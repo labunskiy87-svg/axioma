@@ -35,7 +35,8 @@ import {
   Image as ImageIcon,
   List,
   Quote,
-  Trash2
+  Trash2,
+  Copy
 } from 'lucide-react';
 
 
@@ -361,6 +362,32 @@ const MaterialAdvancedSettings = () => (
     </div>
   </div>
 );
+
+const CopyButton = ({ value, label = 'Скопировать' }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(String(value));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#d4e0ed] bg-white text-[#476788] transition-colors hover:border-[#006bff] hover:text-[#006bff]"
+      onClick={handleCopy}
+      title={copied ? 'Скопировано' : label}
+      aria-label={label}
+    >
+      <Copy className="h-4 w-4" />
+    </button>
+  );
+};
 
 const MaterialRightsDisclaimer = () => (
   <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
@@ -2872,45 +2899,85 @@ const PublisherOrderDetailView = ({ navigate }) => (
       <div className="lg:col-span-2 space-y-6">
         <Card className="p-6">
           <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Состав заказа</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            {[
-              ['Материал', 'Пресс-релиз: Запуск новой платформы'],
-              ['Заказчик', 'Заказчик #842 · контакты скрыты'],
-              ['Площадка', 'РБК Инвестиции'],
-              ['Формат', 'Статья · публикация от редакции'],
-              ['Начисление', formatMoney(127500)],
-              ['Дедлайны', 'Ответ 8 часов · публикация до 20.10'],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4">
-                <div className="text-xs text-[#476788]">{label}</div>
-                <div className="mt-1 font-medium text-[#0b3558]">{value}</div>
+          <div className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4">
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-xs text-[#476788]">Материал</div>
+                <div className="mt-1 text-lg font-semibold text-[#0b3558]">Пресс-релиз: Запуск новой платформы</div>
+                <p className="mt-2 text-sm leading-6 text-[#476788]">
+                  Статья для РБК Инвестиции, публикация от редакции. Ответ 8 часов, дедлайн публикации до 20.10.
+                </p>
               </div>
-            ))}
+              <div className="grid grid-cols-1 sm:grid-cols-3 lg:w-[420px] gap-3 text-sm">
+                {[
+                  ['Площадка', 'РБК Инвестиции'],
+                  ['Формат', 'Статья'],
+                  ['Начисление', formatMoney(127500)],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg bg-white border border-[#d4e0ed] px-3 py-2">
+                    <div className="text-xs text-[#476788]">{label}</div>
+                    <div className="mt-1 font-medium text-[#0b3558]">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4">
-            <div className="text-xs text-[#476788] mb-2">Юридические данные рекламодателя для маркировки</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+
+          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#d4e0ed]">
+              <div className="text-sm font-semibold text-[#0b3558]">Данные для маркировки</div>
+              <p className="text-xs text-[#476788] mt-1">Контакты скрыты. Для работы доступны только реквизиты рекламодателя и объекта рекламы.</p>
+            </div>
+            <div className="divide-y divide-[#d4e0ed]">
               {advertiserLegalData.map(([label, value]) => (
-                <div key={label} className="rounded-lg bg-white border border-[#d4e0ed] px-3 py-2">
-                  <div className="text-[11px] uppercase text-[#a6bbd1]">{label}</div>
-                  <div className="text-xs font-medium text-[#0b3558] mt-0.5">{value}</div>
+                <div key={label} className="flex items-center justify-between gap-3 px-4 py-3 bg-white">
+                  <div className="min-w-0">
+                    <div className="text-xs text-[#476788]">{label}</div>
+                    <div className="mt-0.5 text-sm font-medium text-[#0b3558] break-words">{value}</div>
+                  </div>
+                  <CopyButton value={value} label={`Скопировать ${label}`} />
                 </div>
               ))}
             </div>
           </div>
-          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4">
-            <div className="text-xs text-[#476788] mb-2">Ссылки в тексте материала</div>
-            <div className="space-y-2">
+
+          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#d4e0ed]">
+              <div className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</div>
+            </div>
+            <div className="divide-y divide-[#d4e0ed]">
               {materialLinks.map((link) => (
-                <div key={link} className="flex items-center gap-2 text-sm text-[#006bff] break-all">
-                  <ExternalLink className="w-4 h-4 flex-shrink-0" />
-                  <span>{link}</span>
+                <div key={link} className="flex items-center justify-between gap-3 px-4 py-3 bg-white">
+                  <div className="flex min-w-0 items-center gap-2 text-sm text-[#006bff] break-all">
+                    <ExternalLink className="w-4 h-4 flex-shrink-0" />
+                    <span>{link}</span>
+                  </div>
+                  <CopyButton value={link} label="Скопировать ссылку" />
                 </div>
               ))}
             </div>
           </div>
-          <div className="mt-5">
-            <MaterialAdvancedSettings />
+
+          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#d4e0ed]">
+              <div className="text-sm font-semibold text-[#0b3558]">Дополнительные настройки материала</div>
+            </div>
+            <div className="divide-y divide-[#d4e0ed]">
+              {[
+                ['Тэги', 'финтех, аналитика, PR, запуск продукта'],
+                ['Title', 'Финтех Решения запускает платформу аналитики'],
+                ['Description', 'Новая платформа помогает PR-командам контролировать публикации, ссылки и отчеты.'],
+                ['Желаемый URL', '/news/fintech-analytics-platform'],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-3 px-4 py-3 bg-white">
+                  <div className="min-w-0">
+                    <div className="text-xs text-[#476788]">{label}</div>
+                    <div className="mt-0.5 text-sm font-medium text-[#0b3558] break-words">{value}</div>
+                  </div>
+                  <CopyButton value={value} label={`Скопировать ${label}`} />
+                </div>
+              ))}
+            </div>
           </div>
         </Card>
 
