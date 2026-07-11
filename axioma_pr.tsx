@@ -627,6 +627,7 @@ const LandingView = ({ setGlobalMode }) => {
   const [loginRole, setLoginRole] = useState('client');
   const [authStep, setAuthStep] = useState('credentials');
   const [recoverySent, setRecoverySent] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState(0);
 
   const handleLogin = (role) => {
     setLoginModalOpen(false);
@@ -644,28 +645,72 @@ const LandingView = ({ setGlobalMode }) => {
     setLoginModalOpen(true);
   };
 
+  useEffect(() => {
+    const nodes = Array.from(document.querySelectorAll('.landing-reveal'));
+    if (!('IntersectionObserver' in window)) {
+      nodes.forEach((node) => node.classList.add('is-visible'));
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+
+  const landingPlatforms = [
+    ['РБК Инвестиции', 'СМИ', '2,5 млн/мес', '150 000 ₽'],
+    ['Технологии сегодня', 'ТГ', '125 тыс. подписчиков', '45 000 ₽'],
+    ['VC.ru', 'СМИ', '1,2 млн/мес', '80 000 ₽'],
+    ['Бизнес Среда', 'ВК', '2,4 млн/мес', '146 000 ₽'],
+  ];
+
+  const landingFeatures = [
+    [Globe, 'Закрытый каталог', 'Площадки, цены, сроки, форматы и ограничения доступны в одном интерфейсе после регистрации.'],
+    [FileText, 'Материал как центр процесса', 'Сначала загружается и модерируется материал, затем из него создаются отдельные заказы на площадки.'],
+    [Lock, 'Безопасная оплата', 'Средства замораживаются при создании заказа и списываются только после принятой публикации.'],
+    [MessageSquare, 'Коммуникация в заказе', 'Правки, комментарии, ссылка на публикацию и приемка результата остаются внутри карточки заказа.'],
+  ];
+
+  const landingSteps = [
+    ['01', 'Загрузите материал', 'Добавьте готовый текст, файл или ссылку на документ и укажите рекламодателя для маркировки.'],
+    ['02', 'Пройдите модерацию', 'Платформа проверяет материал до отправки паблишерам и фиксирует статус в кабинете.'],
+    ['03', 'Выберите площадки', 'Соберите размещение из СМИ, сайтов, Telegram, VK и Дзена для одного материала.'],
+    ['04', 'Зарезервируйте средства', 'Деньги замораживаются на балансе до момента выхода публикации.'],
+    ['05', 'Получите результат', 'Паблишер размещает материал и отправляет ссылку на приемку.'],
+  ];
+
+  const landingFaq = [
+    ['Можно ли посмотреть цены без регистрации?', 'Нет. Каталог, цены и условия паблишеров доступны только после регистрации в личном кабинете: это помогает сохранять качество сделок и не раскрывать коммерческие условия публично.'],
+    ['Вы пишете тексты?', 'Нет. «Аксиома» помогает организовать размещение готового материала. Текст загружается заказчиком и проходит проверку до отправки паблишерам.'],
+    ['Когда списываются деньги?', 'Сумма замораживается при создании заказа и списывается после того, как паблишер отправил ссылку на публикацию, а заказчик принял результат.'],
+    ['Как можно пополнить баланс?', 'Доступны банковские карты, СБП и безналичный расчет для юридических лиц с закрывающими документами через ЭДО.'],
+  ];
+
   return (
-    <div className="min-h-screen bg-[#f8f9fb] font-sans text-[#0b3558] selection:bg-[#e6f0ff] selection:text-[#0b3558] text-[90%]">
-      <header className="bg-white border-b border-[#d4e0ed] sticky top-0 z-50">
+    <div className="min-h-screen scroll-smooth bg-[#f4f6f8] font-sans text-[#102f4f] selection:bg-[#b8ffcf] selection:text-[#102f4f] text-[90%]">
+      <header className="sticky top-0 z-50 border-b border-[#dce3eb] bg-white/92 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-[#0b3558] rounded-lg flex items-center justify-center">
-                 <div className="w-4 h-4 border-2 border-white rounded-sm"></div>
-              </div>
-              <span className="font-display font-bold text-xl tracking-tight text-[#0b3558]">Аксиома</span>
+          <div className="flex justify-between items-center h-[72px]">
+            <div className="flex items-center">
+              <span className="landing-heading text-[24px] font-bold text-[#004cca]">Аксиома</span>
             </div>
             
-            <nav className="hidden md:flex items-center gap-2 text-sm font-medium text-[#476788]">
-              <a href="#product" className="px-4 py-2 rounded-full hover:bg-[#f8f9fb] hover:text-[#0b3558] transition-colors">Продукт</a>
-              <a href="#catalog" className="px-4 py-2 rounded-full hover:bg-[#f8f9fb] hover:text-[#0b3558] transition-colors">Каталог</a>
-              <a href="#publishers" className="px-4 py-2 rounded-full hover:bg-[#f8f9fb] hover:text-[#0b3558] transition-colors">Паблишерам</a>
-              <a href="#faq" className="px-4 py-2 rounded-full hover:bg-[#f8f9fb] hover:text-[#0b3558] transition-colors">Вопросы</a>
+            <nav className="hidden md:flex items-center gap-1 text-sm font-semibold text-[#526d86]">
+              <a href="#product" className="px-4 py-2 hover:text-[#004cca] transition-colors">Продукт</a>
+              <a href="#catalog" className="px-4 py-2 hover:text-[#004cca] transition-colors">Каталог</a>
+              <a href="#publishers" className="px-4 py-2 hover:text-[#004cca] transition-colors">Паблишерам</a>
+              <a href="#faq" className="px-4 py-2 hover:text-[#004cca] transition-colors">Вопросы</a>
             </nav>
 
             <div className="hidden md:flex items-center gap-3">
-              <Button variant="ghost" onClick={openLoginModal}>Вход</Button>
-              <Button variant="dark" onClick={() => openRegistrationModal('client')}>Зарегистрироваться</Button>
+              <button className="px-3 py-2 text-sm font-bold text-[#102f4f] hover:text-[#004cca]" onClick={openLoginModal}>Вход</button>
+              <button className="rounded-xl bg-[#004cca] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(0,76,202,0.18)] transition-colors hover:bg-[#003798]" onClick={() => openRegistrationModal('client')}>Зарегистрироваться</button>
             </div>
 
             <button className="md:hidden p-2 text-[#476788]" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -687,267 +732,203 @@ const LandingView = ({ setGlobalMode }) => {
         </div>
       )}
 
-      <section className="px-4 sm:px-6 lg:px-8 bg-[#f8f9fb] overflow-hidden">
-        <div className="max-w-[1200px] mx-auto py-14 lg:py-16 grid grid-cols-1 lg:grid-cols-[500px_minmax(0,1fr)] gap-10 xl:gap-14 items-center relative">
-          <div className="space-y-7 relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#e6f0ff] text-[#004eba] text-xs font-medium">
-              <Globe className="w-4 h-4" /> Закрытый каталог площадок
+      <section className="overflow-hidden bg-[#f8f9fb] px-4 pb-24 pt-24 sm:px-6 lg:px-8 lg:py-24">
+        <div className="landing-reveal mx-auto grid max-w-[1200px] grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-20">
+          <div className="space-y-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#004cca]/10 bg-[#004cca]/5 px-4 py-1.5 text-sm font-semibold text-[#004cca]">
+              <ShieldCheck className="h-[18px] w-[18px]" /> Закрытый каталог площадок
             </div>
-            <div className="space-y-5">
-              <h1 className="font-display text-5xl sm:text-6xl lg:text-[58px] xl:text-[64px] font-bold text-[#0b3558] leading-[1.12] max-w-[540px]">
-                Размещайте пиар-материалы в медиа без ручного хаоса
-              </h1>
-              <p className="text-xl text-[#476788] max-w-2xl leading-relaxed">
-                Закрытый каталог площадок, выбор нескольких медиа для одного текста, безопасная оплата через баланс и контроль публикаций в одном кабинете.
-              </p>
+              <h1 className="landing-heading text-[36px] font-bold leading-[1.2] text-[#191c1e] sm:text-[44px]">
+              Размещайте пиар-материалы в медиа <span className="text-[#0062ff]">без хаоса</span>
+            </h1>
+            <p className="max-w-lg text-lg font-normal leading-8 text-[#434654]">
+              Закрытый каталог площадок, выбор нескольких медиа для одного текста, безопасная оплата через баланс и контроль публикаций в одном кабинете.
+            </p>
+            <div className="flex flex-col gap-4 pt-2 sm:flex-row">
+              <button className="landing-shimmer inline-flex items-center justify-center gap-3 rounded-2xl bg-[#004cca] px-9 py-4 text-sm font-bold text-white premium-shadow-lg transition-all hover:bg-[#003798] active:scale-95" onClick={() => openRegistrationModal('client')}>Зарегистрироваться <ArrowRight className="h-4 w-4" /></button>
+              <button className="rounded-2xl border border-[#c3c6d6] bg-white px-9 py-4 text-sm font-bold text-[#191c1e] transition-all hover:bg-[#edeef0] active:scale-95" onClick={openLoginModal}>Открыть каталог</button>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button variant="primary" className="text-base px-6 py-3" onClick={() => openRegistrationModal('client')}>Зарегистрироваться</Button>
-              <Button variant="dark" className="text-base px-6 py-3" onClick={openLoginModal}>Открыть каталог</Button>
-            </div>
-            <p className="text-sm text-[#476788]">Цены и условия доступны после регистрации.</p>
+            <p className="text-sm italic text-[#737686]">Цены и условия доступны после регистрации.</p>
           </div>
-          <div className="relative">
-            <div className="absolute -right-12 top-4 w-72 h-72 rounded-full bg-[#0099ff] opacity-18 blur-3xl"></div>
-            <div className="absolute -left-10 bottom-12 w-72 h-72 rounded-full bg-[#e55cff] opacity-16 blur-3xl"></div>
-            <div className="relative mx-auto w-full max-w-[620px] rounded-2xl bg-white border border-[#d4e0ed] overflow-hidden shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.08)_0px_30px_50px_0px]">
-              <div className="flex items-center justify-between gap-4 px-6 py-5 border-b border-[#d4e0ed]">
-                <div>
-                  <div className="text-sm font-semibold text-[#0b3558]">Размещение материала</div>
-                  <div className="text-xs text-[#476788] mt-1">Пресс-релиз: запуск новой платформы</div>
-                </div>
-                <Badge color="blue">3 площадки выбрано</Badge>
+
+          <div className="landing-reveal relative" style={{ transitionDelay: '180ms' }}>
+            <div className="absolute -right-20 -top-20 -z-10 h-80 w-80 rounded-full bg-[#0062ff]/10 blur-[100px]" />
+            <div className="absolute -bottom-20 -left-20 -z-10 h-80 w-80 rounded-full bg-[#004cca]/10 blur-[100px]" />
+            <div className="overflow-hidden rounded-3xl border border-white/60 bg-white/70 premium-shadow-lg ring-1 ring-black/5 backdrop-blur-xl">
+              <div className="flex items-center justify-between border-b border-[#c3c6d6]/30 bg-[#f2f4f6]/70 p-6">
+                <span className="font-semibold text-[#434654]">Размещение материала</span>
+                <span className="rounded-full bg-[#004cca] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">3 площадки выбрано</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_210px]">
-                <div className="p-5 border-b md:border-b-0 md:border-r border-[#d4e0ed]">
-                  <div className="text-xs font-medium text-[#476788] mb-4">Каталог площадок</div>
-                  <div className="space-y-3">
-                    {[
-                      ['РБК Инвестиции', 'СМИ', '2,5 млн/мес', '150 000 ₽'],
-                      ['Технологии сегодня', 'ТГ', '125 тыс. подписчиков', '45 000 ₽'],
-                      ['VC.ru', 'СМИ', '1,2 млн/мес', '80 000 ₽'],
-                      ['Бизнес Среда', 'ВК', '2,4 млн/мес', '146 000 ₽'],
-                    ].map(([name, type, reach, price], index) => (
-                      <div key={name} className={`rounded-2xl border p-3.5 ${index < 3 ? 'border-[#006bff] bg-[#e6f0ff]' : 'border-[#d4e0ed] bg-white'}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-[#0b3558] truncate">{name}</div>
-                            <div className="text-xs text-[#476788] mt-1">{type} · {reach}</div>
-                          </div>
-                          <div className="text-sm font-semibold text-[#0b3558] whitespace-nowrap">{price}</div>
-                        </div>
-                      </div>
-                    ))}
+              <div className="space-y-4 p-6 sm:p-8">
+                {landingPlatforms.slice(0, 2).map(([name, type, reach, price]) => (
+                  <div key={name} className="group flex items-center justify-between rounded-2xl border border-[#c3c6d6]/50 bg-white p-5 transition-all hover:border-[#004cca]/30 hover:shadow-lg">
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-[#e7e8ea] text-lg font-extrabold text-[#737686] transition-colors group-hover:bg-[#004cca]/10 group-hover:text-[#004cca]">{name[0]}</div>
+                      <div className="min-w-0"><p className="truncate font-bold text-[#191c1e]">{name}</p><p className="mt-1 text-xs font-medium text-[#434654]">{type === 'ТГ' ? `ТГ: ${reach}` : `Охват: ${reach}`}</p></div>
+                    </div>
+                    <span className="ml-4 whitespace-nowrap text-lg font-extrabold text-[#004cca]">{price}</span>
                   </div>
-                </div>
-                <div className="p-5 bg-[#f8f9fb] flex flex-col">
-                  <div className="text-xs font-medium text-[#476788] mb-4">Сводка запуска</div>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="text-xs text-[#476788]">Материал</div>
-                      <div className="mt-1 text-sm font-semibold text-[#0b3558]">Принят в систему</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#476788]">Выбрано</div>
-                      <div className="mt-1 text-3xl font-bold text-[#0b3558]">3</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#476788]">Бюджет</div>
-                      <div className="mt-1 text-2xl font-bold text-[#0b3558]">275 000 ₽</div>
-                    </div>
-                    <div className="rounded-2xl bg-white border border-[#d4e0ed] p-4">
-                      <div className="text-xs text-[#476788]">Средства</div>
-                      <div className="mt-1 text-sm font-semibold text-[#0b3558]">Будут заморожены до приемки</div>
-                    </div>
-                  </div>
-                  <div className="mt-auto pt-6">
-                    <Button variant="primary" className="w-full">Создать заказы</Button>
-                  </div>
+                ))}
+                <div className="flex items-center justify-between rounded-2xl border border-[#004cca]/20 bg-[#004cca]/5 p-5">
+                  <div className="flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#004cca] text-white"><CreditCard className="h-5 w-5" /></div><div><p className="font-bold text-[#004cca]">Итого к оплате</p><p className="text-xs font-medium text-[#004cca]/70">Безопасная сделка</p></div></div>
+                  <span className="text-xl font-extrabold text-[#004cca]">275 000 ₽</span>
                 </div>
               </div>
+              <div className="px-6 pb-6 sm:px-8 sm:pb-8"><button className="landing-shimmer w-full rounded-2xl bg-[#004cca] py-4 font-bold text-white shadow-md transition-all hover:bg-[#003798] active:scale-[0.98]">Создать заказ</button></div>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="product" className="py-20 bg-[#f8f9fb]">
+      <section id="product" className="border-y border-[#c3c6d6]/30 bg-[#f2f4f6] py-24 lg:py-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-12 items-start">
-            <div>
-              <div className="font-mono text-xs uppercase tracking-[0.10em] text-[#0b3558] mb-4">единый рабочий контур</div>
-              <h2 className="font-display text-4xl lg:text-5xl font-bold text-[#0b3558] leading-tight">Один кабинет для медийных размещений</h2>
-              <p className="text-[#476788] mt-4 leading-relaxed">
+          <div className="landing-reveal mx-auto mb-16 max-w-3xl text-center lg:mb-20">
+              <div className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-[#0062ff]">единый рабочий контур</div>
+              <h2 className="landing-heading text-2xl font-bold leading-[1.3] text-[#191c1e] lg:text-3xl">Один кабинет для медийных размещений</h2>
+              <p className="mt-6 text-lg leading-8 text-[#434654]">
                 «Аксиома» объединяет заказчиков, СМИ, сайты, Телеграм-каналы, паблики ВК и Дзен в одном рабочем пространстве. Вы загружаете готовый материал, проходите модерацию, выбираете подходящие площадки, контролируете размещение и получаете отчет после публикации.
               </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                'Закрытый каталог площадок',
-                'Размещения в СМИ, на сайтах, в Телеграм-каналах, ВК и Дзене',
-                'Модерация материалов перед отправкой',
-                'Оплата только после приемки публикации',
-                'Чат с площадкой внутри заказа',
-                'Единый баланс для всех размещений',
-                'Отчетность по каждому заказу',
-              ].map((item) => (
-                <div key={item} className="rounded-[20px] bg-white border border-[#d4e0ed] p-4 flex items-start gap-3 shadow-[rgba(11,53,88,0.04)_0px_6px_16px]">
-                  <CheckCircle2 className="w-5 h-5 text-[#16a34a] mt-0.5 flex-shrink-0" />
-                  <div className="text-sm font-medium leading-6 text-[#0b3558]">{item}</div>
+          </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+              {landingFeatures.map(([Icon, title, text], index) => (
+                <div key={title} className="landing-reveal hover-premium group flex flex-col items-center rounded-3xl border border-white/60 bg-white/70 p-8 text-center premium-shadow" style={{ transitionDelay: `${index * 90}ms` }}>
+                  <div className="mb-7 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#004cca]/5 text-[#004cca] transition-all duration-500 group-hover:scale-110 group-hover:bg-[#004cca] group-hover:text-white">
+                    <Icon className="w-7 h-7" />
+                  </div>
+                  <h3 className="landing-heading text-base font-bold leading-[1.35] text-[#191c1e]">{title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-[#434654]">{text}</p>
                 </div>
               ))}
             </div>
-          </div>
         </div>
       </section>
 
-      <section className="py-20 bg-[#f8f9fb]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="max-w-3xl">
-            <h2 className="font-display text-3xl font-bold text-[#0b3558]">Публикуйте материалы там, где их увидит нужная аудитория</h2>
-            <p className="text-[#476788] mt-4 leading-relaxed">
+      <section className="bg-[#f8f9fb] py-24 lg:py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="landing-reveal mx-auto mb-16 max-w-3xl text-center">
+            <h2 className="landing-heading text-2xl font-bold leading-[1.3] text-[#191c1e] lg:text-3xl">Публикуйте материалы там, где их увидит нужная аудитория</h2>
+            <p className="mt-6 text-lg leading-8 text-[#434654]">
               Используйте «Аксиому» для пиара, SEO, SERM, продвижения личного бренда, запуска продуктов и формирования экспертности. Выбирайте площадки по тематике, региону, формату, цене и срокам. Один материал можно отправить сразу на несколько площадок без повторной загрузки и разрозненной переписки.
             </p>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="landing-reveal flex flex-wrap justify-center gap-4">
             {['Пресс-релизы', 'Новости компании', 'Экспертные статьи', 'Интервью', 'SERM-материалы', 'Брендированные публикации', 'Посты в Телеграме', 'Публикации в ВК'].map((item) => (
-              <div key={item} className="rounded-[20px] border border-[#d4e0ed] bg-white p-4 text-sm font-semibold text-[#0b3558] shadow-[rgba(11,53,88,0.04)_0px_6px_16px]">{item}</div>
+              <div key={item} className="hover-premium rounded-2xl border border-[#c3c6d6]/60 bg-white px-7 py-5 text-sm font-semibold text-[#191c1e] premium-shadow">{item}</div>
             ))}
           </div>
-          <Button variant="primary" onClick={() => openRegistrationModal('client')}>Открыть каталог</Button>
         </div>
       </section>
 
-      <section id="how-it-works" className="py-20 bg-[#f8f9fb]">
+      <section id="how-it-works" className="relative overflow-hidden bg-[#004cca] py-24 text-white lg:py-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mb-12">
-            <div className="font-mono text-xs uppercase tracking-[0.10em] text-[#0b3558] mb-4">как это работает</div>
-            <h2 className="font-display text-4xl lg:text-5xl font-bold text-[#0b3558] leading-tight">От материала до публикации — в несколько шагов</h2>
+          <div className="landing-reveal mb-16 text-center lg:mb-24">
+            <div className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-white/60">Процесс</div>
+            <h2 className="landing-heading text-2xl font-bold leading-[1.3] text-white lg:text-3xl">От материала до публикации — в несколько шагов</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {[
-              ['1', 'Загрузите материал', 'Добавьте готовый текст, файл или ссылку на документ. Укажите рекламодателя.'],
-              ['2', 'Пройдите модерацию', 'Материал проверяется перед отправкой площадкам. Если нужны правки, вы получите комментарии в кабинете.'],
-              ['3', 'Выберите площадки', 'Соберите медиаплан из СМИ, сайтов, Телеграм-каналов, ВК и Дзена.'],
-              ['4', 'Зарезервируйте средства', 'Стоимость размещения замораживается на балансе до приемки публикации.'],
-              ['5', 'Получите публикацию и отчет', 'Площадка публикует материал, вы принимаете результат, после чего размещение оплачивается.'],
-            ].map(([step, title, text]) => (
-              <div key={step} className="rounded-[24px] bg-white border border-[#d4e0ed] p-6 shadow-[rgba(11,53,88,0.04)_0px_4px_12px,rgba(11,53,88,0.05)_0px_18px_44px]">
-                <div className="text-xs font-semibold text-[#006bff] tracking-[0.08em] mb-5">ШАГ {step}</div>
-                <h3 className="font-display text-lg font-bold tracking-tight text-[#0b3558] leading-snug">{title}</h3>
-                <p className="text-sm text-[#476788] mt-3 leading-6">{text}</p>
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-5">
+            {landingSteps.map(([step, title, text], index) => (
+              <div key={step} className="landing-reveal group" style={{ transitionDelay: `${index * 90}ms` }}>
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-white/20 bg-white/5 text-2xl font-extrabold transition-all group-hover:scale-110 group-hover:bg-[#0062ff]">{Number(step)}</div>
+                <h3 className="landing-heading text-base font-bold leading-[1.4] text-white">{title}</h3>
+                <p className="mt-3 text-sm leading-6 text-white/70">{text}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="catalog" className="py-20 bg-[#f8f9fb]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-          <div>
-            <h2 className="font-display text-3xl font-bold text-[#0b3558]">Площадки, цены и условия — в закрытом каталоге</h2>
-            <p className="text-[#476788] mt-4 leading-relaxed">
+      <section id="catalog" className="bg-[#f8f9fb] py-24 lg:py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="landing-reveal mb-14 flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <div className="max-w-xl">
+            <h2 className="landing-heading text-2xl font-bold leading-[1.3] text-[#191c1e] lg:text-3xl">Площадки, цены и условия — в закрытом каталоге</h2>
+            <p className="mt-6 text-lg leading-8 text-[#434654]">
               После регистрации вы получаете доступ к каталогу площадок с понятными параметрами: формат размещения, цена, срок публикации, тематика, регион, требования к материалу и срок хранения.
             </p>
-            <Button variant="primary" className="mt-8" onClick={() => openRegistrationModal('client')}>Зарегистрироваться и посмотреть каталог</Button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {['Онлайн-СМИ', 'Деловые и отраслевые сайты', 'Региональные медиа', 'Телеграм-каналы', 'Паблики ВК', 'Дзен'].map((item) => (
-              <div key={item} className="rounded-[20px] border border-[#d4e0ed] bg-white p-4 text-sm font-semibold text-[#0b3558] shadow-[rgba(11,53,88,0.04)_0px_6px_16px]">{item}</div>
+            <button className="landing-shimmer rounded-2xl bg-[#004cca] px-9 py-4 text-sm font-bold text-white premium-shadow transition-all hover:bg-[#003798]" onClick={() => openRegistrationModal('client')}>Зарегистрироваться и посмотреть</button>
+          </div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+            {[
+              [Globe, 'Онлайн-СМИ'], [MessageSquare, 'Telegram-каналы'], [FileText, 'Дзен'],
+              [Briefcase, 'Паблики ВК'], [Store, 'Региональные медиа'], [BarChart3, 'Отраслевые сайты'],
+            ].map(([Icon, item], index) => (
+              <div key={item} className="landing-reveal hover-premium group rounded-3xl border border-[#c3c6d6]/60 bg-white p-7 text-center" style={{ transitionDelay: `${index * 60}ms` }}>
+                <Icon className="mx-auto mb-5 h-9 w-9 text-[#004cca] transition-transform duration-500 group-hover:scale-125" />
+                <div className="landing-heading text-xs font-bold leading-[1.4] text-[#191c1e]">{item}</div>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="payments" className="py-20 bg-[#f8f9fb]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-[0.85fr_1.15fr] gap-12">
-          <div>
-            <div className="font-mono text-xs uppercase tracking-[0.10em] text-[#0b3558] mb-4">безопасная оплата</div>
-            <h2 className="font-display text-4xl lg:text-5xl font-bold text-[#0b3558] leading-tight">Деньги списываются только после принятой публикации</h2>
-            <p className="text-[#476788] mt-4 leading-relaxed">
+      <section id="payments" className="bg-[#f8f9fb] py-24 lg:py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 gap-16 lg:grid-cols-2 lg:gap-24">
+          <div className="landing-reveal flex flex-col justify-between">
+            <div><div className="mb-6 text-xs font-bold uppercase tracking-[0.2em] text-[#004cca]">безопасная оплата</div>
+            <h2 className="landing-heading text-3xl font-bold leading-[1.3] text-[#191c1e] lg:text-4xl">Деньги списываются только после принятой публикации</h2>
+            <p className="mt-8 text-lg leading-8 text-[#434654]">
               Вы пополняете баланс и создаете заказ. Сумма размещения замораживается, но не списывается сразу. Паблишер получает оплату только после того, как материал опубликован, а вы приняли результат.
-            </p>
+            </p></div>
+            <div className="mt-12 grid grid-cols-2 gap-5"><div className="rounded-2xl border border-[#c3c6d6]/30 bg-white p-7 premium-shadow"><div className="text-4xl font-extrabold text-[#004cca]">15%</div><div className="mt-3 text-sm font-bold text-[#434654]">Комиссия сервиса</div></div><div className="rounded-2xl border border-[#c3c6d6]/30 bg-white p-7 premium-shadow"><div className="text-4xl font-extrabold text-[#004cca]">0 ₽</div><div className="mt-3 text-sm font-bold text-[#434654]">Абонентская плата</div></div></div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             {[
               ['Пополнение', 'Карта, СБП или счет для юридического лица.'],
-              ['Комиссия', 'Комиссия сервиса — 15% при пополнении.'],
-              ['Холд', 'Средства замораживаются на время размещения.'],
-              ['Возврат', 'Если площадка отказалась, деньги возвращаются на баланс.'],
-              ['Жалоба', 'Если публикация не соответствует условиям, можно открыть жалобу.'],
-            ].map(([title, text]) => (
+              ['Холдирование', 'Средства защищены на балансе на все время выполнения заказа.'],
+              ['Возврат', 'Если паблишер отказался, деньги возвращаются на баланс.'],
+              ['Арбитраж', 'Спорные ситуации решаются через службу поддержки сервиса.'],
+            ].map(([title, text], index) => (
               <div
                 key={title}
-                className="rounded-[24px] border border-[#d4e0ed] bg-white p-6 shadow-[rgba(11,53,88,0.04)_0px_4px_12px,rgba(11,53,88,0.05)_0px_18px_44px]"
+                className="landing-reveal hover-premium rounded-2xl border border-[#c3c6d6]/30 bg-white p-8"
+                style={{ transitionDelay: `${index * 90}ms` }}
               >
-                <h3 className="font-display text-xl font-bold tracking-tight text-[#0b3558] leading-snug">{title}</h3>
-                <p className="mt-4 text-base leading-7 text-[#476788]">{text}</p>
+                <CreditCard className="mb-6 h-7 w-7 text-[#004cca]" />
+                <h3 className="landing-heading text-base font-bold leading-[1.4] text-[#191c1e]">{title}</h3>
+                <p className="mt-3 text-sm leading-6 text-[#434654]">{text}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-20 bg-[#f8f9fb]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-12">
-          <div>
-            <h2 className="font-display text-3xl font-bold text-[#0b3558]">Все согласования — внутри заказа</h2>
-            <p className="text-[#476788] mt-4 leading-relaxed">
-              Больше не нужно вести публикации в почте, мессенджерах и таблицах. Каждый заказ имеет свой статус, чат, историю правок, ссылку на публикацию и отчет.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {['Статус материала', 'Выбранные площадки', 'Замороженные средства', 'Правки и комментарии', 'Публикация', 'Приемка результата', 'Отчет'].map((item) => (
-              <div key={item} className="rounded-2xl border border-[#d4e0ed] p-4 text-sm text-[#476788] flex items-center gap-3">
-                <CheckCircle2 className="w-4 h-4 text-[#16a34a]" />
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="publishers" className="py-20 bg-[#f8f9fb]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="grid grid-cols-1 lg:grid-cols-[0.88fr_1.12fr] gap-12 items-start">
-            <div className="lg:sticky lg:top-28">
-              <div className="font-mono text-xs uppercase tracking-[0.10em] text-[#0b3558] mb-4">для паблишеров</div>
-              <h2 className="font-display text-4xl lg:text-5xl font-bold text-[#0b3558] leading-tight">Получайте заявки на публикации без прямых продаж</h2>
-              <p className="text-[#476788] mt-4 leading-relaxed">
-                Подключите СМИ, сайт, Телеграм-канал, паблик ВК или площадку в Дзене к закрытому каталогу «Аксиомы». Заказчики выбирают размещение на вашем ресурсе, а вы работаете с заявкой внутри кабинета: принимаете материал, запрашиваете правки, загружаете ссылку и получаете выплату после приемки.
+      <section id="publishers" className="border-y border-[#c3c6d6]/30 bg-[#f2f4f6] py-24 lg:py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 items-start gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:gap-20">
+            <div className="landing-reveal lg:sticky lg:top-28">
+              <div className="mb-5 text-xs font-bold uppercase tracking-[0.2em] text-[#004cca]">для паблишеров</div>
+              <h2 className="landing-heading text-3xl font-bold leading-[1.3] text-[#191c1e] lg:text-4xl">Получайте заявки на публикации без прямых продаж</h2>
+              <p className="mt-6 text-lg leading-8 text-[#434654]">
+                Подключите СМИ, сайт, Телеграм-канал, паблик ВК или канал в Дзене к закрытому каталогу «Аксиомы». Заказчики выбирают размещение на вашем ресурсе, а вы работаете с заявкой внутри кабинета: принимаете материал, запрашиваете правки, загружаете ссылку и получаете выплату после приемки.
               </p>
-              <div className="mt-8 flex flex-col sm:flex-row gap-3">
-                <Button variant="primary" onClick={() => openRegistrationModal('publisher')}>Стать паблишером</Button>
-                <Button variant="secondary" onClick={openLoginModal}>Войти как паблишер</Button>
+              <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+                <button className="landing-shimmer rounded-2xl bg-[#004cca] px-8 py-4 text-sm font-bold text-white premium-shadow hover:bg-[#003798]" onClick={() => openRegistrationModal('publisher')}>Стать паблишером</button>
+                <button className="rounded-2xl border border-[#c3c6d6] bg-white px-8 py-4 text-sm font-bold text-[#191c1e] hover:bg-[#e7e8ea]" onClick={openLoginModal}>Войти в кабинет</button>
               </div>
             </div>
-            <div className="rounded-[28px] border border-[#d4e0ed] bg-white shadow-[rgba(11,53,88,0.04)_0px_4px_12px,rgba(11,53,88,0.05)_0px_18px_44px] overflow-hidden">
-              <div className="px-7 py-6 border-b border-[#d4e0ed] bg-[#f8f9fb]">
-                <div className="text-sm font-semibold text-[#476788]">Что получает паблишер</div>
-              </div>
-              <div className="divide-y divide-[#d4e0ed]">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {[
-                  ['Заявки с готовыми материалами', 'Материал проходит базовую модерацию до передачи площадке.'],
-                  ['Оплату, зарезервированную заранее', 'Сумма размещения замораживается на балансе заказчика до публикации.'],
-                  ['Собственные правила размещения', 'Вы задаете форматы, цены, сроки, ограничения и требования к материалам.'],
-                  ['Работу без внешней переписки', 'Правки, файлы, ссылка на публикацию и комментарии хранятся в карточке заказа.'],
-                  ['Контроль прямого обхода', 'Контактные данные заказчика скрыты, коммуникация идет внутри платформы.'],
-                  ['Прозрачные выплаты', 'Начисление становится доступно после публикации и приемки результата заказчиком.'],
-                ].map(([title, text]) => (
-                  <div key={title} className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 px-7 py-5">
-                    <h3 className="font-display text-base font-bold tracking-tight text-[#0b3558] leading-snug">{title}</h3>
-                    <p className="text-sm text-[#476788] leading-6">{text}</p>
+                  [FileText, 'Готовые материалы', 'Материал проходит модерацию до передачи паблишеру.'],
+                  [Lock, 'Оплата зарезервирована', 'Сумма заказа уже заморожена на балансе заказчика.'],
+                  [Settings, 'Свои условия', 'Вы задаете форматы, цены, сроки и требования к публикации.'],
+                  [CreditCard, 'Прозрачные выплаты', 'Начисление доступно после приемки публикации заказчиком.'],
+                ].map(([Icon, title, text], index) => (
+                  <div key={title} className="landing-reveal hover-premium rounded-3xl border border-white/70 bg-white p-8 premium-shadow" style={{ transitionDelay: `${index * 90}ms` }}>
+                    <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#004cca]/5 text-[#004cca]"><Icon className="h-6 w-6" /></div>
+                    <h3 className="landing-heading text-base font-bold leading-[1.4] text-[#191c1e]">{title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-[#434654]">{text}</p>
                   </div>
                 ))}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 border-t border-[#d4e0ed] bg-[#f8f9fb]">
+              <div className="sm:col-span-2 grid grid-cols-1 overflow-hidden rounded-3xl border border-[#c3c6d6]/40 bg-white sm:grid-cols-3">
                 {[
                   ['15%', 'Комиссия на вывод'],
                   ['2 года', 'Минимальный срок хранения размещенных материалов'],
                   ['1 кабинет', 'Заявки, чат и выплаты'],
                 ].map(([value, label]) => (
-                  <div key={label} className="px-7 py-5 border-b sm:border-b-0 sm:border-r last:border-r-0 border-[#d4e0ed]">
-                    <div className="font-display text-2xl font-bold text-[#0b3558]">{value}</div>
-                    <div className="mt-1 text-xs text-[#476788]">{label}</div>
+                  <div key={label} className="border-b border-[#c3c6d6]/40 px-7 py-6 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
+                    <div className="font-display text-2xl font-bold text-[#004cca]">{value}</div>
+                    <div className="mt-2 text-xs leading-5 text-[#434654]">{label}</div>
                   </div>
                 ))}
               </div>
@@ -956,92 +937,87 @@ const LandingView = ({ setGlobalMode }) => {
         </div>
       </section>
 
-      <section id="faq" className="py-20 bg-[#f8f9fb]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="font-mono text-xs uppercase tracking-[0.10em] text-[#0b3558] mb-4 text-center">Вопросы</div>
-          <h2 className="font-display text-4xl lg:text-5xl font-bold text-[#0b3558] mb-10 text-center">Вопросы перед стартом</h2>
-          <div className="space-y-3">
-            {[
-              ['Можно ли посмотреть цены без регистрации?', 'Нет. Каталог, цены и условия площадок доступны только после регистрации.'],
-              ['Вы пишете тексты?', 'Нет. «Аксиома» размещает готовые материалы.'],
-              ['Можно ли разместить один материал на нескольких площадках?', 'Да. После модерации материал можно отправить сразу на несколько площадок.'],
-              ['Когда списываются деньги?', 'После публикации и вашей приемки результата.'],
-              ['Как можно пополнить баланс?', 'Баланс можно пополнить банковской картой, через СБП или по счету для юридического лица.'],
-              ['Что если площадка отказалась?', 'Замороженные средства возвращаются на баланс.'],
-              ['Кто отвечает за рекламную маркировку?', 'Паблишер самостоятельно выполняет маркировку и подтверждает ответственность перед публикацией.'],
-              ['Можно ли подключить Телеграм-канал или паблик ВК?', 'Да. «Аксиома» поддерживает СМИ, сайты, Телеграм-каналы, паблики ВК и Дзен.'],
-            ].map(([question, answer]) => (
-              <div key={question} className="rounded-[22px] border border-[#d4e0ed] bg-white p-6 shadow-[rgba(11,53,88,0.03)_0px_4px_12px]">
-                <h3 className="font-display text-lg font-bold tracking-tight text-[#0b3558] leading-snug">{question}</h3>
-                <p className="text-sm text-[#476788] mt-3 leading-6">{answer}</p>
-              </div>
+      <section id="faq" className="bg-[#f8f9fb] py-24 lg:py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 items-start gap-12 lg:grid-cols-[0.78fr_1.22fr] lg:gap-20">
+          <div className="landing-reveal">
+            <div className="landing-heading mb-8 text-xs font-bold uppercase tracking-[0.12em] text-[#0055d8]">FAQ</div>
+            <h2 className="landing-heading text-3xl font-bold leading-[1.3] text-[#191c1e] lg:text-4xl">Вопросы перед стартом</h2>
+            <p className="mt-8 max-w-xl text-lg leading-8 text-[#434654]">
+              Мы собрали ответы на самые популярные вопросы, чтобы ваш старт в «Аксиоме» был максимально понятным.
+            </p>
+            <div className="mt-12 rounded-[32px] border border-[#cbdcff] bg-[#eef3ff] p-8">
+              <h3 className="landing-heading text-base font-bold leading-[1.4] text-[#191c1e]">Остались вопросы?</h3>
+              <p className="mt-5 text-sm leading-6 text-[#434654]">Служба поддержки поможет разобраться с регистрацией, материалом и размещением.</p>
+              <a href="mailto:support@axioma.ru" className="mt-7 inline-flex items-center gap-3 text-base font-bold text-[#0055d8] transition-colors hover:text-[#003798]">Написать в поддержку <ArrowRight className="h-5 w-5" /></a>
+            </div>
+          </div>
+          <div className="landing-reveal space-y-6" style={{ transitionDelay: '120ms' }}>
+            {landingFaq.map(([question, answer], index) => (
+              <details
+                key={question}
+                className="group rounded-[32px] border border-[#e3e8ee] bg-white transition-shadow hover:shadow-md"
+                open={openFaqIndex === index}
+                onToggle={(event) => {
+                  if (event.currentTarget.open) setOpenFaqIndex(index);
+                }}
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-5 px-7 py-7">
+                  <span className="landing-heading text-base font-bold leading-[1.4] text-[#191c1e] sm:text-lg">{question}</span>
+                  <span className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-[#f2f5fb] text-[#191c1e] transition-all group-open:bg-[#0055d8] group-open:text-white"><ChevronRight className="h-5 w-5 transition-transform group-open:-rotate-90" /></span>
+                </summary>
+                <div className="px-7 pb-8 text-base leading-8 text-[#434654]">
+                  {answer}
+                </div>
+              </details>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-20 bg-[#f8f9fb]">
+      <section className="bg-[#f8f9fb] px-4 py-24 sm:px-6 lg:px-8 lg:py-32">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="rounded-[32px] border border-[#d4e0ed] bg-white overflow-hidden shadow-[rgba(11,53,88,0.04)_0px_4px_12px,rgba(11,53,88,0.06)_0px_24px_60px]">
-            <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="p-8 lg:p-10">
-                <div className="font-mono text-xs uppercase tracking-[0.10em] text-[#006bff] mb-4">Начать работу</div>
-                <h2 className="font-display text-3xl lg:text-4xl font-bold text-[#0b3558] leading-tight max-w-2xl">
-                  Разместите первый материал через управляемый процесс
+          <div className="landing-reveal cta-card-motion relative overflow-hidden rounded-[40px] bg-[#0642aa] px-8 py-16 text-white shadow-[0_28px_60px_rgba(0,55,152,0.18)] sm:px-14 lg:px-28 lg:py-28">
+            <div className="pointer-events-none absolute -left-24 -top-20 h-72 w-72 rounded-full border-[68px] border-[#2e68bf]/45" />
+            <div className="pointer-events-none absolute -bottom-28 -right-20 h-80 w-80 rounded-full border-[68px] border-[#2e68bf]/45" />
+            <div className="relative z-10 max-w-4xl">
+                <h2 className="landing-heading cta-heading-motion max-w-[920px] text-[32px] font-bold leading-[1.3] text-white sm:text-[40px] lg:text-[52px]">
+                  Разместите первый материал через{' '}
+                  <span className="cta-highlight-motion inline bg-[#b8ffcf] px-2 py-1 text-[#102f4f] [box-decoration-break:clone] [-webkit-box-decoration-break:clone]">управляемый процесс</span>
                 </h2>
-                <p className="text-[#476788] mt-4 leading-relaxed max-w-2xl">
+                <p className="mt-8 max-w-3xl text-base leading-7 text-[#d5e5ff] lg:text-lg">
                   Загрузите текст, выберите одну или несколько площадок и контролируйте публикации, оплату и отчетность в одном кабинете.
                 </p>
-                <div className="mt-8 flex flex-col sm:flex-row gap-3">
-                  <Button variant="primary" onClick={() => openRegistrationModal('client')}>Зарегистрироваться</Button>
-                  <Button variant="secondary" onClick={() => openRegistrationModal('client')}>Перейти в каталог</Button>
-                </div>
-              </div>
-              <div className="bg-[#0b3558] p-8 lg:p-10 text-white">
-                <div className="text-sm font-semibold text-[#d4e0ed] mb-5">Что будет доступно в кабинете</div>
-                <div className="space-y-4">
-                  {[
-                    'Закрытый каталог площадок с ценами и сроками',
-                    'Размещение одного текста на нескольких площадках',
-                    'Холд средств до приемки публикации',
-                    'Отчеты, ссылки и документы по каждому заказу',
-                  ].map((item) => (
-                    <div key={item} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-4 h-4 text-[#8fc5ff] mt-1 flex-shrink-0" />
-                      <div className="text-sm leading-6 text-white/90">{item}</div>
-                    </div>
-                  ))}
-                </div>
+              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+                <button className="rounded-2xl bg-white px-10 py-5 text-base font-bold text-[#0642aa] shadow-xl transition-colors hover:bg-[#e7efff]" onClick={() => openRegistrationModal('client')}>Зарегистрироваться</button>
+                <button className="rounded-2xl border border-white/35 bg-transparent px-10 py-5 text-base font-bold text-white transition-colors hover:bg-white/10" onClick={() => openRegistrationModal('client')}>Перейти в каталог</button>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <footer className="bg-[#f8f9fb] border-t border-[#d4e0ed] py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
-           <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-[#0b3558] rounded flex items-center justify-center">
-                 <div className="w-3 h-3 border-2 border-white rounded-sm"></div>
-              </div>
-              <span className="font-display font-bold tracking-tight text-[#0b3558]">Аксиома</span>
+      <footer className="border-t border-[#24415f] bg-[#102f4f] py-14 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-10">
+           <div>
+              <span className="landing-heading text-lg font-bold text-white">Аксиома</span>
+              <p className="mt-4 max-w-[220px] text-sm leading-6 text-[#b8c7d8]">Управляемые медийные размещения для команд, которым важен контроль результата.</p>
+              <div className="mt-6 text-xs text-[#8da4ba]">© «Аксиома», 2026</div>
             </div>
             <div>
-              <div className="text-sm font-semibold text-[#0b3558] mb-3">Продукт</div>
-              <div className="space-y-2 text-sm text-[#476788]"><div>Как это работает</div><div>Каталог</div><div>Для площадок</div></div>
+              <div className="landing-heading mb-4 text-[10px] font-bold uppercase leading-[1.4] tracking-[0.12em] text-[#68a1ff]">Продукт</div>
+              <div className="space-y-3 text-sm text-[#c8d5e2]"><div>Как это работает</div><div>Каталог</div><div>Для паблишеров</div></div>
             </div>
             <div>
-              <div className="text-sm font-semibold text-[#0b3558] mb-3">Документы</div>
-              <div className="space-y-2 text-sm text-[#476788]"><div>Пользовательское соглашение</div><div>Политика конфиденциальности</div><div>Оферта</div><div>Правила размещения</div></div>
+              <div className="landing-heading mb-4 text-[10px] font-bold uppercase leading-[1.4] tracking-[0.12em] text-[#68a1ff]">Документы</div>
+              <div className="space-y-3 text-sm text-[#c8d5e2]"><div>Пользовательское соглашение</div><div>Политика конфиденциальности</div><div>Оферта</div><div>Правила размещения</div></div>
             </div>
             <div>
-              <div className="text-sm font-semibold text-[#0b3558] mb-3">Контакты</div>
-              <div className="space-y-2 text-sm text-[#476788]">
+              <div className="landing-heading mb-4 text-[10px] font-bold uppercase leading-[1.4] tracking-[0.12em] text-[#68a1ff]">Контакты</div>
+              <div className="space-y-3 text-sm text-[#c8d5e2]">
                 <div>Почта</div>
                 <div>Телеграм</div>
                 <div>Юридическая информация</div>
-                <button className="text-left text-[#006bff] hover:underline" onClick={() => handleLogin('admin')}>Вход для администратора</button>
-                <div>© «Аксиома», 2026</div>
+                <button className="text-left font-semibold text-[#68a1ff] hover:text-white" onClick={() => handleLogin('admin')}>Вход для администратора</button>
               </div>
             </div>
         </div>

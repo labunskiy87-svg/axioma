@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,7 +6,7 @@
 
 :root {
   --font-body: "Manrope", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: "Manrope", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Unbounded", "Manrope", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Manrope", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-marker: "Manrope", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --color-ink-navy: #0b3558;
@@ -38,6 +38,8 @@ h2 {
 
 h3,
 h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -51,6 +53,12 @@ textarea {
 .font-display {
   font-family: var(--font-display);
   font-variation-settings: "wght" 700;
+  letter-spacing: 0;
+}
+
+.landing-heading {
+  font-family: "Unbounded", var(--font-display);
+  font-variation-settings: normal;
   letter-spacing: 0;
 }
 
@@ -90,6 +98,97 @@ textarea {
   animation: ui-pop 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.premium-shadow {
+  box-shadow: 0 10px 30px -10px rgba(0, 55, 152, 0.08), 0 4px 12px -4px rgba(0, 55, 152, 0.03);
+}
+
+.premium-shadow-lg {
+  box-shadow: 0 25px 50px -12px rgba(0, 55, 152, 0.12), 0 8px 24px -8px rgba(0, 55, 152, 0.05);
+}
+
+.hover-premium {
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-premium:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 30px 60px -12px rgba(0, 55, 152, 0.15);
+}
+
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 800ms cubic-bezier(0.4, 0, 0.2, 1), transform 800ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.landing-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.landing-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: linear-gradient(90deg, transparent 40%, rgba(255, 255, 255, 0.2) 50%, transparent 60%);
+  transform: translateX(-100%) rotate(30deg);
+  animation: landing-shimmer 4s infinite;
+  pointer-events: none;
+}
+
+@keyframes landing-shimmer {
+  0%, 80% { transform: translateX(-100%) rotate(30deg); }
+  100% { transform: translateX(100%) rotate(30deg); }
+}
+
+@keyframes cta-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cta-heading-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cta-highlight-accent {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(184, 255, 207, 0);
+  }
+  40% {
+    box-shadow: 0 0 0 9px rgba(184, 255, 207, 0.18);
+  }
+}
+
+.cta-card-motion.is-visible {
+  animation: cta-card-in 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cta-card-motion.is-visible .cta-heading-motion {
+  animation: cta-heading-in 650ms 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cta-card-motion.is-visible .cta-highlight-motion {
+  animation: cta-highlight-accent 900ms 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .ui-collapsible {
   display: grid;
   grid-template-rows: 0fr;
@@ -117,5 +216,21 @@ textarea {
 
   .ui-collapsible {
     transition: none;
+  }
+
+  .landing-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .landing-shimmer::after {
+    animation: none;
+  }
+
+  .cta-card-motion.is-visible,
+  .cta-card-motion.is-visible .cta-heading-motion,
+  .cta-card-motion.is-visible .cta-highlight-motion {
+    animation: none;
   }
 }
