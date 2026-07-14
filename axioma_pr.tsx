@@ -627,7 +627,7 @@ const LandingView = ({ setGlobalMode }) => {
   const [loginRole, setLoginRole] = useState('client');
   const [authStep, setAuthStep] = useState('credentials');
   const [recoverySent, setRecoverySent] = useState(false);
-  const [openFaqIndex, setOpenFaqIndex] = useState(0);
+  const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
   const handleLogin = (role) => {
     setLoginModalOpen(false);
@@ -664,7 +664,7 @@ const LandingView = ({ setGlobalMode }) => {
   }, []);
 
   const landingPlatforms = [
-    ['РБК Инвестиции', 'СМИ', '2,5 млн/мес', '150 000 ₽'],
+    ['investor.ru', 'СМИ', '2,5 млн/мес', '150 000 ₽'],
     ['Технологии сегодня', 'ТГ', '125 тыс. подписчиков', '45 000 ₽'],
     ['VC.ru', 'СМИ', '1,2 млн/мес', '80 000 ₽'],
     ['Бизнес Среда', 'ВК', '2,4 млн/мес', '146 000 ₽'],
@@ -694,7 +694,7 @@ const LandingView = ({ setGlobalMode }) => {
 
   return (
     <div className="min-h-screen scroll-smooth bg-[#f4f6f8] font-sans text-[#102f4f] selection:bg-[#b8ffcf] selection:text-[#102f4f] text-[90%]">
-      <header className="sticky top-0 z-50 border-b border-[#dce3eb] bg-white/92 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-[#dce3eb] bg-white shadow-[0_4px_18px_rgba(11,53,88,0.08)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-[72px]">
             <div className="flex items-center">
@@ -945,7 +945,7 @@ const LandingView = ({ setGlobalMode }) => {
             <p className="mt-8 max-w-xl text-lg leading-8 text-[#434654]">
               Мы собрали ответы на самые популярные вопросы, чтобы ваш старт в «Аксиоме» был максимально понятным.
             </p>
-            <div className="mt-12 rounded-[32px] border border-[#cbdcff] bg-[#eef3ff] p-8">
+            <div className="mt-12 rounded-[32px] border border-[#cbdcff] bg-[#eef3ff] p-8 lg:mt-8">
               <h3 className="landing-heading text-base font-bold leading-[1.4] text-[#191c1e]">Остались вопросы?</h3>
               <p className="mt-5 text-sm leading-6 text-[#434654]">Служба поддержки поможет разобраться с регистрацией, материалом и размещением.</p>
               <a href="mailto:support@axioma.ru" className="mt-7 inline-flex items-center gap-3 text-base font-bold text-[#0055d8] transition-colors hover:text-[#003798]">Написать в поддержку <ArrowRight className="h-5 w-5" /></a>
@@ -958,10 +958,10 @@ const LandingView = ({ setGlobalMode }) => {
                 className="group rounded-[32px] border border-[#e3e8ee] bg-white transition-shadow hover:shadow-md"
                 open={openFaqIndex === index}
                 onToggle={(event) => {
-                  if (event.currentTarget.open) setOpenFaqIndex(index);
+                  setOpenFaqIndex(event.currentTarget.open ? index : null);
                 }}
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-5 px-7 py-7">
+                <summary className="faq-summary flex cursor-pointer list-none items-center justify-between gap-5 px-7 py-7 focus:outline-none">
                   <span className="landing-heading text-base font-bold leading-[1.4] text-[#191c1e] sm:text-lg">{question}</span>
                   <span className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-[#f2f5fb] text-[#191c1e] transition-all group-open:bg-[#0055d8] group-open:text-white"><ChevronRight className="h-5 w-5 transition-transform group-open:-rotate-90" /></span>
                 </summary>
