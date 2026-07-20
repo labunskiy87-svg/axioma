@@ -36,7 +36,9 @@ import {
   List,
   Quote,
   Trash2,
-  Copy
+  Copy,
+  Paperclip,
+  UploadCloud
 } from 'lucide-react';
 
 
@@ -264,6 +266,127 @@ const Button = ({ children, variant = 'primary', className = '', ...props }) => 
     <button className={`${baseStyle} ${variants[variant]} ${className}`} {...props}>
       {children}
     </button>
+  );
+};
+
+const formatFileSize = (bytes) => {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} МБ`;
+};
+
+const FileUploadField = ({
+  accept = undefined,
+  multiple = true,
+  prompt = 'Выберите файлы или перетащите их сюда',
+  hint = 'Максимальный размер одного файла — 20 МБ',
+  compact = false,
+}) => {
+  const inputRef = useRef(null);
+  const [files, setFiles] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const addFiles = (incomingFiles) => {
+    const nextFiles = Array.from(incomingFiles || []);
+    if (!nextFiles.length) return;
+
+    setFiles((currentFiles) => {
+      const sourceFiles = multiple ? [...currentFiles, ...nextFiles] : nextFiles.slice(0, 1);
+      return sourceFiles.filter((file, index, allFiles) => (
+        allFiles.findIndex((candidate) => (
+          candidate.name === file.name
+          && candidate.size === file.size
+          && candidate.lastModified === file.lastModified
+        )) === index
+      ));
+    });
+  };
+
+  const openFilePicker = () => inputRef.current?.click();
+  const removeFile = (fileToRemove) => {
+    setFiles((currentFiles) => currentFiles.filter((file) => file !== fileToRemove));
+  };
+
+  const fileList = files.length > 0 && (
+    <div className={`space-y-2 ${compact ? 'mt-3' : 'mt-3'}`}>
+      {files.map((file) => (
+        <div
+          key={`${file.name}-${file.size}-${file.lastModified}`}
+          className="flex min-w-0 items-center gap-3 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2"
+        >
+          <FileText className="h-4 w-4 flex-none text-[#006bff]" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-[#0b3558]">{file.name}</div>
+            <div className="text-xs text-[#476788]">{formatFileSize(file.size)}</div>
+          </div>
+          <button
+            type="button"
+            className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-[#476788] transition-colors hover:bg-red-50 hover:text-red-600"
+            onClick={() => removeFile(file)}
+            aria-label={`Удалить файл ${file.name}`}
+            title="Удалить файл"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="file"
+        className="sr-only"
+        accept={accept}
+        multiple={multiple}
+        onChange={(event) => {
+          addFiles(event.target.files);
+          event.target.value = '';
+        }}
+      />
+
+      {compact ? (
+        <Button type="button" variant="secondary" onClick={openFilePicker}>
+          <Paperclip className="mr-2 h-4 w-4" />
+          Прикрепить файл
+        </Button>
+      ) : (
+        <button
+          type="button"
+          className={`mt-2 flex min-h-[132px] w-full flex-col items-center justify-center rounded-lg border border-dashed px-6 py-5 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-[#006bff] ${
+            isDragging
+              ? 'border-[#006bff] bg-[#e6f0ff]'
+              : 'border-[#476788] bg-[#f8f9fb] hover:border-[#006bff] hover:bg-[#f3f7ff]'
+          }`}
+          onClick={openFilePicker}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
+            addFiles(event.dataTransfer.files);
+          }}
+        >
+          <UploadCloud className="h-6 w-6 text-[#006bff]" />
+          <span className="mt-3 text-sm font-semibold text-[#0b3558]">{prompt}</span>
+          <span className="mt-1 text-xs text-[#476788]">{hint}</span>
+        </button>
+      )}
+
+      {fileList}
+    </div>
   );
 };
 
@@ -1336,11 +1459,13 @@ const ClientDashboardView = ({ navigate }) => (
   </div>
 );
 
-const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
+const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045 }) => {
   const [linksOpen, setLinksOpen] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
-  const isPendingState = state === 'pending';
-  const isRejectedState = state === 'rejected';
+  const [currentState, setCurrentState] = useState(state);
+  const isPendingState = currentState === 'pending';
+  const isRejectedState = currentState === 'rejected';
+  const isCompletedState = currentState === 'completed';
   const order = isPendingState
     ? {
         id: 1048,
@@ -1363,6 +1488,32 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
           title: 'Обзор рынка недвижимости за третий квартал',
           format: 'Новость',
         }
+      : isCompletedState
+        ? orderId === 1052
+          ? {
+              id: 1052,
+              status: 'Завершено',
+              color: 'green',
+              subtitle: 'принят и оплачен 18.10.2023',
+              amount: 80000,
+              platform: 'VC.ru',
+              title: 'Кейс внедрения системы управления клиентами',
+              format: 'Лонгрид',
+              publicationUrl: 'https://vc.ru/services/1052',
+              publicationDate: '18.10.2023',
+            }
+          : {
+              id: 1045,
+              status: 'Завершено',
+              color: 'green',
+              subtitle: 'принят и оплачен 20.10.2023',
+              amount: 150000,
+              platform: 'РБК Инвестиции',
+              title: 'Пресс-релиз: Запуск новой платформы',
+              format: 'Статья',
+              publicationUrl: 'https://invest.rbc.ru/news/652a9f',
+              publicationDate: '18.10.2023',
+            }
       : {
           id: 1045,
           status: 'Ожидает приемки',
@@ -1372,6 +1523,8 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
           platform: 'РБК Инвестиции',
           title: 'Пресс-релиз: Запуск новой платформы',
           format: 'Статья',
+          publicationUrl: 'https://invest.rbc.ru/news/652a9f',
+          publicationDate: '18.10.2023',
         };
 
   return (
@@ -1389,7 +1542,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
         <p className="text-sm text-[#476788] mt-1">Площадка: {order.platform} · {order.subtitle}</p>
       </div>
       <div className="text-left sm:text-right">
-        <div className="text-sm text-[#476788]">К списанию</div>
+        <div className="text-sm text-[#476788]">{isCompletedState ? 'Оплачено' : 'К списанию'}</div>
         <div className="text-2xl font-semibold text-[#0b3558] tabular-nums">{formatMoney(order.amount)}</div>
       </div>
     </div>
@@ -1397,18 +1550,28 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
     <div className="bg-white border border-[#d4e0ed] rounded-2xl p-6">
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <div className="w-12 h-12 bg-[#f8f9fb] rounded-full flex items-center justify-center border border-[#d4e0ed] flex-shrink-0">
-           {isRejectedState
+           {isCompletedState
+             ? <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+             : isRejectedState
              ? <AlertCircle className="w-6 h-6 text-red-500" />
              : isPendingState
                ? <Clock className="w-6 h-6 text-[#006bff]" />
                : <CheckCircle2 className="w-6 h-6 text-[#006bff]" />}
-        </div>
+          </div>
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-[#0b3558]">
-            {isRejectedState ? 'Площадка отказалась от заказа' : isPendingState ? 'Заказ отправлен площадке' : 'Публикация загружена'}
+            {isCompletedState
+              ? 'Заказ завершен'
+              : isRejectedState
+                ? 'Площадка отказалась от заказа'
+                : isPendingState
+                  ? 'Заказ отправлен площадке'
+                  : 'Публикация загружена'}
           </h3>
           <p className="text-sm text-[#476788] mt-1 mb-5">
-            {isRejectedState
+            {isCompletedState
+              ? 'Публикация принята заказчиком, средства списаны с замороженного баланса, заказ закрыт. Ссылка и итоговый отчет остаются доступны в карточке.'
+              : isRejectedState
               ? 'Площадка рассмотрела заказ и отказалась от размещения. Средства по заказу не будут списаны и останутся доступны на балансе.'
               : isPendingState
                 ? 'Площадка получила заказ и должна принять или отклонить его до указанного срока. До решения площадки редактирование условий заказа недоступно.'
@@ -1418,9 +1581,9 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
             <div className="bg-[#f8f9fb] rounded-lg p-4 border border-[#d4e0ed] flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-3">
               <div className="flex items-center gap-2 truncate">
                 <ExternalLink className="w-4 h-4 text-[#a6bbd1] flex-shrink-0" />
-                <a href="#" className="text-sm text-[#006bff] hover:underline truncate">https://invest.rbc.ru/news/652a9f...</a>
+                <a href={order.publicationUrl} target="_blank" rel="noreferrer" className="text-sm text-[#006bff] hover:underline truncate">{order.publicationUrl}</a>
               </div>
-              <span className="text-xs text-[#476788] whitespace-nowrap bg-[#f8f9fb] px-2 py-1 rounded">Опубликовано 18.10.2023</span>
+              <span className="text-xs text-[#476788] whitespace-nowrap bg-[#f8f9fb] px-2 py-1 rounded">Опубликовано {order.publicationDate}</span>
             </div>
           )}
           {isRejectedState && (
@@ -1435,14 +1598,23 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
           )}
           
           <div className="flex flex-wrap gap-3">
-            {!isPendingState && !isRejectedState && (
+            {isCompletedState ? (
               <>
-                <Button variant="primary">Принять и оплатить</Button>
-                <Button variant="secondary" onClick={() => navigate('complaint')}>Открыть жалобу</Button>
+                <Button variant="primary" onClick={() => navigate('report_detail')}>Открыть отчет</Button>
+                <Button variant="secondary" onClick={() => navigate('order_chat')}>Чат заказа</Button>
+              </>
+            ) : (
+              <>
+                {!isPendingState && !isRejectedState && (
+                  <>
+                    <Button variant="primary" onClick={() => setCurrentState('completed')}>Принять и оплатить</Button>
+                    <Button variant="secondary" onClick={() => navigate('complaint')}>Открыть жалобу</Button>
+                  </>
+                )}
+                {isRejectedState && <Button variant="primary" onClick={() => navigate('catalog')}>Выбрать другую площадку</Button>}
+                <Button variant="secondary" onClick={() => navigate('order_chat')}>Чат заказа</Button>
               </>
             )}
-            {isRejectedState && <Button variant="primary" onClick={() => navigate('catalog')}>Выбрать другую площадку</Button>}
-            <Button variant="secondary" onClick={() => navigate('order_chat')}>Чат заказа</Button>
           </div>
         </div>
       </div>
@@ -1538,7 +1710,14 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance' }) => {
           <div className="space-y-4">
             {[
               ['Заказ создан', '15.10, 10:15', 'done'],
-              ...(isRejectedState
+              ...(isCompletedState
+                ? [
+                    ['Площадка приняла заказ', '16.10, 11:40', 'done'],
+                    ['Площадка отправила ссылку', '18.10, 12:30', 'done'],
+                    ['Публикация принята', '20.10, 12:03', 'done'],
+                    ['Заказ оплачен и закрыт', '20.10, 12:03', 'done'],
+                  ]
+                : isRejectedState
                 ? [
                     ['Площадка рассмотрела заказ', '19.10, 14:20', 'done'],
                     ['Площадка отказала', '19.10, 14:20', 'current'],
@@ -1600,7 +1779,15 @@ const ClientOrdersView = ({ navigate }) => (
               <tr
                 key={order.id}
                 className="hover:bg-[#f8f9fb] cursor-pointer"
-                onClick={() => navigate(order.status === 'Площадка рассматривает' ? 'order_pending_detail' : order.status === 'Площадка отказала' ? 'order_rejected_detail' : 'order_detail')}
+                onClick={() => navigate(
+                  order.status === 'Площадка рассматривает'
+                    ? 'order_pending_detail'
+                    : order.status === 'Площадка отказала'
+                      ? 'order_rejected_detail'
+                      : order.status === 'Завершено'
+                        ? 'order_completed_detail'
+                        : 'order_detail',
+                )}
               >
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0b3558]">#{order.id}</td>
                 <td className="px-6 py-4 text-sm text-[#476788]">{order.material}</td>
@@ -1619,41 +1806,87 @@ const ClientOrdersView = ({ navigate }) => (
   </div>
 );
 
-const ClientComplaintView = ({ navigate }) => (
-  <div className="space-y-6 max-w-4xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('order_detail')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К заказу #1045
-    </button>
-    <div>
-      <h1 className="font-display text-2xl font-bold text-[#0b3558]">Жалоба / спор</h1>
-      <p className="text-sm text-[#476788] mt-1">Замороженные средства остаются на холде до решения модератора.</p>
+const ClientComplaintView = ({ navigate }) => {
+  const [submitted, setSubmitted] = useState(false);
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('order_detail')}>
+        <ChevronRight className="w-4 h-4 rotate-180" /> К заказу #1045
+      </button>
+
+      {!submitted ? (
+        <>
+          <div>
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">Открытие жалобы</h1>
+            <p className="text-sm text-[#476788] mt-1">На время рассмотрения средства по заказу останутся заморожены.</p>
+          </div>
+          <Card className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <label className="block"><span className="text-sm font-medium text-[#476788]">Заказ</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="#1045 · РБК Инвестиции" /></label>
+              <label className="block"><span className="text-sm font-medium text-[#476788]">Причина</span><CustomSelect className="mt-2" options={['Некорректная маркировка', 'Материал изменен', 'Ссылка недоступна', 'Нарушен формат']} /></label>
+              <label className="block"><span className="text-sm font-medium text-[#476788]">Ссылка</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="https://invest.rbc.ru/news/652a9f" /></label>
+              <label className="block"><span className="text-sm font-medium text-[#476788]">Дата обнаружения</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="19.10.2023" /></label>
+              <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Описание</span><textarea className="mt-2 w-full min-h-[150px] border border-[#476788] rounded-lg px-4 py-3 text-sm" defaultValue="Опишите, что именно нарушено: ссылка, фрагмент публикации, отличие от согласованного материала." /></label>
+              <div className="block md:col-span-2">
+                <span className="text-sm font-medium text-[#476788]">Доказательства</span>
+                <FileUploadField
+                  accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp"
+                  prompt="Выберите файлы с доказательствами или перетащите их сюда"
+                  hint="PDF, DOCX, TXT, PNG, JPG или WEBP · до 20 МБ"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex flex-col items-start justify-between gap-4 border-t border-[#d4e0ed] pt-5 sm:flex-row sm:items-center">
+              <p className="max-w-xl text-sm leading-6 text-[#476788]">После отправки будет создан спор. Паблишер получит запрос на доказательства, а оплата заказа будет приостановлена.</p>
+              <Button variant="primary" className="whitespace-nowrap" onClick={() => setSubmitted(true)}>Открыть жалобу</Button>
+            </div>
+          </Card>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">Жалоба открыта</h1>
+            <Badge color="amber">Спор #C-020</Badge>
+          </div>
+          <Card className="p-6 sm:p-8">
+            <div className="flex flex-col gap-6 md:flex-row md:items-start">
+              <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full border border-emerald-200 bg-emerald-50">
+                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-display text-lg font-bold text-[#0b3558]">Жалоба принята и передана на рассмотрение</h2>
+                <p className="mt-2 text-sm leading-6 text-[#476788]">Спор #C-020 создан 20.10.2023 в 12:03. Мы уведомили паблишера и запросили его позицию и доказательства.</p>
+
+                <div className="mt-6 grid gap-3 md:grid-cols-3">
+                  {[
+                    ['Статус', 'Ожидается ответ паблишера'],
+                    ['Ответ паблишера', 'до 21.10, 18:00'],
+                    ['Решение модератора', 'до 3 рабочих дней'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+                      <div className="text-xs text-[#476788]">{label}</div>
+                      <div className="mt-1 text-sm font-semibold leading-5 text-[#0b3558]">{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-lg border border-[#d4e0ed] bg-white p-4 text-sm leading-6 text-[#476788]">
+                  Оплата заказа приостановлена. {formatMoney(150000)} останутся на холде до решения модератора. Все обновления появятся на странице спора и в уведомлениях.
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Button variant="primary" onClick={() => navigate('dispute_detail')}>Открыть спор</Button>
+                  <Button variant="secondary" onClick={() => navigate('order_detail')}>Вернуться к заказу</Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
     </div>
-    <Card className="p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Заказ</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="#1045 · РБК Инвестиции" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Причина</span><CustomSelect className="mt-2" options={['Некорректная маркировка', 'Материал изменен', 'Ссылка недоступна', 'Нарушен формат']} /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Ссылка</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="https://invest.rbc.ru/news/652a9f" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Дата обнаружения</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="19.10.2023" /></label>
-        <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Описание</span><textarea className="mt-2 w-full min-h-[150px] border border-[#476788] rounded-lg px-4 py-3 text-sm" defaultValue="Опишите, что именно нарушено: ссылка, фрагмент публикации, отличие от согласованного материала." /></label>
-        <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Доказательства</span><div className="mt-2 border border-dashed border-[#476788] rounded-lg p-6 text-sm text-[#476788] bg-[#f8f9fb]">Загрузите файл или несколько доказательств</div></label>
-      </div>
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-[#476788]">После открытия жалобы будет создана отдельная страница спора с доказательствами и решением модератора.</p>
-        <Button variant="primary">Открыть жалобу</Button>
-      </div>
-    </Card>
-    <Card className="p-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-semibold text-[#0b3558]">Спор #C-020 уже открыт</div>
-          <p className="text-sm text-[#476788] mt-1">Средства по заказу заморожены, модератор ожидает доказательства от паблишера.</p>
-        </div>
-        <Button variant="secondary" onClick={() => navigate('dispute_detail')}>Открыть спор</Button>
-      </div>
-    </Card>
-    <ConfirmAction title="Подтверждение жалобы" text="Открытие жалобы блокирует оплату заказа до решения модератора." action="Подтвердить жалобу" />
-  </div>
-);
+  );
+};
 
 const DisputeDetailView = ({ navigate, role = 'client' }) => (
   <div className="space-y-6 max-w-6xl mx-auto">
@@ -2142,17 +2375,19 @@ const ClientMaterialDetailView = ({ navigate }) => (
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('materials')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> К материалам
     </button>
-    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558] flex items-center gap-3">
+    <div className="grid gap-5 border-b border-[#d4e0ed] pb-6 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+      <div className="min-w-0">
+        <h1 className="max-w-3xl font-display text-2xl font-bold leading-tight text-[#0b3558]">
           Пресс-релиз: Запуск новой платформы
-          <Badge color="green">Принят в систему</Badge>
         </h1>
-        <p className="text-sm text-[#476788] mt-1">Материал #M-1048 · обновлен 12.10.2023</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Badge color="green">Принят в систему</Badge>
+          <p className="text-sm text-[#476788]">Материал #M-1048 · обновлен 12.10.2023</p>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-3">
-        <Button variant="secondary" onClick={() => navigate('create_material')}>Редактировать материал</Button>
-        <Button variant="primary" onClick={() => navigate('catalog')}>Выбрать площадки</Button>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Button variant="secondary" className="w-full whitespace-nowrap" onClick={() => navigate('create_material')}>Редактировать материал</Button>
+        <Button variant="primary" className="w-full whitespace-nowrap" onClick={() => navigate('catalog')}>Выбрать площадки</Button>
       </div>
     </div>
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2220,14 +2455,23 @@ const ClientCreateMaterialView = ({ navigate }) => {
           <span className="text-sm font-medium text-[#476788]">Тип материала</span>
           <CustomSelect className="mt-2" options={['Статья', 'Новость', 'Интервью', 'Пост в Телеграме']} />
         </label>
-        <label className="block">
+        <div className="block">
           <span className="text-sm font-medium text-[#476788]">Файлы</span>
-          <div className="mt-2 border border-dashed border-[#476788] rounded-lg p-6 text-sm text-[#476788] bg-[#f8f9fb]">Перетащите документ, отчет или изображения либо нажмите для загрузки</div>
-        </label>
+          <FileUploadField
+            accept=".pdf,.doc,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp"
+            prompt="Выберите документ или перетащите его сюда"
+            hint="PDF, DOCX, TXT, RTF или изображение · до 20 МБ"
+          />
+        </div>
         <div className="block">
           <span className="text-sm font-medium text-[#476788]">Изображения</span>
-          <div className="mt-2 border border-dashed border-[#476788] rounded-lg p-6 text-sm text-[#476788] bg-[#f8f9fb]">
-            Загрузите изображение или <button type="button" className="font-semibold text-[#006bff]" onClick={() => setAiModal('image')}>сгенерируйте с помощью ИИ за 50 ₽</button>
+          <FileUploadField
+            accept="image/png,image/jpeg,image/webp"
+            prompt="Выберите изображения или перетащите их сюда"
+            hint="PNG, JPG или WEBP · до 20 МБ"
+          />
+          <div className="mt-2 text-sm text-[#476788]">
+            Или <button type="button" className="font-semibold text-[#006bff]" onClick={() => setAiModal('image')}>сгенерируйте изображение с помощью ИИ за 50 ₽</button>
           </div>
         </div>
         <label className="block md:col-span-2">
@@ -2670,25 +2914,25 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
         </div>
       </Card>
 
-      <Card className="p-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
+      <Card className="p-5 sm:p-6">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+          <div className="min-w-0">
             <h2 className="font-display text-sm font-bold text-[#0b3558]">Массовое размещение одного материала</h2>
-            <p className="text-sm text-[#476788] mt-1">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#476788]">
               Выберите несколько площадок в списке и создайте отдельные заказы для одного текста.
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-2 text-sm">
+          <div className="grid gap-3 sm:grid-cols-[auto_auto] sm:items-center xl:grid-cols-[auto_auto_auto]">
+            <div className="flex min-h-10 items-center rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-2 text-sm sm:col-span-2 xl:col-span-1">
               <span className="text-[#476788]">Выбрано:</span>
               <span className="ml-2 font-semibold text-[#0b3558]">{selectedPlatforms.length}</span>
               <span className="mx-2 text-[#d4d4d4]">/</span>
               <span className="font-semibold text-[#0b3558] tabular-nums">{formatMoney(selectedTotal)}</span>
             </div>
-            <Button variant="secondary" className="w-full sm:w-auto" disabled={!selectedPlatforms.length} onClick={() => setSelectedPlatformIds([])}>
+            <Button variant="secondary" className="w-full whitespace-nowrap sm:w-auto" disabled={!selectedPlatforms.length} onClick={() => setSelectedPlatformIds([])}>
               Сбросить
             </Button>
-            <Button variant="primary" className="w-full sm:w-auto" disabled={!selectedPlatforms.length} onClick={() => setBulkModalOpen(true)}>
+            <Button variant="primary" className="w-full whitespace-nowrap sm:w-auto" disabled={!selectedPlatforms.length} onClick={() => setBulkModalOpen(true)}>
               Разместить на выбранных
             </Button>
           </div>
@@ -2723,13 +2967,15 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
         <ChevronRight className="w-4 h-4 rotate-180" /> К каталогу
       </button>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl ${item.logo}`}>{item.name.charAt(0)}</div>
-          <div>
-            <h1 className="font-display text-2xl font-bold text-[#0b3558]">{item.name}</h1>
-            <p className="text-sm text-[#476788] mt-1">{item.type} · {item.theme} · {item.region}</p>
-            <div className="flex flex-wrap gap-2 mt-3">{item.tags.map(tag => <Badge key={tag} color="blue">{tag}</Badge>)}</div>
+        <div className="min-w-0">
+          <div className="flex items-start gap-4">
+            <div className={`w-14 h-14 rounded-2xl flex flex-none items-center justify-center text-white font-bold text-xl ${item.logo}`}>{item.name.charAt(0)}</div>
+            <div className="min-w-0">
+              <h1 className="font-display text-2xl font-bold text-[#0b3558]">{item.name}</h1>
+              <p className="text-sm text-[#476788] mt-1">{item.type} · {item.theme} · {item.region}</p>
+            </div>
           </div>
+          <div className="mt-4 flex flex-wrap justify-start gap-2">{item.tags.map(tag => <Badge key={tag} color="blue">{tag}</Badge>)}</div>
         </div>
         <Button variant={isFavorite ? 'primary' : 'secondary'} onClick={() => toggleFavoritePlatform(item.id)}>
           <Star className={`w-4 h-4 mr-2 ${isFavorite ? 'fill-white' : ''}`} /> {isFavorite ? 'В избранном' : 'В избранное'}
@@ -2861,8 +3107,12 @@ const ClientSupportView = ({ navigate, role = 'client' }) => {
           </div>
           <div className="p-4 border-t border-[#d4e0ed]">
             <textarea className="w-full min-h-[100px] border border-[#476788] rounded-lg px-4 py-3 text-sm" placeholder="Напишите сообщение менеджеру" />
-            <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <Button variant="secondary"><Download className="w-4 h-4 mr-2" /> Прикрепить файл</Button>
+            <div className="mt-3 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+              <FileUploadField
+                compact
+                accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp"
+                hint=""
+              />
               <Button variant="primary">Отправить</Button>
             </div>
           </div>
@@ -3798,7 +4048,14 @@ const PublisherComplaintView = ({ navigate }) => (
         <label className="block"><span className="text-sm font-medium text-[#476788]">Заказ</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="#1055 · Кейс внедрения системы управления клиентами" /></label>
         <label className="block"><span className="text-sm font-medium text-[#476788]">Причина жалобы</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Нарушен формат публикации" /></label>
         <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Комментарий паблишера</span><textarea className="mt-2 w-full min-h-[150px] border border-[#476788] rounded-lg px-4 py-3 text-sm" defaultValue="Опишите позицию редакции и приложите доказательства: ссылка, архив страницы, исходные файлы, переписка." /></label>
-        <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Доказательства</span><div className="mt-2 border border-dashed border-[#476788] rounded-lg p-6 text-sm text-[#476788] bg-[#f8f9fb]">Загрузите файл или несколько доказательств</div></label>
+        <div className="block md:col-span-2">
+          <span className="text-sm font-medium text-[#476788]">Доказательства</span>
+          <FileUploadField
+            accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp"
+            prompt="Выберите файлы с доказательствами или перетащите их сюда"
+            hint="PDF, DOCX, TXT, PNG, JPG или WEBP · до 20 МБ"
+          />
+        </div>
       </div>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[#476788]">Доказательства будут добавлены на страницу спора. Выплата по заказу останется замороженной до решения модератора.</p>
@@ -5959,6 +6216,7 @@ export default function App() {
         case 'order_detail': return <ClientOrderDetailView navigate={setClientView} />;
         case 'order_pending_detail': return <ClientOrderDetailView navigate={setClientView} state="pending" />;
         case 'order_rejected_detail': return <ClientOrderDetailView navigate={setClientView} state="rejected" />;
+        case 'order_completed_detail': return <ClientOrderDetailView navigate={setClientView} state="completed" orderId={1052} />;
         case 'complaint': return <ClientComplaintView navigate={setClientView} />;
         case 'dispute_detail': return <DisputeDetailView navigate={setClientView} />;
         case 'order_chat': return <OrderChatView navigate={setClientView} />;
