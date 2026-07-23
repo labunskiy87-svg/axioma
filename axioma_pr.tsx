@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -41,17 +42,111 @@ import {
   Copy,
   Paperclip,
   UploadCloud,
-  FolderKanban
+  FolderKanban,
+  Megaphone,
+  Newspaper,
+  Lightbulb,
+  Rocket,
+  Gift,
+  Percent,
+  Tag,
+  BookOpen,
+  Sparkles,
+  Users,
+  TrendingUp,
+  Link2,
+  Zap,
+  Pencil,
+  Eye
 } from 'lucide-react';
 
 
 // --- ДАННЫЕ ПРОТОТИПА ---
+
+const federalDistricts = [
+  'Центральный федеральный округ',
+  'Северо-Западный федеральный округ',
+  'Южный федеральный округ',
+  'Северо-Кавказский федеральный округ',
+  'Приволжский федеральный округ',
+  'Уральский федеральный округ',
+  'Сибирский федеральный округ',
+  'Дальневосточный федеральный округ',
+];
+const regionFilterOptions = ['Любая география', 'Федеральные', 'Москва', 'Санкт-Петербург', ...federalDistricts];
+const matchesGeographyFilter = (region, filter) => {
+  if (!filter || filter === 'Любая география') return true;
+  if (filter === 'Федеральные') return region === 'Федеральный охват';
+  return region === filter;
+};
+const informerIconOptions = [
+  { value: 'store', label: 'Площадка' },
+  { value: 'briefcase', label: 'Пакет' },
+  { value: 'credit', label: 'Оплата' },
+  { value: 'file', label: 'Документ' },
+  { value: 'megaphone', label: 'Анонс' },
+  { value: 'newspaper', label: 'Новость' },
+  { value: 'lightbulb', label: 'Идея' },
+  { value: 'rocket', label: 'Запуск' },
+  { value: 'gift', label: 'Предложение' },
+  { value: 'percent', label: 'Скидка' },
+  { value: 'tag', label: 'Специальная цена' },
+  { value: 'book', label: 'База знаний' },
+  { value: 'sparkles', label: 'Новинка' },
+  { value: 'users', label: 'Аудитория' },
+  { value: 'trending', label: 'Рост' },
+  { value: 'link', label: 'Ссылка' },
+  { value: 'zap', label: 'Важное' },
+];
+const informerIconMap = {
+  store: Store,
+  briefcase: Briefcase,
+  credit: CreditCard,
+  file: FileText,
+  megaphone: Megaphone,
+  newspaper: Newspaper,
+  lightbulb: Lightbulb,
+  rocket: Rocket,
+  gift: Gift,
+  percent: Percent,
+  tag: Tag,
+  book: BookOpen,
+  sparkles: Sparkles,
+  users: Users,
+  trending: TrendingUp,
+  link: Link2,
+  zap: Zap,
+};
+const informerAccentOptions = [
+  { value: 'blue', label: 'Синий' },
+  { value: 'green', label: 'Зеленый' },
+  { value: 'amber', label: 'Янтарный' },
+  { value: 'violet', label: 'Фиолетовый' },
+  { value: 'cyan', label: 'Бирюзовый' },
+  { value: 'pink', label: 'Розовый' },
+  { value: 'red', label: 'Красный' },
+  { value: 'lime', label: 'Лаймовый' },
+  { value: 'orange', label: 'Оранжевый' },
+  { value: 'slate', label: 'Графитовый' },
+];
+const informerAccentMap = {
+  blue: 'bg-[#e8f1ff] text-[#006bff]',
+  green: 'bg-[#eef8f3] text-[#168a57]',
+  amber: 'bg-[#fff4df] text-[#b46b00]',
+  violet: 'bg-[#f1edff] text-[#6a4bc4]',
+  cyan: 'bg-[#e6f8fb] text-[#087f8c]',
+  pink: 'bg-[#fdebf4] text-[#c0266d]',
+  red: 'bg-[#feecec] text-[#c62929]',
+  lime: 'bg-[#eef9df] text-[#4d7c0f]',
+  orange: 'bg-[#fff0e5] text-[#c25100]',
+  slate: 'bg-[#edf1f5] text-[#40566d]',
+};
 const mockMaterials = [
   { id: 1, name: 'Пресс-релиз: Запуск новой платформы', advertiser: 'ООО "Финтех Решения"', type: 'Статья', status: 'Принят в систему', statusColor: 'green', placements: 3, date: '12.10.2023', projectId: 1 },
-  { id: 2, name: 'Обзор рынка недвижимости за третий квартал', advertiser: 'Урбан Групп', type: 'Пост в Телеграме', status: 'На модерации', statusColor: 'blue', placements: 0, date: '14.10.2023', projectId: 2 },
-  { id: 3, name: 'Интервью с генеральным директором', advertiser: 'ООО "Финтех Решения"', type: 'Интервью', status: 'Требуются правки', statusColor: 'amber', placements: 0, date: '15.10.2023', projectId: 1 },
+  { id: 2, name: 'Обзор рынка недвижимости за третий квартал', advertiser: 'Урбан Групп', type: 'Пост', status: 'На модерации', statusColor: 'blue', placements: 0, date: '14.10.2023', projectId: 2 },
+  { id: 3, name: 'Интервью с генеральным директором', advertiser: 'ООО "Финтех Решения"', type: 'Статья', status: 'Требуются правки', statusColor: 'amber', placements: 0, date: '15.10.2023', projectId: 1 },
   { id: 4, name: 'Кейс внедрения системы управления клиентами', advertiser: 'ТехКорп', type: 'Кейс', status: 'Используется в заказах', statusColor: 'indigo', placements: 5, date: '10.10.2023', projectId: 3 },
-  { id: 5, name: 'Заметка о новом продукте', advertiser: 'Урбан Групп', type: 'Новость', status: 'Черновик', statusColor: 'gray', placements: 0, date: '17.10.2023', projectId: null },
+  { id: 5, name: 'Заметка о новом продукте', advertiser: 'Урбан Групп', type: 'Новость', status: 'Принят в систему', statusColor: 'green', placements: 0, date: '17.10.2023', projectId: null },
   { id: 6, name: 'Материал с запрещенными обещаниями', advertiser: 'ТехКорп', type: 'Статья', status: 'Отклонен', statusColor: 'red', placements: 0, date: '11.10.2023', projectId: null },
   { id: 7, name: 'Публикация про отраслевую конференцию', advertiser: 'ООО "Финтех Решения"', type: 'Пресс-релиз', status: 'Принят в систему', statusColor: 'green', placements: 2, date: '01.09.2023', projectId: 3 },
 ];
@@ -86,13 +181,32 @@ const initialProjects = [
   },
 ];
 
+const placementFormatFilterOptions = ['Все форматы', 'Статья', 'Новость', 'Пост', 'Лонгрид'];
+
 const mockCatalog = [
-  { id: 101, name: 'РБК Инвестиции', type: 'СМИ', theme: 'Финансы', region: 'Федеральные', goal: 'пиар', format: 'Статья', price: 150000, reach: '2,5 млн/мес', mediology: 'A+', aggregators: ['Google News', 'Дзен'], deadline: '2 дня', storage: '2 года', tags: ['Проверено', 'Маркировка'], logo: 'bg-[#0b3558]' },
-  { id: 102, name: 'Технологии сегодня', type: 'ТГ-канал', theme: 'ИТ', region: 'Москва', goal: 'SEO', format: 'Пост', price: 45000, reach: '125 тыс. подписчиков', mediology: 'B+', aggregators: ['Дзен'], deadline: '1 день', storage: '2 года', tags: ['Проверено', 'Маркировка'], logo: 'bg-[#006bff]' },
-  { id: 103, name: 'VC.ru', type: 'СМИ', theme: 'Бизнес', region: 'Федеральные', goal: 'SEO', format: 'Лонгрид', price: 80000, reach: '1,2 млн/мес', mediology: 'A', aggregators: ['Google News', 'Дзен'], deadline: '4 дня', storage: '2 года', tags: ['SEO', 'Маркировка'], logo: 'bg-pink-600' },
-  { id: 104, name: 'Код Дурова', type: 'ТГ-канал', theme: 'ИТ', region: 'Федеральные', goal: 'пиар', format: 'Нативный пост', price: 60000, reach: '200 тыс. подписчиков', mediology: 'B', aggregators: ['нет'], deadline: '1 день', storage: '2 года', tags: ['Проверено', 'Маркировка'], logo: 'bg-[#0b3558]' },
-  { id: 105, name: 'Бизнес Среда', type: 'Паблик ВК', theme: 'Бизнес', region: 'Регионы', goal: 'SERM', format: 'Новость', price: 146000, reach: '2,4 млн/мес', mediology: 'A-', aggregators: ['Дзен'], deadline: '3 дня', storage: '2 года', tags: ['Без удаления', 'пиар'], logo: 'bg-emerald-700' },
+  { id: 101, name: 'РБК Инвестиции', type: 'СМИ', theme: 'Финансы', region: 'Федеральный охват', goals: ['Пиар', 'SEO'], formats: ['Статья', 'Новость'], format: 'Статья', price: 150000, reach: '2,5 млн/мес', mediology: 'A+', aggregators: ['Google News', 'Дзен'], deadline: '2 дня', storage: '2 года', tags: ['Проверено', 'Маркировка'], logo: 'bg-[#0b3558]' },
+  { id: 102, name: 'Технологии сегодня', type: 'ТГ-канал', theme: 'ИТ', region: 'Центральный федеральный округ', goals: ['Пиар', 'SEO'], formats: ['Пост'], format: 'Пост', price: 45000, reach: '125 тыс. подписчиков', mediology: 'B+', aggregators: ['Дзен'], deadline: '1 день', storage: '2 года', tags: ['Проверено', 'Маркировка'], logo: 'bg-[#006bff]' },
+  { id: 103, name: 'VC.ru', type: 'СМИ', theme: 'Бизнес', region: 'Федеральный охват', goals: ['Пиар', 'SEO', 'SERM'], formats: ['Статья', 'Новость', 'Лонгрид'], format: 'Лонгрид', price: 80000, reach: '1,2 млн/мес', mediology: 'A', aggregators: ['Google News', 'Дзен'], deadline: '4 дня', storage: '2 года', tags: ['SEO', 'Маркировка'], logo: 'bg-pink-600' },
+  { id: 104, name: 'Код Дурова', type: 'ТГ-канал', theme: 'ИТ', region: 'Федеральный охват', goals: ['Пиар', 'SERM'], formats: ['Пост'], format: 'Пост', price: 60000, reach: '200 тыс. подписчиков', mediology: 'B', aggregators: ['нет'], deadline: '1 день', storage: '2 года', tags: ['Проверено', 'Маркировка'], logo: 'bg-[#0b3558]' },
+  { id: 105, name: 'Бизнес Среда', type: 'Паблик ВК', theme: 'Бизнес', region: 'Приволжский федеральный округ', goals: ['Пиар', 'SERM'], formats: ['Пост'], format: 'Пост', price: 146000, reach: '2,4 млн/мес', mediology: 'A-', aggregators: ['Дзен'], deadline: '3 дня', storage: '2 года', tags: ['Без удаления', 'Пиар'], logo: 'bg-emerald-700' },
 ];
+
+const platformFormatPrices = {
+  101: { Статья: 150000, Новость: 85000 },
+  102: { Пост: 45000 },
+  103: { Статья: 80000, Новость: 55000 },
+  104: { Пост: 60000 },
+  105: { Пост: 146000 },
+};
+
+const getMaterialCommercialFormat = (material, platform) => {
+  if (['ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене'].includes(platform?.type)) return 'Пост';
+  return material?.type === 'Новость' ? 'Новость' : 'Статья';
+};
+const getPlatformPriceForMaterial = (platform, material) => {
+  const format = getMaterialCommercialFormat(material, platform);
+  return platform.formatPrices?.[format] ?? platformFormatPrices[platform.id]?.[format] ?? platform.price;
+};
 
 const mockOrdersClient = [
   { id: 1045, material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', price: 150000, frozen: 150000, status: 'Ожидает приемки', statusColor: 'indigo', date: '15.10.2023', action: 'Проверить публикацию', projectId: 1 },
@@ -103,11 +217,11 @@ const mockOrdersClient = [
 ];
 
 const mockOrdersPublisher = [
-  { id: 1045, material: 'Пресс-релиз: Запуск новой платформы', advertiser: 'Заказчик #842', price: 127500, status: 'Ожидает публикации', statusColor: 'amber', date: '16.10.2023', format: 'СМИ (Статья)' },
-  { id: 1048, material: 'Анонс вебинара по инвестициям', advertiser: 'Заказчик #112', price: 85000, status: 'Новая заявка', statusColor: 'blue', date: '18.10.2023', format: 'СМИ (Новость)' },
-  { id: 1052, material: 'Обзор ИТ рынка', advertiser: 'Заказчик #55', price: 150000, status: 'Завершено', statusColor: 'gray', date: '05.10.2023', format: 'СМИ (Лонгрид)' },
-  { id: 1054, material: 'Интервью с генеральным директором', advertiser: 'Заказчик #901', price: 60000, status: 'Ожидает публикации', statusColor: 'amber', date: '18.10.2023', format: 'ТГ-канал (Нативный пост)' },
-  { id: 1055, material: 'Кейс внедрения системы управления клиентами', advertiser: 'Заказчик #842', price: 146000, status: 'Жалоба открыта', statusColor: 'red', date: '19.10.2023', format: 'Паблик ВК (Новость)' },
+  { id: 1045, material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', advertiser: 'Заказчик #842', price: 127500, status: 'Ожидает публикации', statusColor: 'amber', date: '16.10.2023', format: 'СМИ (Статья)' },
+  { id: 1048, material: 'Анонс вебинара по инвестициям', platform: 'РБК Инвестиции', advertiser: 'Заказчик #112', price: 85000, status: 'Новая заявка', statusColor: 'blue', date: '18.10.2023', format: 'СМИ (Новость)' },
+  { id: 1052, material: 'Обзор ИТ рынка', platform: 'РБК Инвестиции', advertiser: 'Заказчик #55', price: 150000, status: 'Завершено', statusColor: 'gray', date: '05.10.2023', format: 'СМИ (Лонгрид)' },
+  { id: 1054, material: 'Интервью с генеральным директором', platform: 'Код Дурова', advertiser: 'Заказчик #901', price: 60000, status: 'Ожидает публикации', statusColor: 'amber', date: '18.10.2023', format: 'ТГ-канал (Пост)' },
+  { id: 1055, material: 'Кейс внедрения системы управления клиентами', platform: 'Бизнес Среда', advertiser: 'Заказчик #842', price: 146000, status: 'Жалоба открыта', statusColor: 'red', date: '19.10.2023', format: 'Паблик ВК (Пост)' },
 ];
 
 const mockTransactions = [
@@ -136,10 +250,183 @@ const mockReports = [
   { order: '#1056', materialId: 2, material: 'Обзор рынка недвижимости за третий квартал', platform: 'Бизнес Среда', date: '05.10.2023', link: 'https://business-sreda.ru/research/q3', price: 146000, status: 'Завершено', color: 'gray', projectId: 2 },
 ];
 
+const initialPublisherApplications = [
+  {
+    id: 'PA-014',
+    submittedAt: '23.07.2026, 10:42',
+    status: 'Новая',
+    accountStatus: 'Не создан',
+    applicant: 'Анна Смирнова',
+    position: 'Коммерческий директор',
+    email: 'partner@investor.ru',
+    phone: '+7 999 000-00-00',
+    relation: 'Сотрудник редакции',
+    platform: 'Investor.ru',
+    platformType: 'Онлайн-СМИ',
+    platformUrl: 'https://investor.ru',
+    legalName: 'ООО «Инвестор Медиа»',
+    inn: '7701000000',
+    theme: 'Финансы, инвестиции, бизнес',
+    reach: '2,5 млн посещений в месяц',
+    comment: 'Готовы предоставить доступ к Метрике и официальный контакт редакции.',
+    checks: { resource: true, legal: true, representative: false, duplicate: true },
+    decisionComment: '',
+  },
+  {
+    id: 'PA-013',
+    submittedAt: '22.07.2026, 16:15',
+    status: 'Нужны данные',
+    accountStatus: 'Не создан',
+    applicant: 'Илья Морозов',
+    position: 'Владелец',
+    email: 'owner@city-media.ru',
+    phone: '+7 916 400-12-30',
+    relation: 'Владелец',
+    platform: 'Городские новости',
+    platformType: 'Telegram-канал',
+    platformUrl: 'https://t.me/city_media',
+    legalName: 'ИП Морозов Илья Андреевич',
+    inn: '771100000000',
+    theme: 'Город, общество',
+    reach: '84 тыс. подписчиков',
+    comment: '',
+    checks: { resource: true, legal: true, representative: false, duplicate: true },
+    decisionComment: 'Нужен официальный контакт в описании канала или подтверждение владения.',
+  },
+  {
+    id: 'PA-012',
+    submittedAt: '21.07.2026, 12:30',
+    status: 'Одобрена',
+    accountStatus: 'Приглашение отправлено',
+    applicant: 'Мария Лебедева',
+    position: 'Главный редактор',
+    email: 'editor@business-review.ru',
+    phone: '+7 495 100-10-10',
+    relation: 'Сотрудник редакции',
+    platform: 'Business Review',
+    platformType: 'Онлайн-СМИ',
+    platformUrl: 'https://business-review.ru',
+    legalName: 'ООО «Бизнес Ревью»',
+    inn: '7722000000',
+    theme: 'Бизнес, управление',
+    reach: '940 тыс. посещений в месяц',
+    comment: 'Приглашение отправлено владельцу кабинета.',
+    checks: { resource: true, legal: true, representative: true, duplicate: true },
+    decisionComment: 'Площадка и представитель подтверждены.',
+  },
+];
+
+const getInformerFormat = (item) => item.format || (item.category === 'Полезное' ? 'Внешняя ссылка' : 'Подборка площадок');
+
+const getInformerSelectionOptions = (format) => (
+  format === 'Подборка площадок'
+    ? mockCatalog.map((platform) => ({
+      value: String(platform.id),
+      label: platform.name,
+      description: `${platform.type} · ${platform.theme} · ${formatMoney(platform.price)}`,
+    }))
+    : []
+);
+
+const initialInformerItems = [
+  {
+    id: 'INF-001',
+    category: 'Новинки',
+    format: 'Подборка площадок',
+    eyebrow: 'Новые площадки',
+    title: 'В каталоге появились 12 новых медиа',
+    text: 'Онлайн-СМИ, Telegram-каналы и региональные площадки уже доступны для размещения.',
+    action: 'Смотреть площадки',
+    target: 'Каталог',
+    icon: 'store',
+    accent: 'blue',
+    status: 'Опубликован',
+    startsAt: '23.07.2026',
+    endsAt: 'Без срока',
+    updatedAt: '23.07.2026, 09:20',
+    selectionIds: ['101', '102', '105'],
+    targetUrl: '',
+  },
+  {
+    id: 'INF-002',
+    category: 'Пакеты',
+    format: 'Подборка площадок',
+    eyebrow: 'Пакетное размещение',
+    title: 'Один материал сразу в пяти бизнес-медиа',
+    text: 'Готовая подборка площадок с единым бюджетом и согласованными сроками публикации.',
+    action: 'Выбрать пакет',
+    target: 'Каталог',
+    icon: 'briefcase',
+    accent: 'green',
+    status: 'Опубликован',
+    startsAt: '23.07.2026',
+    endsAt: '31.07.2026',
+    updatedAt: '23.07.2026, 09:10',
+    selectionIds: ['101', '102', '103', '104', '105'],
+    packagePrice: '320000',
+    targetUrl: '',
+  },
+  {
+    id: 'INF-003',
+    category: 'Скидки',
+    format: 'Подборка площадок',
+    eyebrow: 'Специальные условия',
+    title: 'До 20% на размещения этой недели',
+    text: 'Площадки со свободными слотами снизили стоимость публикации на ближайшие даты.',
+    action: 'Смотреть предложения',
+    target: 'Каталог',
+    icon: 'credit',
+    accent: 'amber',
+    status: 'Опубликован',
+    startsAt: '23.07.2026',
+    endsAt: '27.07.2026',
+    updatedAt: '23.07.2026, 09:05',
+    selectionIds: ['102', '103'],
+    targetUrl: '',
+  },
+  {
+    id: 'INF-004',
+    category: 'Полезное',
+    format: 'Внешняя ссылка',
+    eyebrow: 'Новости и гайды',
+    title: 'Как подготовить материал к размещению',
+    text: 'Короткий гид по модерации, маркировке и требованиям площадок перед запуском заказа.',
+    action: 'Читать в базе знаний',
+    target: 'Внешняя ссылка',
+    icon: 'file',
+    accent: 'violet',
+    status: 'Опубликован',
+    startsAt: '20.07.2026',
+    endsAt: 'Без срока',
+    updatedAt: '22.07.2026, 18:40',
+    selectionIds: [],
+    targetUrl: 'https://help.axioma.ru/guides/material-for-publication',
+  },
+];
+
 const mockAdminQueue = [
   { id: '#M-1052', object: 'Новость компании', type: 'Материал', risk: 'Ссылки', status: 'На модерации', color: 'amber' },
   { id: '#P-044', object: 'Новая площадка', type: 'Площадка', risk: 'Метрики', status: 'Проверить', color: 'blue' },
   { id: '#C-019', object: 'Жалоба по заказу #1045', type: 'Спор', risk: 'Маркировка', status: 'Решить', color: 'red' },
+];
+
+const mockExpeditedModeration = [
+  {
+    id: '#M-1052',
+    title: 'Новость компании',
+    customer: 'Заказчик #842',
+    submittedAt: 'сегодня, 12:40',
+    deadline: 'проверить до 13:10',
+    row: ['#M-1052', 'Новость компании', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
+  },
+  {
+    id: '#M-1061',
+    title: 'Исследование рынка корпоративных сервисов',
+    customer: 'Заказчик #916',
+    submittedAt: 'сегодня, 12:51',
+    deadline: 'проверить до 13:21',
+    row: ['#M-1061', 'Исследование рынка корпоративных сервисов', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
+  },
 ];
 
 const materialStates = ['Черновик', 'На модерации', 'Требуются правки', 'Отклонен', 'Принят в систему', 'Используется в заказах'];
@@ -147,8 +434,8 @@ const orderStates = ['Заявка создана', 'Средства замор
 const complaintStates = ['Черновик', 'Открыта', 'На рассмотрении', 'Нужны доказательства', 'Решена в пользу заказчика', 'Решена в пользу паблишера', 'Удержание применено'];
 
 const publisherPlatforms = [
-  { id: 'PUB-01', name: 'РБК Инвестиции', type: 'СМИ', theme: 'Финансы', region: 'Федеральная', formats: 'Статья, новость, интервью', price: '150 000 ₽ / статья', answer: '8 часов', publication: '2 дня', storage: '2 года', metrics: '2,5 млн визитов/мес, Google News, Дзен', status: 'Активна', color: 'green' },
-  { id: 'PUB-02', name: 'РБК Телеграм', type: 'ТГ-канал', theme: 'Финансы', region: 'Федеральная', formats: 'Нативный пост, репост', price: '60 000 ₽ / пост', answer: '4 часа', publication: '1 день', storage: '2 года', metrics: '210 тыс. подписчиков, вовлеченность 12%', status: 'На проверке', color: 'blue' },
+  { id: 'PUB-01', name: 'РБК Инвестиции', type: 'СМИ', theme: 'Финансы', region: 'Федеральный охват', formats: 'Статья, новость, интервью', price: '150 000 ₽ / статья', answer: '8 часов', publication: '2 дня', storage: '2 года', metrics: '2,5 млн визитов/мес, Google News, Дзен', status: 'Активна', color: 'green' },
+  { id: 'PUB-02', name: 'РБК Телеграм', type: 'ТГ-канал', theme: 'Финансы', region: 'Федеральный охват', formats: 'Пост, репост', price: '60 000 ₽ / пост', answer: '4 часа', publication: '1 день', storage: '2 года', metrics: '210 тыс. подписчиков, вовлеченность 12%', status: 'На проверке', color: 'blue' },
   { id: 'PUB-03', name: 'РБК Бизнес ВК', type: 'Паблик ВК', theme: 'Бизнес', region: 'Москва', formats: 'Пост, карточки', price: '85 000 ₽ / пост', answer: '1 день', publication: '3 дня', storage: '2 года', metrics: '480 тыс. подписчиков', status: 'Требуются правки', color: 'amber' },
 ];
 
@@ -269,6 +556,21 @@ const mockAdminSections = {
 
 const formatMoney = (amount) => {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(amount);
+};
+
+const toDateInputValue = (value) => {
+  if (!value || value === 'Без срока') return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const match = String(value).match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : '';
+};
+
+const formatInformerDate = (value) => {
+  if (!value || value === 'Без срока') return 'Без срока';
+  const normalized = toDateInputValue(value);
+  if (!normalized) return value;
+  const [year, month, day] = normalized.split('-');
+  return `${day}.${month}.${year}`;
 };
 
 const parseReportDate = (value) => {
@@ -455,20 +757,76 @@ const FileUploadField = ({
   );
 };
 
+const useSelectMenuPosition = (isOpen, triggerRef, optionCount) => {
+  const [menuPosition, setMenuPosition] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setMenuPosition(null);
+      return undefined;
+    }
+
+    const updateMenuPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const gap = 8;
+      const viewportPadding = 12;
+      const estimatedHeight = Math.min(288, Math.max(72, optionCount * 48 + 12));
+      const spaceBelow = window.innerHeight - rect.bottom - gap - viewportPadding;
+      const spaceAbove = rect.top - gap - viewportPadding;
+      const openAbove = spaceBelow < Math.min(estimatedHeight, 220) && spaceAbove > spaceBelow;
+      const availableSpace = openAbove ? spaceAbove : spaceBelow;
+      const maxHeight = Math.max(96, Math.min(288, availableSpace));
+      const visibleHeight = Math.min(estimatedHeight, maxHeight);
+
+      setMenuPosition({
+        left: Math.max(viewportPadding, rect.left),
+        top: openAbove
+          ? Math.max(viewportPadding, rect.top - visibleHeight - gap)
+          : Math.min(window.innerHeight - viewportPadding - visibleHeight, rect.bottom + gap),
+        width: Math.min(rect.width, window.innerWidth - viewportPadding * 2),
+        maxHeight,
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [isOpen, optionCount, triggerRef]);
+
+  return menuPosition;
+};
+
 const CustomSelect = ({ options, defaultValue = undefined, value: controlledValue = undefined, placeholder = undefined, onChange = undefined, className = '', buttonClassName = '' }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [value, setValue] = useState(defaultValue ?? (placeholder ? undefined : options[0]));
+  const optionValue = (option) => typeof option === 'object' ? option.value : option;
+  const optionLabel = (option) => typeof option === 'object' ? option.label : option;
+  const firstOptionValue = options.length ? optionValue(options[0]) : undefined;
+  const [value, setValue] = useState(defaultValue ?? (placeholder ? undefined : firstOptionValue));
   const selectRef = useRef(null);
+  const menuRef = useRef(null);
   const selectIdRef = useRef(`custom-select-${Math.random().toString(36).slice(2)}`);
   const selectedValue = controlledValue ?? value;
-  const displayValue = selectedValue ?? placeholder ?? options[0];
+  const selectedOption = options.find((option) => optionValue(option) === selectedValue);
+  const displayValue = selectedOption ? optionLabel(selectedOption) : placeholder ?? (options.length ? optionLabel(options[0]) : '');
   const listboxId = `${selectIdRef.current}-listbox`;
+  const menuPosition = useSelectMenuPosition(isOpen, selectRef, options.length);
 
   useEffect(() => {
     if (!isOpen) return undefined;
 
     const closeOnOutsideClick = (event) => {
-      if (selectRef.current && !selectRef.current.contains(event.target)) {
+      if (
+        selectRef.current
+        && !selectRef.current.contains(event.target)
+        && !menuRef.current?.contains(event.target)
+      ) {
         setIsOpen(false);
       }
     };
@@ -498,8 +856,9 @@ const CustomSelect = ({ options, defaultValue = undefined, value: controlledValu
     setIsOpen(true);
   };
   const selectOption = (option) => {
-    setValue(option);
-    onChange?.(option);
+    const nextValue = optionValue(option);
+    setValue(nextValue);
+    onChange?.(nextValue);
     setIsOpen(false);
   };
 
@@ -522,15 +881,21 @@ const CustomSelect = ({ options, defaultValue = undefined, value: controlledValu
         <span className={`truncate ${selectedValue ? '' : 'text-[#476788]'}`}>{displayValue}</span>
         <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${isOpen ? '-rotate-90' : 'rotate-90'}`} />
       </button>
-      {isOpen && (
-        <div id={listboxId} role="listbox" className="ui-enter absolute left-0 right-0 top-full mt-2 z-[70] max-h-72 overflow-y-auto rounded-2xl border border-[#d4e0ed] bg-white p-1.5 shadow-[rgba(11,53,88,0.08)_0px_10px_24px,rgba(11,53,88,0.10)_0px_24px_60px]">
+      {isOpen && menuPosition && createPortal(
+        <div
+          ref={menuRef}
+          id={listboxId}
+          role="listbox"
+          className="ui-enter fixed z-[220] overflow-y-auto rounded-2xl border border-[#d4e0ed] bg-white p-1.5 shadow-[rgba(11,53,88,0.08)_0px_10px_24px,rgba(11,53,88,0.10)_0px_24px_60px]"
+          style={menuPosition}
+        >
           {options.map((option) => (
             <button
-              key={option}
+              key={optionValue(option)}
               type="button"
               role="option"
-              aria-selected={selectedValue === option}
-              className={`w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors flex items-center justify-between gap-3 ${selectedValue === option ? 'bg-[#e6f0ff] text-[#004eba] font-semibold' : 'text-[#0b3558] hover:bg-[#f8f9fb]'}`}
+              aria-selected={selectedValue === optionValue(option)}
+              className={`w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors flex items-center justify-between gap-3 ${selectedValue === optionValue(option) ? 'bg-[#e6f0ff] text-[#004eba] font-semibold' : 'text-[#0b3558] hover:bg-[#f8f9fb]'}`}
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -538,27 +903,43 @@ const CustomSelect = ({ options, defaultValue = undefined, value: controlledValu
               }}
               onClick={() => selectOption(option)}
             >
-              <span className="truncate">{option}</span>
-              {selectedValue === option && <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
+              <span className="truncate">{optionLabel(option)}</span>
+              {selectedValue === optionValue(option) && <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
 };
 
-const CheckboxMultiSelect = ({ options, value, onChange, placeholder = 'Выберите значения', className = '' }) => {
+const CheckboxMultiSelect = ({
+  options,
+  value,
+  onChange,
+  placeholder = 'Выберите значения',
+  selectedNoun = 'значений',
+  className = '',
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef(null);
+  const menuRef = useRef(null);
   const selectIdRef = useRef(`checkbox-select-${Math.random().toString(36).slice(2)}`);
   const selectedOptions = options.filter((option) => value.includes(option.value));
   const listboxId = `${selectIdRef.current}-listbox`;
+  const menuPosition = useSelectMenuPosition(isOpen, selectRef, options.length + 1);
 
   useEffect(() => {
     if (!isOpen) return undefined;
     const closeOnOutsideClick = (event) => {
-      if (selectRef.current && !selectRef.current.contains(event.target)) setIsOpen(false);
+      if (
+        selectRef.current
+        && !selectRef.current.contains(event.target)
+        && !menuRef.current?.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
     };
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') setIsOpen(false);
@@ -600,13 +981,20 @@ const CheckboxMultiSelect = ({ options, value, onChange, placeholder = 'Выбе
           {selectedOptions.length
             ? selectedOptions.length === 1
               ? selectedOptions[0].label
-              : `Выбрано рекламодателей: ${selectedOptions.length}`
+              : `Выбрано ${selectedNoun}: ${selectedOptions.length}`
             : placeholder}
         </span>
         <ChevronRight className={`h-4 w-4 flex-none text-[#476788] transition-transform ${isOpen ? '-rotate-90' : 'rotate-90'}`} />
       </button>
-      {isOpen && (
-        <div id={listboxId} role="listbox" aria-multiselectable="true" className="ui-enter absolute left-0 right-0 top-full z-[70] mt-2 max-h-72 overflow-y-auto rounded-2xl border border-[#d4e0ed] bg-white p-1.5 shadow-[rgba(11,53,88,0.08)_0px_10px_24px,rgba(11,53,88,0.10)_0px_24px_60px]">
+      {isOpen && menuPosition && createPortal(
+        <div
+          ref={menuRef}
+          id={listboxId}
+          role="listbox"
+          aria-multiselectable="true"
+          className="ui-enter fixed z-[220] overflow-y-auto rounded-2xl border border-[#d4e0ed] bg-white p-1.5 shadow-[rgba(11,53,88,0.08)_0px_10px_24px,rgba(11,53,88,0.10)_0px_24px_60px]"
+          style={menuPosition}
+        >
           {options.map((option) => {
             const selected = value.includes(option.value);
             return (
@@ -632,17 +1020,18 @@ const CheckboxMultiSelect = ({ options, value, onChange, placeholder = 'Выбе
             <span className="text-xs text-[#476788]">Выбрано: {selectedOptions.length}</span>
             <button type="button" className="text-xs font-semibold text-[#006bff]" onClick={() => setIsOpen(false)}>Готово</button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
 };
 
-const Card = ({ children, className = '', ...props }) => (
-  <div className={`bg-white border border-[#d4e0ed] rounded-[24px] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.08)_0px_30px_50px_0px] ${className}`} {...props}>
+const Card = React.forwardRef(({ children, className = '', ...props }, ref) => (
+  <div ref={ref} className={`bg-white border border-[#d4e0ed] rounded-[24px] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.08)_0px_30px_50px_0px] ${className}`} {...props}>
     {children}
   </div>
-);
+));
 
 const CollapsiblePanel = ({ open, children, className = '' }) => (
   <div className={`ui-collapsible ${className}`} data-open={open}>
@@ -803,8 +1192,13 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
   const selectedPlatforms = initialPlatforms.filter((item) => !removedPlatformIds.includes(item.id));
   const selectedMaterial = availableMaterials.find((material) => material.name === selectedMaterialName);
   const selectedProject = projects.find((project) => project.id === selectedMaterial?.projectId);
-  const totalPrice = selectedPlatforms.reduce((sum, item) => sum + item.price, 0);
-  const isBulk = selectedPlatforms.length > 1;
+  const pricedPlatforms = selectedPlatforms.map((item) => ({
+    ...item,
+    format: getMaterialCommercialFormat(selectedMaterial, item),
+    price: getPlatformPriceForMaterial(item, selectedMaterial),
+  }));
+  const totalPrice = pricedPlatforms.reduce((sum, item) => sum + item.price, 0);
+  const isBulk = pricedPlatforms.length > 1;
   return (
   <Modal isOpen={isOpen} onClose={onClose} title={isBulk ? 'Массовое размещение материала' : 'Выбор материала для размещения'} className="max-w-5xl">
     <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
@@ -812,7 +1206,7 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xs text-[#476788] uppercase">{isBulk ? 'Выбрано площадок' : 'Площадка'}</div>
-            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{selectedPlatforms.length ? `${selectedPlatforms.length} площадки` : 'Нет выбранных площадок'}</div>
+            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{pricedPlatforms.length ? `${pricedPlatforms.length} площадки` : 'Нет выбранных площадок'}</div>
           </div>
           <div className="text-right">
             <div className="text-xs text-[#476788] uppercase">Бюджет</div>
@@ -820,7 +1214,7 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
           </div>
         </div>
         <div className="mt-4 space-y-2 max-h-[360px] overflow-y-auto">
-          {selectedPlatforms.map((item) => (
+          {pricedPlatforms.map((item) => (
             <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2">
               <div className="min-w-0">
                 <div className="text-sm font-medium text-[#0b3558] truncate">{item.name}</div>
@@ -858,9 +1252,9 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
           <Button variant="secondary" onClick={onClose}>Отмена</Button>
           <Button
             variant="primary"
-            disabled={!selectedMaterial || !selectedPlatforms.length}
+            disabled={!selectedMaterial || !pricedPlatforms.length}
             onClick={() => {
-              onCreateOrders?.(selectedMaterial, selectedPlatforms);
+              onCreateOrders?.(selectedMaterial, pricedPlatforms);
               onClose();
             }}
           >
@@ -1551,7 +1945,7 @@ const LandingView = ({ setGlobalMode }) => {
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Тип площадки</span>
-                  <CustomSelect className="mt-2" placeholder="Выберите тип" options={['Онлайн-СМИ', 'Сайт', 'Telegram-канал', 'Паблик ВК', 'Канал в Дзене']} />
+                  <CustomSelect className="mt-2" placeholder="Выберите тип" options={['Онлайн-СМИ', 'Сайт', 'Telegram-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
                 </label>
                 <label className="block md:col-span-2">
                   <span className="text-sm font-medium text-[#476788]">Ссылка на площадку</span>
@@ -1611,52 +2005,28 @@ const LandingView = ({ setGlobalMode }) => {
 
 // --- 2. CLIENT PORTAL ---
 
-const ClientDashboardView = ({ navigate }) => {
+const ClientDashboardView = ({ navigate, informerItems = initialInformerItems }) => {
   const [selectedPromo, setSelectedPromo] = useState(0);
-  const clientPromos = [
-    {
-      label: 'Новинки',
-      eyebrow: 'Новые площадки',
-      title: 'В каталоге появились 12 новых медиа',
-      text: 'Онлайн-СМИ, Telegram-каналы и региональные площадки уже доступны для размещения.',
-      action: 'Смотреть площадки',
-      target: 'catalog',
-      Icon: Store,
-      accent: 'bg-[#e8f1ff] text-[#006bff]',
-    },
-    {
-      label: 'Пакеты',
-      eyebrow: 'Пакетное размещение',
-      title: 'Один материал сразу в пяти бизнес-медиа',
-      text: 'Готовая подборка площадок с единым бюджетом и согласованными сроками публикации.',
-      action: 'Выбрать пакет',
-      target: 'catalog',
-      Icon: Briefcase,
-      accent: 'bg-[#eef8f3] text-[#168a57]',
-    },
-    {
-      label: 'Скидки',
-      eyebrow: 'Специальные условия',
-      title: 'До 20% на размещения этой недели',
-      text: 'Площадки со свободными слотами снизили стоимость публикации на ближайшие даты.',
-      action: 'Смотреть предложения',
-      target: 'catalog',
-      Icon: CreditCard,
-      accent: 'bg-[#fff4df] text-[#b46b00]',
-    },
-    {
-      label: 'Полезное',
-      eyebrow: 'Новости и гайды',
-      title: 'Как подготовить материал к размещению',
-      text: 'Короткий гид по модерации, маркировке и требованиям площадок перед запуском заказа.',
-      action: null,
-      target: null,
-      Icon: FileText,
-      accent: 'bg-[#f1edff] text-[#6a4bc4]',
-    },
-  ];
-  const promo = clientPromos[selectedPromo];
-  const PromoIcon = promo.Icon;
+  const iconMap = informerIconMap;
+  const accentMap = informerAccentMap;
+  const clientPromos = informerItems
+    .filter((item) => item.status === 'Опубликован')
+    .map((item) => ({
+      ...item,
+      format: getInformerFormat(item),
+      label: getInformerFormat(item),
+      targetView: ['Каталог', 'Карточка площадки'].includes(item.target) ? 'catalog' : null,
+      selectedContent: getInformerSelectionOptions(getInformerFormat(item)).filter((option) => (item.selectionIds || []).includes(option.value)),
+      Icon: iconMap[item.icon] || FileText,
+      accentClass: accentMap[item.accent] || accentMap.blue,
+    }));
+
+  useEffect(() => {
+    if (selectedPromo >= clientPromos.length) setSelectedPromo(0);
+  }, [clientPromos.length, selectedPromo]);
+
+  const promo = clientPromos[selectedPromo] || clientPromos[0];
+  const PromoIcon = promo?.Icon;
 
   return (
     <div className="space-y-8">
@@ -1669,7 +2039,7 @@ const ClientDashboardView = ({ navigate }) => {
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card className="flex min-h-[400px] flex-col overflow-hidden xl:h-[400px]">
+        <Card className={`flex min-h-[400px] flex-col overflow-hidden xl:h-[400px] ${promo ? '' : 'xl:col-span-2'}`}>
           <div className="flex items-center justify-between border-b border-[#d4e0ed] px-6 py-5">
             <div>
               <h2 className="font-display text-lg font-bold text-[#0b3558]">Сводка</h2>
@@ -1699,31 +2069,39 @@ const ClientDashboardView = ({ navigate }) => {
           </div>
         </Card>
 
-        <Card className="flex min-h-[400px] flex-col overflow-hidden bg-[#f8fbff] xl:h-[400px]">
+        {promo && <Card className="flex min-h-[400px] flex-col overflow-hidden bg-[#f8fbff] xl:h-[400px]">
           <div className="border-b border-[#d4e0ed] px-5 py-4">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="font-display text-lg font-bold text-[#0b3558]">Актуальное</h2>
                 <p className="mt-1 h-4 truncate text-xs text-[#476788]">Предложения и новости платформы</p>
               </div>
-              <span className="rounded-full bg-[#e8f1ff] px-3 py-1 text-xs font-semibold text-[#006bff]">{selectedPromo + 1} / {clientPromos.length}</span>
-            </div>
-            <div className="mt-4 grid grid-cols-4 gap-1 rounded-xl bg-[#edf2f8] p-1">
-              {clientPromos.map((item, index) => (
+              <div className="flex items-center gap-2">
                 <button
-                  key={item.label}
                   type="button"
-                  className={`min-w-0 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${selectedPromo === index ? 'bg-white text-[#0b3558] shadow-sm' : 'text-[#476788] hover:text-[#0b3558]'}`}
-                  onClick={() => setSelectedPromo(index)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#d4e0ed] bg-white text-[#0b3558] transition-colors hover:border-[#8badcf] disabled:opacity-40"
+                  onClick={() => setSelectedPromo((current) => (current - 1 + clientPromos.length) % clientPromos.length)}
+                  disabled={clientPromos.length < 2}
+                  aria-label="Предыдущая карточка"
                 >
-                  <span className="block truncate">{item.label}</span>
+                  <ChevronRight className="h-4 w-4 rotate-180" />
                 </button>
-              ))}
+                <span className="min-w-[54px] text-center text-xs font-semibold tabular-nums text-[#006bff]">{selectedPromo + 1} / {clientPromos.length}</span>
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#d4e0ed] bg-white text-[#0b3558] transition-colors hover:border-[#8badcf] disabled:opacity-40"
+                  onClick={() => setSelectedPromo((current) => (current + 1) % clientPromos.length)}
+                  disabled={clientPromos.length < 2}
+                  aria-label="Следующая карточка"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
           <div className="grid flex-1 grid-rows-[48px_116px_1fr] gap-y-3 p-5">
             <div className="flex min-w-0 items-center gap-3">
-              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${promo.accent}`}>
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${promo.accentClass}`}>
                 <PromoIcon className="h-6 w-6" />
               </div>
               <div className="truncate text-xs font-bold uppercase leading-4 text-[#006bff]">{promo.eyebrow}</div>
@@ -1733,18 +2111,24 @@ const ClientDashboardView = ({ navigate }) => {
               <p className="mt-3 line-clamp-2 text-sm leading-6 text-[#476788]">{promo.text}</p>
             </div>
             <div className="flex items-end">
-              {promo.action ? (
-                <Button variant="primary" className="w-full" onClick={() => navigate(promo.target)}>
+              {promo.action && (promo.targetView || promo.targetUrl) ? (
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  onClick={() => promo.targetUrl
+                    ? window.open(promo.targetUrl, '_blank', 'noopener,noreferrer')
+                    : navigate(promo.targetView)}
+                >
                   {promo.action}<ArrowRight className="h-4 w-4" />
                 </Button>
               ) : (
                 <Button variant="secondary" className="w-full">
-                  Читать в базе знаний<ArrowRight className="h-4 w-4" />
+                  {promo.action || 'Подробнее'}<ArrowRight className="h-4 w-4" />
                 </Button>
               )}
             </div>
           </div>
-        </Card>
+        </Card>}
       </div>
 
       <Card className="overflow-hidden">
@@ -1789,11 +2173,141 @@ const ClientDashboardView = ({ navigate }) => {
   );
 };
 
-const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045, sourceOrder = null, projects = [], openProject, onChangeProject }) => {
+const MaterialContentCard = ({ subtitle = 'Полная версия материала', showDownload = false }) => {
   const [linksOpen, setLinksOpen] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-display text-lg font-bold text-[#0b3558]">Текст и изображения материала</h2>
+          <p className="mt-1 text-sm text-[#476788]">{subtitle}</p>
+        </div>
+        <Badge color="blue"><ImageIcon className="mr-1.5 h-3.5 w-3.5" /> 3 изображения</Badge>
+      </div>
+      <div className="p-6">
+        <FullMaterialPreview showLinks={false} />
+        {showDownload && (
+          <div className="mt-5">
+            <Button variant="secondary"><Paperclip className="h-4 w-4" /> Прикрепленный документ</Button>
+          </div>
+        )}
+        <div className="mt-6 space-y-3">
+          <div className="overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]">
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left ${linksOpen ? 'border-b border-[#d4e0ed]' : ''}`}
+              onClick={() => setLinksOpen((value) => !value)}
+              aria-expanded={linksOpen}
+            >
+              <span className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</span>
+              <ChevronRight className={`h-4 w-4 text-[#476788] transition-transform ${linksOpen ? 'rotate-90' : ''}`} />
+            </button>
+            <CollapsiblePanel open={linksOpen}>
+              <div className="divide-y divide-[#d4e0ed]">
+                {materialLinks.map((link) => (
+                  <div key={link} className="flex items-center gap-3 bg-white px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-2 break-all text-sm text-[#006bff]">
+                      <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                      <span>{link}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CollapsiblePanel>
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]">
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left ${advancedSettingsOpen ? 'border-b border-[#d4e0ed]' : ''}`}
+              onClick={() => setAdvancedSettingsOpen((value) => !value)}
+              aria-expanded={advancedSettingsOpen}
+            >
+              <span className="text-sm font-semibold text-[#0b3558]">Дополнительные настройки материала</span>
+              <ChevronRight className={`h-4 w-4 text-[#476788] transition-transform ${advancedSettingsOpen ? 'rotate-90' : ''}`} />
+            </button>
+            <CollapsiblePanel open={advancedSettingsOpen}>
+              <div className="divide-y divide-[#d4e0ed]">
+                {[
+                  ['Тэги', 'финтех, аналитика, PR, запуск продукта'],
+                  ['Title', 'Финтех Решения запускает платформу аналитики'],
+                  ['Description', 'Новая платформа помогает PR-командам контролировать публикации, ссылки и отчеты.'],
+                  ['Желаемый URL', '/news/fintech-analytics-platform'],
+                ].map(([label, value]) => (
+                  <div key={label} className="bg-white px-4 py-3">
+                    <div className="text-xs text-[#476788]">{label}</div>
+                    <div className="mt-0.5 break-words text-sm font-medium text-[#0b3558]">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </CollapsiblePanel>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const ProjectChangeModal = ({ isOpen, onClose, currentProject, projects, entityLabel, onConfirm }) => {
+  const [selectedProject, setSelectedProject] = useState(currentProject);
+
+  useEffect(() => {
+    if (isOpen) setSelectedProject(currentProject);
+  }, [isOpen, currentProject]);
+
+  const entityGenitive = entityLabel === 'заказа' ? 'заказа' : 'материала';
+  const entityName = entityLabel === 'заказа' ? 'заказ' : 'материал';
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Изменить проект ${entityGenitive}?`} className="max-w-lg">
+      <div className="space-y-5">
+        <p className="text-sm leading-6 text-[#476788]">
+          Выберите проект, в котором должен отображаться {entityName}. Изменение будет применено только после подтверждения.
+        </p>
+        <label className="block">
+          <span className="text-sm font-medium text-[#476788]">Новый проект</span>
+          <CustomSelect
+            className="mt-2"
+            value={selectedProject}
+            onChange={setSelectedProject}
+            options={[...projects.map((project) => project.name), 'Без проекта']}
+          />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+            <div className="text-xs text-[#7d96af]">Текущий проект</div>
+            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{currentProject}</div>
+          </div>
+          <ChevronRight className="mx-auto h-5 w-5 rotate-90 text-[#8badcf] sm:rotate-0" />
+          <div className="rounded-lg border border-[#b8d2ff] bg-[#edf4ff] p-4">
+            <div className="text-xs text-[#476788]">Новый проект</div>
+            <div className="mt-1 text-sm font-semibold text-[#004eba]">{selectedProject}</div>
+          </div>
+        </div>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="secondary" onClick={onClose}>Отмена</Button>
+          <Button
+            variant="primary"
+            disabled={selectedProject === currentProject}
+            onClick={() => {
+              onConfirm(selectedProject);
+              onClose();
+            }}
+          >
+            Изменить проект
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045, sourceOrder = null, projects = [], openProject, onChangeProject }) => {
   const [currentState, setCurrentState] = useState(state);
   const [projectName, setProjectName] = useState(projects.find((project) => project.id === sourceOrder?.projectId)?.name || 'Без проекта');
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
   const isPendingState = currentState === 'pending';
   const isRejectedState = currentState === 'rejected';
   const isCompletedState = currentState === 'completed';
@@ -1869,55 +2383,117 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
         projectId: sourceOrder.projectId,
       }
     : fallbackOrder;
-  const selectedProject = projects.find((project) => project.name === projectName);
   const changeProject = (nextName) => {
     setProjectName(nextName);
     onChangeProject?.(order.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
   };
+  const timelineItems = [
+    ['Заказ создан', '15.10, 10:15', 'done'],
+    ...(isCompletedState
+      ? [
+          ['Площадка приняла заказ', '16.10, 11:40', 'done'],
+          ['Ссылка отправлена', '18.10, 12:30', 'done'],
+          ['Публикация принята', '20.10, 12:03', 'done'],
+          ['Заказ оплачен', '20.10, 12:03', 'done'],
+        ]
+      : isRejectedState
+        ? [
+            ['Заказ отправлен', '16.10, 11:40', 'done'],
+            ['Площадка отказала', '19.10, 14:20', 'current'],
+            ['Средства доступны', 'списания не было', 'next'],
+          ]
+        : isPendingState
+          ? [
+              ['Заказ отправлен', '16.10, 11:40', 'done'],
+              ['Решение площадки', 'до 18.10', 'current'],
+              ['Публикация', 'после принятия', 'next'],
+            ]
+          : [
+              ['Площадка приняла заказ', '16.10, 11:40', 'done'],
+              ['Ссылка отправлена', '18.10, 12:30', 'done'],
+              ['Приемка публикации', 'ожидает решения', 'current'],
+              ['Оплата заказа', 'после приемки', 'next'],
+            ]),
+  ];
 
   return (
-  <div className="space-y-6 max-w-5xl mx-auto">
+  <div className="space-y-6 max-w-6xl mx-auto">
     <div className="flex items-center gap-2 text-sm text-[#476788] cursor-pointer hover:text-[#0b3558]" onClick={() => navigate('orders')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> Назад к списку
     </div>
     
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558] flex items-center gap-3">
-          Заказ #{order.id}
+    <div className="border-b border-[#d4e0ed] pb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge color={order.color}>{order.status}</Badge>
-        </h1>
-        <p className="text-sm text-[#476788] mt-1">Площадка: {order.platform} · {order.subtitle}</p>
-        <div className="mt-2"><ProjectLink project={selectedProject} onOpen={openProject} /></div>
+          <span className="text-sm text-[#476788]">Заказ #{order.id}</span>
+        </div>
+        <div className="shrink-0 lg:text-right">
+          <div className="text-xs font-medium uppercase text-[#476788]">
+            {isCompletedState ? 'Оплачено' : 'Сумма заказа'}
+          </div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums text-[#0b3558]">{formatMoney(order.amount)}</div>
+        </div>
       </div>
-      <div className="text-left sm:text-right">
-        <div className="text-sm text-[#476788]">{isCompletedState ? 'Оплачено' : 'К списанию'}</div>
-        <div className="text-2xl font-semibold text-[#0b3558] tabular-nums">{formatMoney(order.amount)}</div>
+      <h1 className="mt-4 w-full break-words font-display text-2xl font-bold leading-tight text-[#0b3558] sm:text-3xl">
+        {order.title}
+      </h1>
+      <div className="mt-2 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-2 text-sm text-[#476788]">
+        <span>
+          {order.publicationDate
+            ? `Размещено на ${order.platform} · ${order.publicationDate}, 12:30`
+            : `Площадка: ${order.platform}`}
+        </span>
+        <span aria-hidden="true">·</span>
+        <button
+          type="button"
+          className="inline-flex min-w-0 items-center gap-1.5 font-medium text-[#006bff] hover:text-[#004eba]"
+          onClick={() => setProjectModalOpen(true)}
+          aria-label={`Изменить проект: ${projectName}`}
+        >
+          <span className="truncate">{projectName}</span>
+          <Pencil className="h-3.5 w-3.5 shrink-0" />
+        </button>
+      </div>
+      <div className="mt-5 grid gap-3 border-t border-[#d4e0ed] pt-4 sm:grid-cols-2 lg:grid-cols-5">
+        {timelineItems.map(([label, time, status]) => (
+          <div key={`${label}-${time}`} className="flex min-w-0 items-start gap-2.5">
+            {status === 'done'
+              ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-500" />
+              : status === 'current'
+                ? <Clock className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
+                : <div className="mt-0.5 h-4 w-4 flex-none rounded-full border-2 border-[#d4e0ed]" />}
+            <div className="min-w-0">
+              <div className="text-xs font-semibold leading-5 text-[#0b3558]">{label}</div>
+              <div className="text-xs leading-5 text-[#476788]">{time}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
 
-    <div className="bg-white border border-[#d4e0ed] rounded-2xl p-6">
-      <div className="flex flex-col md:flex-row gap-6 items-start">
-        <div className="w-12 h-12 bg-[#f8f9fb] rounded-full flex items-center justify-center border border-[#d4e0ed] flex-shrink-0">
+    <div className="rounded-xl border border-[#d4e0ed] bg-white p-5">
+      <div className="flex flex-col items-start gap-4 md:flex-row">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-[#d4e0ed] bg-[#f8f9fb]">
            {isCompletedState
-             ? <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+             ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
              : isRejectedState
-             ? <AlertCircle className="w-6 h-6 text-red-500" />
+             ? <AlertCircle className="h-5 w-5 text-red-500" />
              : isPendingState
-               ? <Clock className="w-6 h-6 text-[#006bff]" />
-               : <CheckCircle2 className="w-6 h-6 text-[#006bff]" />}
+               ? <Clock className="h-5 w-5 text-[#006bff]" />
+               : <CheckCircle2 className="h-5 w-5 text-[#006bff]" />}
           </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-[#0b3558]">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold text-[#0b3558]">
             {isCompletedState
               ? 'Заказ завершен'
               : isRejectedState
                 ? 'Площадка отказалась от заказа'
                 : isPendingState
-                  ? 'Заказ отправлен площадке'
+                  ? 'Площадка рассматривает заказ'
                   : 'Публикация загружена'}
-          </h3>
-          <p className="text-sm text-[#476788] mt-1 mb-5">
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-[#476788]">
             {isCompletedState
               ? 'Публикация принята заказчиком, средства списаны с замороженного баланса, заказ закрыт. Ссылка и итоговый отчет остаются доступны в карточке.'
               : isRejectedState
@@ -1927,7 +2503,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
                 : 'Площадка загрузила ссылку на опубликованный материал. Проверьте корректность размещения. Нажимая «Принять и оплатить», вы подтверждаете отсутствие претензий, средства будут списаны с замороженного баланса.'}
           </p>
           {!isPendingState && !isRejectedState && (
-            <div className="bg-[#f8f9fb] rounded-lg p-4 border border-[#d4e0ed] flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-3">
+            <div className="mt-4 flex flex-col justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2 truncate">
                 <ExternalLink className="w-4 h-4 text-[#a6bbd1] flex-shrink-0" />
                 <a href={order.publicationUrl} target="_blank" rel="noreferrer" className="text-sm text-[#006bff] hover:underline truncate">{order.publicationUrl}</a>
@@ -1936,7 +2512,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
             </div>
           )}
           {isRejectedState && (
-            <div className="mb-5 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+            <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
               <div className="text-xs font-medium text-[#476788]">Причина отказа</div>
               <div className="mt-1 text-sm font-semibold text-[#0b3558]">Нет свободного редакционного слота в срок заказа</div>
               <p className="mt-3 text-sm leading-6 text-[#476788]">
@@ -1946,7 +2522,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
             </div>
           )}
           
-          <div className="flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-3">
             {isCompletedState ? (
               <>
                 <Button variant="primary" onClick={() => navigate('report_detail')}>Открыть отчет</Button>
@@ -1969,143 +2545,15 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
       </div>
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Состав заказа</h3>
-          <div className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4">
-            <div className="min-w-0">
-              <div className="text-xs text-[#476788]">Материал</div>
-              <div className="mt-1 text-xl font-semibold text-[#0b3558]">{order.title}</div>
-            </div>
-            <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              {[
-                ['Площадка', order.platform],
-                ['Формат', order.format],
-                ['Сумма', formatMoney(order.amount)],
-              ].map(([label, value]) => (
-                <div key={label} className="min-w-0 rounded-lg bg-white border border-[#d4e0ed] px-4 py-3">
-                  <div className="text-xs text-[#476788]">{label}</div>
-                  <div className="mt-1 font-medium text-[#0b3558] break-words">{value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-white p-4">
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_280px] sm:items-end">
-              <div>
-                <div className="text-xs text-[#476788]">Проект</div>
-                <div className="mt-1 text-sm font-medium text-[#0b3558]">{selectedProject?.name || 'Без проекта'}</div>
-              </div>
-              <CustomSelect value={projectName} onChange={changeProject} options={[...projects.map((project) => project.name), 'Без проекта']} />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Материал</h3>
-          <FullMaterialPreview showLinks={false} />
-          <div className="mt-6 space-y-3">
-            <div className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
-              <button
-                type="button"
-                className={`w-full px-4 py-3 flex items-center justify-between gap-3 text-left ${linksOpen ? 'border-b border-[#d4e0ed]' : ''}`}
-                onClick={() => setLinksOpen((value) => !value)}
-                aria-expanded={linksOpen}
-              >
-                <span className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</span>
-                <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${linksOpen ? 'rotate-90' : ''}`} />
-              </button>
-              <CollapsiblePanel open={linksOpen}>
-                <div className="divide-y divide-[#d4e0ed]">
-                  {materialLinks.map((link) => (
-                    <div key={link} className="flex items-center gap-3 px-4 py-3 bg-white">
-                      <div className="flex min-w-0 items-center gap-2 text-sm text-[#006bff] break-all">
-                        <ExternalLink className="w-4 h-4 flex-shrink-0" />
-                        <span>{link}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CollapsiblePanel>
-            </div>
-
-            <div className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
-              <button
-                type="button"
-                className={`w-full px-4 py-3 flex items-center justify-between gap-3 text-left ${advancedSettingsOpen ? 'border-b border-[#d4e0ed]' : ''}`}
-                onClick={() => setAdvancedSettingsOpen((value) => !value)}
-                aria-expanded={advancedSettingsOpen}
-              >
-                <span className="text-sm font-semibold text-[#0b3558]">Дополнительные настройки материала</span>
-                <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${advancedSettingsOpen ? 'rotate-90' : ''}`} />
-              </button>
-              <CollapsiblePanel open={advancedSettingsOpen}>
-                <div className="divide-y divide-[#d4e0ed]">
-                  {[
-                    ['Тэги', 'финтех, аналитика, PR, запуск продукта'],
-                    ['Title', 'Финтех Решения запускает платформу аналитики'],
-                    ['Description', 'Новая платформа помогает PR-командам контролировать публикации, ссылки и отчеты.'],
-                    ['Желаемый URL', '/news/fintech-analytics-platform'],
-                  ].map(([label, value]) => (
-                    <div key={label} className="px-4 py-3 bg-white">
-                      <div className="min-w-0">
-                        <div className="text-xs text-[#476788]">{label}</div>
-                        <div className="mt-0.5 text-sm font-medium text-[#0b3558] break-words">{value}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CollapsiblePanel>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="space-y-6">
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Таймлайн</h3>
-          <div className="space-y-4">
-            {[
-              ['Заказ создан', '15.10, 10:15', 'done'],
-              ...(isCompletedState
-                ? [
-                    ['Площадка приняла заказ', '16.10, 11:40', 'done'],
-                    ['Площадка отправила ссылку', '18.10, 12:30', 'done'],
-                    ['Публикация принята', '20.10, 12:03', 'done'],
-                    ['Заказ оплачен и закрыт', '20.10, 12:03', 'done'],
-                  ]
-                : isRejectedState
-                ? [
-                    ['Площадка рассмотрела заказ', '19.10, 14:20', 'done'],
-                    ['Площадка отказала', '19.10, 14:20', 'current'],
-                    ['Средства доступны на балансе', 'списания не было', 'next'],
-                  ]
-                : isPendingState
-                  ? [
-                      ['Заказ отправлен площадке', '16.10, 11:40', 'done'],
-                      ['Решение площадки', 'до 18.10', 'current'],
-                      ['Публикация', 'после принятия', 'next'],
-                    ]
-                  : [
-                      ['Площадка приняла заказ', '16.10, 11:40', 'done'],
-                      ['Площадка отправила ссылку', '18.10, 12:30', 'done'],
-                      ['Приемка публикации', 'ожидает решения', 'current'],
-                      ['Оплата заказа', 'после приемки', 'next'],
-                    ]),
-            ].map(([state, time, status]) => (
-              <div key={`${state}-${time}`} className="flex items-start gap-3">
-                {status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5" /> : status === 'current' ? <Clock className="w-4 h-4 text-amber-500 mt-0.5" /> : <div className="w-4 h-4 rounded-full border-2 border-[#d4e0ed] mt-0.5" />}
-                <div>
-                  <div className="text-sm font-medium text-[#0b3558]">{state}</div>
-                  <div className="text-xs text-[#476788] mt-1">{time}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    </div>
+    <MaterialContentCard subtitle="Версия материала, связанная с заказом" />
+    <ProjectChangeModal
+      isOpen={projectModalOpen}
+      onClose={() => setProjectModalOpen(false)}
+      currentProject={projectName}
+      projects={projects}
+      entityLabel="заказа"
+      onConfirm={changeProject}
+    />
   </div>
   );
 };
@@ -2464,14 +2912,44 @@ const ClientOrdersView = ({ navigate, projects, orders, openProject, openOrder, 
         </table>
       </div>
     </Card>
-    <Modal isOpen={moveOpen} onClose={() => setMoveOpen(false)} title="Переместить заказы" className="max-w-lg">
+    <Modal isOpen={moveOpen} onClose={() => setMoveOpen(false)} title="Переместить заказы" className="max-w-xl">
       <div className="space-y-5">
-        <p className="text-sm leading-6 text-[#476788]">Выбрано заказов: <span className="font-semibold text-[#0b3558]">{selectedIds.length}</span>. Изменится только группировка, статусы и финансовые операции останутся без изменений.</p>
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">Новый проект</span>
-          <CustomSelect className="mt-2" value={targetProject} onChange={setTargetProject} options={[...projects.map((project) => project.name), 'Без проекта']} />
-        </label>
-        <div className="flex justify-end gap-3">
+        <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3">
+          <div className="text-sm font-semibold text-[#0b3558]">Выбрано заказов: {selectedIds.length}</div>
+          <p className="mt-1 text-xs leading-5 text-[#476788]">
+            Изменится только проект. Статусы заказов и финансовые операции останутся без изменений.
+          </p>
+        </div>
+        <fieldset>
+          <legend className="text-sm font-medium text-[#476788]">Новый проект</legend>
+          <div className="mt-2 grid max-h-64 gap-2 overflow-y-auto pr-1">
+            {[...projects.map((project) => project.name), 'Без проекта'].map((projectName) => {
+              const selected = targetProject === projectName;
+              return (
+                <button
+                  key={projectName}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                    selected
+                      ? 'border-[#006bff] bg-[#e6f0ff]'
+                      : 'border-[#d4e0ed] bg-white hover:bg-[#f8f9fb]'
+                  }`}
+                  onClick={() => setTargetProject(projectName)}
+                >
+                  <span className={`text-sm font-medium ${selected ? 'text-[#004eba]' : 'text-[#0b3558]'}`}>{projectName}</span>
+                  <span className={`flex h-5 w-5 flex-none items-center justify-center rounded-full border ${
+                    selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf] bg-white'
+                  }`}>
+                    {selected && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+        <div className="flex flex-col-reverse gap-3 border-t border-[#d4e0ed] pt-4 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={() => setMoveOpen(false)}>Отмена</Button>
           <Button variant="primary" onClick={moveSelected}>Переместить</Button>
         </div>
@@ -2665,7 +3143,7 @@ const DisputeDetailView = ({ navigate, role = 'client' }) => (
 );
 
 const OrderChatView = ({ navigate, role = 'client' }) => (
-  <div className="space-y-6 max-w-5xl mx-auto">
+  <div className="space-y-6 max-w-6xl mx-auto">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate(role === 'publisher' ? 'pub_order_detail' : role === 'admin' ? 'admin_order_detail' : 'order_detail')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> К карточке заказа
     </button>
@@ -3133,253 +3611,360 @@ const ClientMaterialsView = ({ navigate, projects, materials, openProject, openM
 
 const ClientMaterialDetailView = ({ navigate, material, projects, openProject, onChangeProject }) => {
   const [projectName, setProjectName] = useState(projects.find((project) => project.id === material?.projectId)?.name || 'Без проекта');
-  const [pendingProjectName, setPendingProjectName] = useState(null);
-  const [confirmProjectOpen, setConfirmProjectOpen] = useState(false);
-  const [result, setResult] = useState('');
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
   const currentMaterial = material || mockMaterials[0];
-  const selectedProject = projects.find((project) => project.name === projectName);
-  const requestProjectChange = (nextName) => {
-    if (nextName === projectName) return;
-    setPendingProjectName(nextName);
-    setConfirmProjectOpen(true);
+  const changeProject = (nextName) => {
+    setProjectName(nextName);
+    onChangeProject(currentMaterial.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
   };
-  const confirmProjectChange = () => {
-    if (!pendingProjectName) return;
-    setProjectName(pendingProjectName);
-    onChangeProject(currentMaterial.id, pendingProjectName === 'Без проекта' ? null : projects.find((project) => project.name === pendingProjectName)?.id ?? null);
-    setResult('Проект материала изменен. Связанные заказы остались в прежних проектах.');
-    setPendingProjectName(null);
-    setConfirmProjectOpen(false);
-  };
-  const cancelProjectChange = () => {
-    setPendingProjectName(null);
-    setConfirmProjectOpen(false);
-  };
+  const isMaterialAccepted = ['Принят в систему', 'Используется в заказах'].includes(currentMaterial.status);
   return (
-  <div className="space-y-6 max-w-5xl mx-auto">
+  <div className="mx-auto max-w-6xl space-y-6">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('materials')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> К материалам
     </button>
-    <div className="grid gap-5 border-b border-[#d4e0ed] pb-6 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-      <div className="min-w-0">
-        <h1 className="max-w-3xl font-display text-2xl font-bold leading-tight text-[#0b3558]">
-          {currentMaterial.name}
-        </h1>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+
+    <div className="border-b border-[#d4e0ed] pb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge color={currentMaterial.statusColor}>{currentMaterial.status}</Badge>
-          <p className="text-sm text-[#476788]">Материал #M-{1047 + currentMaterial.id} · обновлен {currentMaterial.date}</p>
-          <ProjectLink project={selectedProject} onOpen={openProject} />
+          <span className="text-sm text-[#476788]">Материал #M-{1047 + currentMaterial.id}</span>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
+          <Button variant="secondary" className="whitespace-nowrap" onClick={() => navigate('material_edit')}>Редактировать материал</Button>
+          <Button variant="primary" className="whitespace-nowrap" onClick={() => navigate('catalog')}>Выбрать площадки</Button>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Button variant="secondary" className="w-full whitespace-nowrap" onClick={() => navigate('create_material')}>Редактировать материал</Button>
-        <Button variant="primary" className="w-full whitespace-nowrap" onClick={() => navigate('catalog')}>Выбрать площадки</Button>
-      </div>
-    </div>
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <Card className="p-6 lg:col-span-2">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Содержание материала</h3>
-        <FullMaterialPreview />
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button variant="secondary"><Download className="h-4 w-4" /> Скачать документ</Button>
-        </div>
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          При редактировании материал вернется в черновики и станет недоступен для новых размещений до повторной модерации.
-        </div>
-      </Card>
-      <div className="space-y-6">
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558]">Проект</h3>
-          <p className="mt-2 text-sm leading-6 text-[#476788]">Проект задает группировку для новых заказов этого материала.</p>
-          <CustomSelect className="mt-4" value={projectName} onChange={requestProjectChange} options={[...projects.map((project) => project.name), 'Без проекта']} />
-          {result && <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3 text-xs leading-5 text-[#476788]">{result}</div>}
-        </Card>
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4">Рекламодатель</h3>
-          <div className="space-y-3 text-sm">
-            <div><div className="text-[#476788]">Юрлицо</div><div className="font-medium text-[#0b3558]">ООО "Финтех Решения"</div></div>
-            <div><div className="text-[#476788]">ИНН</div><div className="font-medium text-[#0b3558]">7700000000</div></div>
-          </div>
-        </Card>
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4">Комментарий модератора</h3>
-          <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-4 text-sm text-emerald-800">
-            Материал принят в систему. Доступен выбор площадок и добавление их в избранное.
-          </div>
-        </Card>
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4">Размещение</h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between gap-4"><span className="text-[#476788]">Доступно площадок</span><span className="font-medium text-[#0b3558]">128</span></div>
-            <div className="flex justify-between gap-4"><span className="text-[#476788]">В избранном</span><span className="font-medium text-[#0b3558]">2</span></div>
-            <div className="flex justify-between gap-4"><span className="text-[#476788]">Активных заказов</span><span className="font-medium text-[#0b3558]">3</span></div>
-          </div>
-          <Button variant="secondary" className="w-full mt-5" onClick={() => navigate('catalog')}>Открыть каталог</Button>
-        </Card>
+      <h1 className="mt-4 w-full break-words font-display text-2xl font-bold leading-tight text-[#0b3558] sm:text-3xl">
+        {currentMaterial.name}
+      </h1>
+      <div className="mt-2 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-2 text-sm text-[#476788]">
+        <span>{currentMaterial.advertiser}</span>
+        <span aria-hidden="true">·</span>
+        <span>{currentMaterial.type}</span>
+        <span aria-hidden="true">·</span>
+        <button
+          type="button"
+          className="inline-flex min-w-0 items-center gap-1.5 font-medium text-[#006bff] hover:text-[#004eba]"
+          onClick={() => setProjectModalOpen(true)}
+          aria-label={`Изменить проект: ${projectName}`}
+        >
+          <span className="truncate">{projectName}</span>
+          <Pencil className="h-3.5 w-3.5 shrink-0" />
+        </button>
       </div>
     </div>
-    <Modal isOpen={confirmProjectOpen} onClose={cancelProjectChange} title="Изменить проект материала?" className="max-w-lg">
-      <div className="space-y-5">
-        <p className="text-sm leading-6 text-[#476788]">
-          Материал будет перемещен в другой проект. Это повлияет на группировку новых заказов, созданных для этого материала.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-            <div className="text-xs text-[#7d96af]">Текущий проект</div>
-            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{projectName}</div>
-          </div>
-          <ChevronRight className="mx-auto h-5 w-5 rotate-90 text-[#8badcf] sm:rotate-0" />
-          <div className="rounded-lg border border-[#b8d2ff] bg-[#edf4ff] p-4">
-            <div className="text-xs text-[#476788]">Новый проект</div>
-            <div className="mt-1 text-sm font-semibold text-[#004eba]">{pendingProjectName}</div>
-          </div>
+
+    <div className="rounded-xl border border-[#d4e0ed] bg-white p-5">
+      <div className="flex flex-col items-start gap-4 md:flex-row">
+        <div className="flex h-10 w-10 flex-none items-center justify-center rounded-full border border-[#d4e0ed] bg-[#f8f9fb]">
+          {isMaterialAccepted
+            ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            : <Clock className="h-5 w-5 text-[#006bff]" />}
         </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-          Уже созданные заказы останутся в прежних проектах. При необходимости их можно перенести отдельно в списке заказов.
-        </div>
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <Button variant="secondary" onClick={cancelProjectChange}>Отмена</Button>
-          <Button variant="primary" onClick={confirmProjectChange}>Изменить проект</Button>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold text-[#0b3558]">
+            {isMaterialAccepted ? 'Материал принят в систему' : currentMaterial.status}
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-[#476788]">
+            {isMaterialAccepted
+              ? 'Материал прошел проверку и доступен для создания заказов. Выберите одну или несколько площадок в каталоге.'
+              : 'Материал проходит проверку. После принятия станет доступен выбор площадок и создание заказов.'}
+          </p>
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            При редактировании материал вернется в черновики и станет недоступен для новых размещений до повторной модерации.
+          </div>
         </div>
       </div>
-    </Modal>
+    </div>
+
+    <MaterialContentCard subtitle="Актуальная версия материала" showDownload />
+    <ProjectChangeModal
+      isOpen={projectModalOpen}
+      onClose={() => setProjectModalOpen(false)}
+      currentProject={projectName}
+      projects={projects}
+      entityLabel="материала"
+      onConfirm={changeProject}
+    />
   </div>
+  );
+};
+
+const createMaterialDraft = (id, projectName, withExample = false) => ({
+  id,
+  title: withExample ? 'Пресс-релиз: запуск аналитики' : '',
+  advertiser: 'ООО "Финтех Решения"',
+  materialType: 'Статья',
+  projectName,
+  note: '',
+});
+
+const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemove, onOpenAi, mode = 'create' }) => (
+  <Card id={`material-form-${draft.id}`} className="scroll-mt-6 p-6">
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#d4e0ed] pb-4">
+      <div>
+        <h2 className="font-display text-lg font-bold text-[#0b3558]">{mode === 'edit' ? 'Данные материала' : `Материал ${index + 1}`}</h2>
+        <p className="mt-1 text-sm text-[#476788]">
+          {mode === 'edit'
+            ? 'Изменения применятся только к этому материалу.'
+            : 'Все поля остаются доступными для редактирования до общей отправки.'}
+        </p>
+      </div>
+      {canRemove && (
+        <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#d4e0ed] text-[#476788] hover:border-[#e12525] hover:text-[#e12525]" aria-label={`Удалить материал ${index + 1}`} onClick={onRemove}>
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <label className="block md:col-span-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium text-[#476788]">Заголовок</span>
+          <span className="text-xs text-[#476788]">{draft.title.length} / 200 символов</span>
+        </div>
+        <input maxLength={200} className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={draft.title} onChange={(event) => onChange({ title: event.target.value })} placeholder="Введите заголовок материала" />
+      </label>
+      <label className="block">
+        <span className="text-sm font-medium text-[#476788]">Рекламодатель</span>
+        <CustomSelect className="mt-2" value={draft.advertiser} onChange={(value) => onChange({ advertiser: value })} options={['ООО "Финтех Решения"', 'Урбан Групп']} />
+      </label>
+      <label className="block">
+        <span className="text-sm font-medium text-[#476788]">Тип материала</span>
+        <CustomSelect className="mt-2" value={draft.materialType} onChange={(value) => onChange({ materialType: value })} options={['Статья', 'Новость', 'Пост', 'Лонгрид']} />
+      </label>
+      <label className="block md:col-span-2">
+        <span className="text-sm font-medium text-[#476788]">Проект</span>
+        <CustomSelect className="mt-2" value={draft.projectName} onChange={(value) => onChange({ projectName: value })} options={[...projects.map((project) => project.name), 'Без проекта']} />
+        <span className="mt-2 block text-xs text-[#476788]">Необязательно. Новые заказы этого материала унаследуют выбранный проект.</span>
+      </label>
+      <div>
+        <span className="text-sm font-medium text-[#476788]">Файлы</span>
+        <FileUploadField accept=".pdf,.doc,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp" prompt="Выберите документ или перетащите его сюда" hint="PDF, DOCX, TXT, RTF или изображение · до 20 МБ" />
+      </div>
+      <div>
+        <span className="text-sm font-medium text-[#476788]">Изображения</span>
+        <FileUploadField accept="image/png,image/jpeg,image/webp" prompt="Выберите изображения или перетащите их сюда" hint="PNG, JPG или WEBP · до 20 МБ" />
+        <div className="mt-2 text-sm text-[#476788]">Или <button type="button" className="font-semibold text-[#006bff]" onClick={() => onOpenAi('image')}>сгенерируйте изображение с помощью ИИ за 50 ₽</button></div>
+      </div>
+      <label className="block md:col-span-2">
+        <span className="text-sm font-medium text-[#476788]">Примечание и ТЗ</span>
+        <textarea className="mt-2 min-h-[120px] w-full rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={draft.note} onChange={(event) => onChange({ note: event.target.value })} placeholder="Необязательные пожелания по стилистике, акцентам, площадкам или ограничениям." />
+      </label>
+      <div className="md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm font-medium text-[#476788]">Текст материала</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-[#476788]">2 840 знаков</span>
+            <Button variant="secondary" size="sm" onClick={() => onOpenAi('rewrite')}>Рерайт с помощью ИИ · 30 ₽</Button>
+          </div>
+        </div>
+        <div className="mt-2 overflow-hidden rounded-2xl border border-[#0b3558] bg-white focus-within:border-[#006bff] focus-within:ring-2 focus-within:ring-[#006bff]">
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-[#d4e0ed] bg-[#f8f9fb] px-3 py-2">
+            {[
+              { label: 'Обычный текст', icon: Type },
+              { label: 'Заголовок 1', icon: Heading1 },
+              { label: 'Заголовок 2', icon: Heading2 },
+              { label: 'Жирный', icon: Bold },
+              { label: 'Курсив', icon: Italic },
+              { label: 'Список', icon: List },
+              { label: 'Цитата', icon: Quote },
+              { label: 'Изображение', icon: ImageIcon },
+              { label: 'Ссылка', icon: ExternalLink },
+            ].map((tool) => {
+              const Icon = tool.icon;
+              return <button key={tool.label} type="button" title={tool.label} className="inline-flex h-9 min-w-9 items-center justify-center rounded-lg border border-transparent px-2 text-[#476788] hover:border-[#d4e0ed] hover:bg-white hover:text-[#0b3558]"><Icon className="h-4 w-4" />{tool.label === 'Обычный текст' && <span className="ml-2 text-xs font-medium">Текст</span>}</button>;
+            })}
+            <div className="mx-1 h-6 w-px bg-[#d4e0ed]" />
+            <CustomSelect className="w-32" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" options={['Manrope', 'Arial', 'Georgia']} />
+            <CustomSelect className="w-24" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" options={['16 px', '18 px', '20 px']} />
+          </div>
+          <div className="min-h-[320px] p-6 text-[#0b3558] outline-none" contentEditable suppressContentEditableWarning>
+            <h2 className="mb-4 font-display text-2xl font-bold text-[#0b3558]">Финтех Решения запускает новую платформу аналитики</h2>
+            <p className="mb-4 text-base leading-7">Вставьте готовый материал или отредактируйте его прямо в платформе. Редактор поддерживает заголовки, базовое форматирование, списки, цитаты, ссылки и изображения.</p>
+            <h3 className="mb-3 font-display text-xl font-bold text-[#0b3558]">Ключевые тезисы</h3>
+            <ul className="mb-4 list-disc space-y-2 pl-6">
+              <li>материал проходит модерацию до выбора площадок;</li>
+              <li>изображения можно вставлять в тело публикации;</li>
+              <li>после принятия материала открывается каталог площадок.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <details className="mt-6 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-[#0b3558]">Дополнительные настройки</summary>
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label><span className="text-sm font-medium text-[#476788]">Тэги</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="финтех, аналитика, запуск" /></label>
+        <label><span className="text-sm font-medium text-[#476788]">Title</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="Финтех Решения запускает платформу аналитики" /></label>
+        <label><span className="text-sm font-medium text-[#476788]">Description</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="Платформа помогает контролировать публикации, ссылки и отчеты." /></label>
+        <label><span className="text-sm font-medium text-[#476788]">Желаемый URL</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="/news/fintech-analytics-platform" /></label>
+      </div>
+    </details>
+  </Card>
+);
+
+const ClientEditMaterialView = ({ navigate, material, projects, onUpdateMaterial }) => {
+  const currentMaterial = material || mockMaterials[0];
+  const initialProjectName = projects.find((project) => project.id === currentMaterial.projectId)?.name || 'Без проекта';
+  const [aiModal, setAiModal] = useState(null);
+  const [draft, setDraft] = useState(() => ({
+    ...createMaterialDraft(currentMaterial.id, initialProjectName),
+    title: currentMaterial.name,
+    advertiser: currentMaterial.advertiser,
+    materialType: currentMaterial.type,
+    note: currentMaterial.note || '',
+  }));
+  const saveMaterial = () => {
+    if (!draft.title.trim()) return;
+    onUpdateMaterial(currentMaterial.id, {
+      name: draft.title.trim(),
+      advertiser: draft.advertiser,
+      type: draft.materialType,
+      note: draft.note.trim(),
+      projectId: draft.projectName === 'Без проекта'
+        ? null
+        : projects.find((project) => project.name === draft.projectName)?.id ?? null,
+      status: 'Черновик',
+      statusColor: 'gray',
+      date: '23.07.2026',
+    });
+    navigate('material_detail');
+  };
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('material_detail')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К материалу
+      </button>
+      <div>
+        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Редактирование материала</h1>
+        <p className="mt-1 text-sm text-[#476788]">После сохранения материал вернется в черновики. Другие материалы и заказы не изменятся.</p>
+      </div>
+      <MaterialDraftForm
+        draft={draft}
+        index={0}
+        projects={projects}
+        onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+        onRemove={() => {}}
+        canRemove={false}
+        onOpenAi={setAiModal}
+        mode="edit"
+      />
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <Button variant="secondary" onClick={() => navigate('material_detail')}>Отмена</Button>
+        <Button variant="primary" disabled={!draft.title.trim()} onClick={saveMaterial}>Сохранить изменения</Button>
+      </div>
+      <AiAssistModal isOpen={Boolean(aiModal)} onClose={() => setAiModal(null)} type={aiModal || 'rewrite'} />
+    </div>
   );
 };
 
 const ClientCreateMaterialView = ({ navigate, projects, defaultProjectId = null, onCreateMaterial }) => {
   const [aiModal, setAiModal] = useState(null);
   const defaultProjectName = projects.find((project) => project.id === defaultProjectId)?.name || 'Без проекта';
-  const [projectName, setProjectName] = useState(defaultProjectName);
-  const saveMaterial = (status) => {
-    onCreateMaterial({
-      name: 'Пресс-релиз: запуск аналитики',
-      advertiser: 'ООО "Финтех Решения"',
-      type: 'Статья',
+  const [drafts, setDrafts] = useState(() => [createMaterialDraft(1, defaultProjectName, true)]);
+  const [expeditedModeration, setExpeditedModeration] = useState(false);
+  const readyDrafts = drafts.filter((draft) => draft.title.trim());
+  const materialsCount = readyDrafts.length;
+  const expeditedTotal = materialsCount * 50;
+  const updateDraft = (id, patch) => setDrafts((items) => items.map((draft) => draft.id === id ? { ...draft, ...patch } : draft));
+  const addDraft = () => {
+    const lastDraft = drafts[drafts.length - 1];
+    if (!lastDraft?.title.trim()) return;
+    const nextId = Math.max(...drafts.map((draft) => draft.id)) + 1;
+    setDrafts((items) => [...items, createMaterialDraft(nextId, defaultProjectName)]);
+    requestAnimationFrame(() => document.getElementById(`material-form-${nextId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  const removeDraft = (id) => setDrafts((items) => items.filter((draft) => draft.id !== id));
+  const saveMaterials = (status) => {
+    readyDrafts.forEach((draft) => onCreateMaterial({
+      name: draft.title.trim(),
+      advertiser: draft.advertiser,
+      type: draft.materialType,
+      note: draft.note.trim(),
+      projectId: draft.projectName === 'Без проекта' ? null : projects.find((project) => project.name === draft.projectName)?.id ?? null,
       status,
       statusColor: status === 'Черновик' ? 'gray' : 'blue',
-      projectId: projectName === 'Без проекта' ? null : projects.find((project) => project.name === projectName)?.id ?? null,
-    });
+      expeditedModeration: status === 'На модерации' && expeditedModeration,
+      moderationFee: status === 'На модерации' && expeditedModeration ? 50 : 0,
+    }));
     navigate('materials');
   };
+
   return (
-  <div className="space-y-6 max-w-5xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('materials')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К материалам
-    </button>
-    <h1 className="font-display text-2xl font-bold text-[#0b3558]">Создание материала</h1>
-    <Card className="p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <label className="block md:col-span-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-[#476788]">Заголовок</span>
-            <span className="text-xs text-[#476788]">36 / 200 символов</span>
-          </div>
-          <input maxLength={200} className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Пресс-релиз: запуск аналитики" />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">Рекламодатель</span>
-          <CustomSelect className="mt-2" options={['ООО "Финтех Решения"', 'Урбан Групп']} />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">Тип материала</span>
-          <CustomSelect className="mt-2" options={['Статья', 'Новость', 'Интервью', 'Пост в Телеграме']} />
-        </label>
-        <label className="block md:col-span-2">
-          <span className="text-sm font-medium text-[#476788]">Проект</span>
-          <CustomSelect className="mt-2" value={projectName} onChange={setProjectName} options={[...projects.map((project) => project.name), 'Без проекта']} />
-          <span className="mt-2 block text-xs text-[#476788]">Необязательно. Новые заказы этого материала унаследуют выбранный проект.</span>
-        </label>
-        <div className="block">
-          <span className="text-sm font-medium text-[#476788]">Файлы</span>
-          <FileUploadField
-            accept=".pdf,.doc,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp"
-            prompt="Выберите документ или перетащите его сюда"
-            hint="PDF, DOCX, TXT, RTF или изображение · до 20 МБ"
+    <div className="mx-auto max-w-5xl space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('materials')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К материалам
+      </button>
+      <div>
+        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Создание материалов</h1>
+        <p className="mt-1 text-sm text-[#476788]">Заполните несколько материалов на одной странице и отправьте их на модерацию одновременно.</p>
+      </div>
+
+      {drafts.map((draft, index) => (
+        <React.Fragment key={draft.id}>
+          <MaterialDraftForm
+            draft={draft}
+            index={index}
+            projects={projects}
+            onChange={(patch) => updateDraft(draft.id, patch)}
+            onRemove={() => removeDraft(draft.id)}
+            canRemove={drafts.length > 1}
+            onOpenAi={setAiModal}
           />
-        </div>
-        <div className="block">
-          <span className="text-sm font-medium text-[#476788]">Изображения</span>
-          <FileUploadField
-            accept="image/png,image/jpeg,image/webp"
-            prompt="Выберите изображения или перетащите их сюда"
-            hint="PNG, JPG или WEBP · до 20 МБ"
-          />
-          <div className="mt-2 text-sm text-[#476788]">
-            Или <button type="button" className="font-semibold text-[#006bff]" onClick={() => setAiModal('image')}>сгенерируйте изображение с помощью ИИ за 50 ₽</button>
-          </div>
-        </div>
-        <label className="block md:col-span-2">
-          <span className="text-sm font-medium text-[#476788]">Примечание и ТЗ</span>
-          <textarea className="mt-2 w-full min-h-[120px] border border-[#476788] rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="Необязательные пожелания по стилистике, акцентам, площадкам или ограничениям." />
-        </label>
-        <div className="block md:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm font-medium text-[#476788]">Текст материала</span>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[#476788]">2 840 знаков</span>
-              <Button variant="secondary" size="sm" onClick={() => setAiModal('rewrite')}>Рерайт с помощью ИИ · 30 ₽</Button>
+          {index === drafts.length - 1 && (
+            <div className="flex justify-start">
+              <Button variant="secondary" onClick={addDraft} disabled={!draft.title.trim()}>
+                <Plus className="h-4 w-4" /> Сохранить и добавить еще материал
+              </Button>
             </div>
+          )}
+        </React.Fragment>
+      ))}
+
+      <section className="border-t border-[#d4e0ed] pt-6" aria-labelledby="material-batch-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="material-batch-heading" className="font-display text-lg font-bold text-[#0b3558]">Материалы к отправке</h2>
+            <p className="mt-1 text-sm text-[#476788]">Все формы выше остаются доступными для редактирования.</p>
           </div>
-          <div className="mt-2 border border-[#0b3558] rounded-2xl overflow-hidden bg-white focus-within:ring-2 focus-within:ring-[#006bff] focus-within:border-[#006bff]">
-            <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-[#d4e0ed] bg-[#f8f9fb]">
-              {[
-                { label: 'Обычный текст', icon: Type },
-                { label: 'Заголовок 1', icon: Heading1 },
-                { label: 'Заголовок 2', icon: Heading2 },
-                { label: 'Жирный', icon: Bold },
-                { label: 'Курсив', icon: Italic },
-                { label: 'Список', icon: List },
-                { label: 'Цитата', icon: Quote },
-                { label: 'Изображение', icon: ImageIcon },
-                { label: 'Ссылка', icon: ExternalLink },
-              ].map((tool) => {
-                const Icon = tool.icon;
-                return (
-                  <button key={tool.label} type="button" title={tool.label} className="inline-flex items-center justify-center h-9 min-w-9 px-2 rounded-lg text-[#476788] hover:text-[#0b3558] hover:bg-white border border-transparent hover:border-[#d4e0ed]">
-                    <Icon className="w-4 h-4" />
-                    {tool.label === 'Обычный текст' && <span className="ml-2 text-xs font-medium">Текст</span>}
-                  </button>
-                );
-              })}
-              <div className="h-6 w-px bg-[#d4e0ed] mx-1"></div>
-              <CustomSelect className="w-32" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" options={['Manrope', 'Arial', 'Georgia']} />
-              <CustomSelect className="w-24" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" options={['16 px', '18 px', '20 px']} />
-            </div>
-            <div className="min-h-[360px] p-6 text-[#0b3558] outline-none" contentEditable suppressContentEditableWarning>
-              <h1 className="font-display text-3xl font-bold text-[#0b3558] mb-4">Финтех Решения запускает новую платформу аналитики</h1>
-              <p className="text-base leading-7 mb-4">Вставьте готовый материал или отредактируйте его прямо в платформе. Редактор поддерживает заголовки, шрифты, базовое форматирование, списки, цитаты, ссылки и изображения.</p>
-              <h2 className="font-display text-xl font-bold text-[#0b3558] mb-3">Ключевые тезисы</h2>
-              <ul className="list-disc pl-6 space-y-2 mb-4">
-                <li>материал проходит модерацию до выбора площадок;</li>
-                <li>изображения можно вставлять в тело публикации;</li>
-                <li>после принятия материала открывается каталог площадок.</li>
-              </ul>
-              <blockquote className="border-l-4 border-[#006bff] pl-4 text-[#476788] italic">Платформа не пишет материалы, а размещает готовые пиар-публикации в проверенных каналах.</blockquote>
-            </div>
-          </div>
+          <span className="rounded-full bg-[#e5f0ff] px-3 py-1.5 text-sm font-semibold text-[#0054c7]">{materialsCount}</span>
         </div>
-      </div>
-      <details className="mt-6 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-[#0b3558]">Дополнительные настройки</summary>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="block"><span className="text-sm font-medium text-[#476788]">Тэги</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="финтех, аналитика, запуск" /></label>
-          <label className="block"><span className="text-sm font-medium text-[#476788]">Title</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Финтех Решения запускает платформу аналитики" /></label>
-          <label className="block"><span className="text-sm font-medium text-[#476788]">Description</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Платформа помогает контролировать публикации, ссылки и отчеты." /></label>
-          <label className="block"><span className="text-sm font-medium text-[#476788]">Желаемый URL</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="/news/fintech-analytics-platform" /></label>
+        <div className="mt-4 divide-y divide-[#d4e0ed] overflow-hidden rounded-xl border border-[#d4e0ed] bg-white">
+          {readyDrafts.map((draft) => {
+            const index = drafts.findIndex((item) => item.id === draft.id);
+            return (
+              <button key={draft.id} type="button" className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-[#f8f9fb]" onClick={() => document.getElementById(`material-form-${draft.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium uppercase text-[#6f88a3]">Материал {index + 1}</div>
+                  <div className="mt-1 truncate font-semibold text-[#0b3558]">{draft.title}</div>
+                  <div className="mt-1 text-sm text-[#476788]">{draft.advertiser} · {draft.materialType}</div>
+                </div>
+                <span className="shrink-0 text-xs font-semibold text-[#006bff]">К форме</span>
+              </button>
+            );
+          })}
         </div>
-      </details>
-      <div className="mt-6 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4 text-sm text-[#476788] space-y-2">
-        <p>До выбора площадок платформа проверяет базовые требования, рекламодателя, ссылки, изображения и юридические риски.</p>
-        <p>Размещая материал, вы подтверждаете, что у вас есть все необходимые авторские права на текст, изображения и другие элементы контента.</p>
+      </section>
+
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+        <input type="checkbox" checked={expeditedModeration} onChange={(event) => setExpeditedModeration(event.target.checked)} className="mt-1 h-4 w-4 accent-[#006bff]" />
+        <span className="flex-1">
+          <span className="flex items-center gap-2 font-semibold text-[#0b3558]"><Zap className="h-4 w-4 text-[#006bff]" /> Ускоренная модерация</span>
+          <span className="mt-1 block text-sm text-[#476788]">Приоритетная проверка стоит 50 ₽ за материал{expeditedModeration && materialsCount > 0 ? ` · итого ${expeditedTotal} ₽` : ''}.</span>
+        </span>
+      </label>
+
+      <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
+        Все материалы пройдут базовую проверку рекламодателя, ссылок, изображений и юридических рисков. Отправка создаст отдельную заявку на модерацию для каждого материала.
       </div>
-      <div className="mt-6 flex justify-end gap-3">
-        <Button variant="secondary" onClick={() => saveMaterial('Черновик')}>Сохранить черновик</Button>
-        <Button variant="primary" onClick={() => saveMaterial('На модерации')}>Отправить на модерацию</Button>
+
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <Button variant="secondary" disabled={!materialsCount} onClick={() => saveMaterials('Черновик')}>{materialsCount > 1 ? 'Сохранить черновики' : 'Сохранить черновик'}</Button>
+        <Button variant="primary" disabled={!materialsCount} onClick={() => saveMaterials('На модерации')}>Отправить на модерацию{materialsCount > 1 ? ` · ${materialsCount}` : ''}</Button>
       </div>
-    </Card>
-    <AiAssistModal isOpen={Boolean(aiModal)} onClose={() => setAiModal(null)} type={aiModal || 'rewrite'} />
-  </div>
+      <AiAssistModal isOpen={Boolean(aiModal)} onClose={() => setAiModal(null)} type={aiModal || 'rewrite'} />
+    </div>
   );
 };
 
@@ -3664,7 +4249,7 @@ const PlatformListTable = ({ items, favoritePlatforms, toggleFavoritePlatform, n
                 <td className="px-4 py-4 whitespace-nowrap"><Badge color="gray">{item.type}</Badge></td>
 	                <td className="px-4 py-4 whitespace-nowrap">
 	                  <div className="text-sm font-semibold text-[#0b3558]">#{mediologyRank}</div>
-	                  <div className="text-[11px] text-[#476788]" title="Для федеральных СМИ — общий рейтинг; для региональных и отраслевых — рейтинг по региону или отрасли.">{item.region === 'Федеральные' ? 'общий' : 'по сегменту'}</div>
+	                  <div className="text-[11px] text-[#476788]" title="Для федеральных СМИ — общий рейтинг; для региональных и отраслевых — рейтинг по региону или отрасли.">{item.region === 'Федеральный охват' ? 'общий' : 'по сегменту'}</div>
 	                </td>
                 <td className="px-4 py-4">
                   <div className="flex flex-wrap gap-1">
@@ -3696,9 +4281,13 @@ const PlatformListTable = ({ items, favoritePlatforms, toggleFavoritePlatform, n
 
 const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate, materials, projects, onCreateOrders }) => {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState([]);
   const [isBulkModalOpen, setBulkModalOpen] = useState(false);
   const [audienceFilter, setAudienceFilter] = useState(undefined);
+  const [regionFilter, setRegionFilter] = useState(undefined);
+  const [goalFilter, setGoalFilter] = useState(undefined);
+  const [formatFilter, setFormatFilter] = useState(undefined);
   const getReachValue = (reach) => {
     const normalized = String(reach).replace(',', '.');
     const number = Number(normalized.match(/[\d.]+/)?.[0] || 0);
@@ -3714,7 +4303,15 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
     if (audienceFilter === '1 млн+') return reach > 1000000;
     return true;
   };
+  const matchesRegion = (item) => matchesGeographyFilter(item.region, regionFilter);
+  const matchesGoal = (item) => !goalFilter || goalFilter === 'Любая цель' || item.goals.includes(goalFilter);
+  const matchesFormat = (item) => !formatFilter
+    || formatFilter === 'Все форматы'
+    || item.formats.includes(formatFilter);
   const visiblePlatforms = (showFavoritesOnly ? mockCatalog.filter(item => favoritePlatforms.includes(item.id)) : mockCatalog)
+    .filter(matchesRegion)
+    .filter(matchesGoal)
+    .filter(matchesFormat)
     .filter(matchesAudience);
   const selectedPlatforms = mockCatalog.filter(item => selectedPlatformIds.includes(item.id));
   const selectedTotal = selectedPlatforms.reduce((sum, item) => sum + item.price, 0);
@@ -3732,22 +4329,34 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
             <Star className={`w-4 h-4 mr-2 ${showFavoritesOnly ? 'fill-white' : ''}`} />
             Избранные: {favoritePlatforms.length}
           </Button>
-          <Button variant="secondary" className="w-full sm:w-auto"><Filter className="h-4 w-4" /> Фильтры</Button>
+          <Button
+            variant="secondary"
+            className="w-full sm:w-auto"
+            onClick={() => setFiltersOpen((value) => !value)}
+            aria-expanded={filtersOpen}
+            aria-controls="catalog-filters"
+          >
+            <Filter className="h-4 w-4" />
+            Фильтры
+            <ChevronRight className={`h-4 w-4 transition-transform ${filtersOpen ? '-rotate-90' : 'rotate-90'}`} />
+          </Button>
         </div>
       </div>
 
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <CustomSelect placeholder="Тип площадки" options={['Все типы', 'СМИ', 'ТГ-канал', 'Паблик ВК']} />
-          <CustomSelect placeholder="Цель размещения" options={['Любая цель', 'Пиар', 'SEO', 'SERM']} />
-          <CustomSelect placeholder="Регион" options={['Все регионы', 'Федеральные', 'Москва', 'Регионы']} />
-          <CustomSelect placeholder="Тематика" options={['Любая тематика', 'Финансы', 'ИТ', 'Бизнес']} />
-          <CustomSelect placeholder="Цена" options={['Любая цена', 'До 50 000 ₽', '50 000-100 000 ₽', '100 000+ ₽']} />
-          <CustomSelect placeholder="Срок публикации" options={['Любой срок', '1 день', '2-3 дня', 'До недели']} />
-          <CustomSelect placeholder="Формат" options={['Все форматы', 'Статья', 'Пост', 'Лонгрид']} />
-          <CustomSelect placeholder="Аудитория" options={['Любая аудитория', 'До 100 тыс.', '100 тыс.-1 млн', '1 млн+']} value={audienceFilter} onChange={setAudienceFilter} />
-        </div>
-      </Card>
+      <CollapsiblePanel open={filtersOpen}>
+        <Card id="catalog-filters" className="p-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <CustomSelect placeholder="Тип площадки" options={['Все типы', 'СМИ', 'ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
+            <CustomSelect placeholder="Цель размещения" options={['Любая цель', 'Пиар', 'SEO', 'SERM']} value={goalFilter} onChange={setGoalFilter} />
+            <CustomSelect placeholder="География" options={regionFilterOptions} value={regionFilter} onChange={setRegionFilter} />
+            <CustomSelect placeholder="Тематика" options={['Любая тематика', 'Финансы', 'ИТ', 'Бизнес']} />
+            <CustomSelect placeholder="Цена" options={['Любая цена', 'До 50 000 ₽', '50 000-100 000 ₽', '100 000+ ₽']} />
+            <CustomSelect placeholder="Срок публикации" options={['Любой срок', '1 день', '2-3 дня', 'До недели']} />
+            <CustomSelect placeholder="Формат" options={placementFormatFilterOptions} value={formatFilter} onChange={setFormatFilter} />
+            <CustomSelect placeholder="Аудитория" options={['Любая аудитория', 'До 100 тыс.', '100 тыс.-1 млн', '1 млн+']} value={audienceFilter} onChange={setAudienceFilter} />
+          </div>
+        </Card>
+      </CollapsiblePanel>
 
       <Card className="p-5 sm:p-6">
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
@@ -3799,51 +4408,158 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
   const item = mockCatalog[0];
   const isFavorite = favoritePlatforms.includes(item.id);
   const [isMaterialModalOpen, setMaterialModalOpen] = useState(false);
+  const placementFormats = [
+    { name: 'Статья', deadline: 'до 2 дней', basePrice: 150000, price: 135000 },
+    { name: 'Новость', deadline: 'до 1 дня', basePrice: 85000, price: 76500 },
+  ];
+  const [selectedFormatName, setSelectedFormatName] = useState(placementFormats[0].name);
+  const selectedFormat = placementFormats.find((format) => format.name === selectedFormatName) || placementFormats[0];
+  const selectedPlatform = {
+    ...item,
+    format: selectedFormat.name,
+    deadline: selectedFormat.deadline,
+    price: selectedFormat.price,
+  };
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="platform-view-enter space-y-6 max-w-5xl mx-auto">
       <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('catalog')}>
         <ChevronRight className="w-4 h-4 rotate-180" /> К каталогу
       </button>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-start gap-4">
-            <div className={`w-14 h-14 rounded-2xl flex flex-none items-center justify-center text-white font-bold text-xl ${item.logo}`}>{item.name.charAt(0)}</div>
+            <div className="platform-logo-motion flex h-16 w-16 flex-none flex-col items-center justify-center rounded-2xl border border-[#d4e0ed] bg-white shadow-sm" aria-label="Логотип РБК">
+              <span className="flex h-4 items-end gap-0.5" aria-hidden="true">
+                <span className="h-2.5 w-1.5 rounded-sm bg-[#f5a623]" />
+                <span className="h-3.5 w-1.5 rounded-sm bg-[#4dbb73]" />
+                <span className="h-4 w-1.5 rounded-sm bg-[#28a8df]" />
+                <span className="h-3 w-1.5 rounded-sm bg-[#405de6]" />
+              </span>
+              <span className="mt-1 text-xs font-bold leading-none text-[#0b3558]">РБК</span>
+            </div>
             <div className="min-w-0">
-              <h1 className="font-display text-2xl font-bold text-[#0b3558]">{item.name}</h1>
-              <p className="text-sm text-[#476788] mt-1">{item.type} · {item.theme} · {item.region}</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h1 className="font-display text-2xl font-bold text-[#0b3558]">{item.name}</h1>
+                <div className="flex flex-wrap gap-2">{item.tags.map(tag => <Badge key={tag} color="blue">{tag}</Badge>)}</div>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#476788]">
+                <span>{item.type} · {item.theme} · {item.region}</span>
+                <span className="hidden text-[#9bb6d3] sm:inline">·</span>
+                <a className="inline-flex items-center gap-1 font-medium text-[#006cff] hover:underline" href="https://invest.rbc.ru" target="_blank" rel="noreferrer">
+                  invest.rbc.ru <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap justify-start gap-2">{item.tags.map(tag => <Badge key={tag} color="blue">{tag}</Badge>)}</div>
         </div>
         <Button variant={isFavorite ? 'primary' : 'secondary'} onClick={() => toggleFavoritePlatform(item.id)}>
           <Star className={`w-4 h-4 mr-2 ${isFavorite ? 'fill-white' : ''}`} /> {isFavorite ? 'В избранном' : 'В избранное'}
         </Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Цена</div><div className="mt-2 text-xl font-semibold">{formatMoney(item.price)}</div></Card>
-        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Срок публикации</div><div className="mt-2 text-xl font-semibold">{item.deadline}</div></Card>
-        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Хранение</div><div className="mt-2 text-xl font-semibold">{item.storage}</div></Card>
-	        <Card className="p-5"><div className="text-xs text-[#476788] uppercase flex items-center gap-1">Медиалогия <Info className="w-3.5 h-3.5" /></div><div className="mt-2 text-xl font-semibold">#{((item.id - 100) * 5) % 30 || 30}</div><div className="text-xs text-[#476788] mt-1">{item.region === 'Федеральные' ? 'общий рейтинг' : 'рейтинг по региону/отрасли'}</div></Card>
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '80ms' }}><div className="text-xs text-[#476788] uppercase">Посещаемость в день</div><div className="mt-2 text-xl font-semibold">82 тыс.</div><a className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#006cff] hover:underline" href="https://metrika.yandex.ru" target="_blank" rel="noreferrer">Яндекс Метрика <ExternalLink className="h-3 w-3" /></a></Card>
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '120ms' }}><div className="text-xs text-[#476788] uppercase">Срок публикации</div><div className="mt-2 text-xl font-semibold">{item.deadline}</div></Card>
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '160ms' }}><div className="text-xs text-[#476788] uppercase">Хранение</div><div className="mt-2 text-xl font-semibold">{item.storage}</div></Card>
+	        <Card className="platform-card-motion p-5" style={{ animationDelay: '200ms' }}><div className="text-xs text-[#476788] uppercase flex items-center gap-1">Медиалогия <Info className="w-3.5 h-3.5" /></div><div className="mt-2 text-xl font-semibold">#{((item.id - 100) * 5) % 30 || 30}</div><div className="text-xs text-[#476788] mt-1">{item.region === 'Федеральный охват' ? 'общий рейтинг' : 'рейтинг по региону/отрасли'}</div></Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-6 lg:col-span-2">
-          <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Метрики и требования</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div><div className="text-[#476788]">Посещаемость</div><div className="font-medium text-[#0b3558]">{item.reach}</div></div>
-            <div><div className="text-[#476788]">Агрегаторы</div><div className="font-medium text-[#0b3558]">{item.aggregators.join(', ')}</div></div>
-            <div><div className="text-[#476788]">Доступные форматы</div><div className="font-medium text-[#0b3558]">Статья, новость, интервью, нативная интеграция</div></div>
-            <div><div className="text-[#476788]">SEO-параметры</div><div className="font-medium text-[#0b3558]">Индексация, dofollow по согласованию, Google News</div></div>
+        <div className="space-y-6 lg:col-span-2">
+          <Card className="platform-section-motion overflow-hidden">
+            <div className="flex flex-col gap-2 border-b border-[#d4e0ed] bg-[#f8f9fb] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-display text-base font-bold text-[#0b3558]">Форматы и цены</h2>
+                <p className="mt-1 text-xs text-[#476788]">Сезонная скидка 10% действует до 31 августа</p>
+              </div>
+              <Badge color="green">Коэффициент сезона ×1,0</Badge>
+            </div>
+            <div className="divide-y divide-[#d4e0ed]">
+              {placementFormats.map((format) => {
+                const selected = selectedFormatName === format.name;
+                return (
+                  <button
+                    key={format.name}
+                    type="button"
+                    className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-6 py-3.5 text-left transition-colors hover:bg-[#f8f9fb] focus:outline-none focus-visible:bg-[#eef5ff] ${selected ? 'bg-[#f3f7fd] shadow-[inset_3px_0_0_#006cff]' : 'bg-white'}`}
+                    onClick={() => setSelectedFormatName(format.name)}
+                    aria-pressed={selected}
+                  >
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2 text-sm font-semibold text-[#0b3558]">
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3] bg-white'}`}>
+                          {selected && <Check className="h-3.5 w-3.5" />}
+                        </span>
+                        {format.name}
+                      </span>
+                      <span className="mt-1 block pl-7 text-xs text-[#476788]">Публикация {format.deadline}</span>
+                    </span>
+                    <span className="text-right">
+                      <span className="block text-xs text-[#7890aa] line-through">{formatMoney(format.basePrice)}</span>
+                      <span className="mt-0.5 block text-base font-semibold text-[#0b3558]">{formatMoney(format.price)}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+          <Card className="platform-section-motion p-6">
+            <h2 className="font-display text-base font-bold text-[#0b3558]">Требования</h2>
+            <p className="mt-3 text-sm leading-6 text-[#476788]">
+              Площадка принимает материалы о финансах, бизнесе и технологиях. Редакция может изменить заголовок и структуру текста без искажения смысла. Допускается до двух внешних ссылок, изображения обязательны. Не принимаются запрещенные тематики и обещания гарантированного дохода.
+            </p>
+            <div className="mt-5 grid gap-5 border-t border-[#d4e0ed] pt-5 sm:grid-cols-2 sm:gap-0">
+              <div className="flex min-w-0 items-center gap-3 sm:pr-5">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e7f1ff] text-[#006cff]">
+                  <Megaphone className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase leading-none text-[#6f88a3]">Подходит для целей</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.goals.map((goal) => (
+                      <span key={goal} className="rounded-full bg-[#e7f1ff] px-3 py-1 text-sm font-semibold text-[#075cc8]">{goal}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex min-w-0 items-center gap-3 border-t border-[#d4e0ed] pt-5 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ebf8f1] text-[#16834d]">
+                  <Newspaper className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase leading-none text-[#6f88a3]">Новостные агрегаторы</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.aggregators.map((aggregator) => (
+                      <span key={aggregator} className="rounded-full bg-[#ebf8f1] px-3 py-1 text-sm font-semibold text-[#146b43]">{aggregator}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+        <Card className="platform-section-motion self-start overflow-hidden">
+          <div className="border-b border-[#d4e0ed] px-6 py-4">
+            <h2 className="font-display text-base font-bold text-[#0b3558]">Размещение</h2>
           </div>
-          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4 text-sm text-[#476788]">Не принимаются запрещенные тематики, материалы без рекламодателя, внешние контакты в тексте и обещания гарантированного дохода.</div>
-        </Card>
-        <Card className="p-6">
-          <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Выбор площадки</h2>
-          <p className="text-sm text-[#476788] mb-4">Выберите готовый материал, который нужно отправить на эту площадку. Создание заказа заморозит средства.</p>
-          <Button variant="primary" className="w-full" onClick={() => setMaterialModalOpen(true)}>Разместить текст на площадке</Button>
-          <Button variant="secondary" className="w-full mt-3" onClick={() => navigate('catalog')}>К каталогу</Button>
+          <div className="p-6">
+            <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-xs text-[#476788]">Выбранный формат</div>
+                  <div className="mt-1 text-sm font-semibold text-[#0b3558]">{selectedFormat.name}</div>
+                </div>
+                <div className="shrink-0 text-base font-semibold text-[#0b3558]">{formatMoney(selectedFormat.price)}</div>
+              </div>
+              <div className="mt-2 text-xs text-[#476788]">Публикация {selectedFormat.deadline}. Скидка учтена.</div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-[#476788]">
+              Выберите готовый материал. После создания заказа сумма размещения будет заморожена на балансе.
+            </p>
+            <Button variant="primary" className="mt-4 w-full" onClick={() => setMaterialModalOpen(true)}>Разместить материал</Button>
+            <Button variant="secondary" className="mt-3 w-full" onClick={() => navigate('catalog')}>К каталогу</Button>
+          </div>
         </Card>
       </div>
-      <MaterialSelectionModal isOpen={isMaterialModalOpen} onClose={() => setMaterialModalOpen(false)} platform={item} materials={materials} projects={projects} onCreateOrders={onCreateOrders} />
+      <MaterialSelectionModal isOpen={isMaterialModalOpen} onClose={() => setMaterialModalOpen(false)} platform={selectedPlatform} materials={materials} projects={projects} onCreateOrders={onCreateOrders} />
     </div>
   );
 };
@@ -4091,140 +4807,166 @@ const ClientSupportView = ({ navigate, role = 'client' }) => {
 
 // --- 3. КАБИНЕТ ПЛОЩАДКИ ---
 
-const PublisherDashboardView = ({ navigate }) => (
-  <div className="space-y-8">
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Панель паблишера</h1>
-        <p className="text-sm text-[#476788] mt-1">Рабочая сводка по заказам, публикациям и выплатам.</p>
-      </div>
-      <Button variant="secondary" onClick={() => navigate('pub_orders')}>Все заказы</Button>
-    </div>
+const PublisherDashboardView = ({ navigate }) => {
+  const openOrder = (order) => {
+    navigate(
+      order.status === 'Ожидает приемки'
+        ? 'pub_order_acceptance_detail'
+        : order.id === 1048
+          ? 'pub_order_new_detail'
+          : /жалоб|спор/i.test(order.status)
+            ? 'pub_dispute_detail'
+            : 'pub_order_detail',
+    );
+  };
 
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-      {[
-        ['Новые заявки', '1', 'ответить до 18:00', 'pub_orders', 'Открыть заявки', 'blue'],
-        ['В работе', '3', 'приняты редакцией', 'pub_orders', 'Перейти к заказам', 'green'],
-        ['Ждут публикации', '2', 'ближайший дедлайн завтра', 'pub_order_detail', 'Загрузить ссылку', 'amber'],
-        ['На приемке', '4', 'ожидают заказчика', 'pub_orders', 'Открыть приемку', 'indigo'],
-        ['Жалобы', '1', 'нужны доказательства', 'pub_dispute_detail', 'Открыть спор', 'red'],
-        ['Доступно к выводу', formatMoney(235000), 'после проверки реквизитов', 'pub_finance', 'Открыть выплаты', 'green'],
-        ['Ожидает приемки', formatMoney(127500), 'начислится после принятия', 'pub_order_acceptance_detail', 'Открыть приемку', 'gray'],
-        ['Удержания', formatMoney(52000), 'по жалобе #C-020', '', '', 'red'],
-      ].map(([label, value, note, target, action, color]) => (
-        <Card key={label} className="p-5">
-          <h3 className="text-xs font-medium text-[#476788] uppercase tracking-wider mb-2">{label}</h3>
-          <div className="text-2xl font-semibold text-[#0b3558] tabular-nums">{value}</div>
-          <div className="mt-2 text-xs text-[#476788]">{note}</div>
-          {target && action && (
+  const currentOrders = mockOrdersPublisher
+    .filter((order) => order.status !== 'Завершено')
+    .map((order) => {
+      const isNew = order.status === 'Новая заявка';
+      const isDispute = /жалоб|спор/i.test(order.status);
+      const isAcceptance = order.status === 'Ожидает приемки';
+
+      return {
+        ...order,
+        deadline: isNew
+          ? 'до 18:00 сегодня'
+          : isDispute
+            ? 'в течение 24 часов'
+            : isAcceptance
+              ? 'ожидаем заказчика'
+              : 'до 20.10',
+        nextAction: isNew
+          ? 'Принять или отклонить'
+          : isDispute
+            ? 'Предоставить доказательства'
+            : isAcceptance
+              ? 'Дождаться приемки'
+              : 'Загрузить ссылку',
+        priority: isNew ? 0 : isDispute ? 1 : isAcceptance ? 3 : 2,
+      };
+    })
+    .sort((left, right) => left.priority - right.priority);
+
+  const summary = [
+    ['Новые заявки', '1', 'Нужно решение редакции'],
+    ['В работе', '3', 'Заказы приняты'],
+    ['На приемке', '4', 'Ожидают заказчика'],
+    ['Завершено в июле', '12', 'Приняты и оплачены'],
+  ];
+
+  const finance = [
+    ['Доступно к выводу', formatMoney(235000)],
+    ['Ожидает приемки', formatMoney(127500)],
+    ['На выплате', formatMoney(180000)],
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[#0b3558]">Панель паблишера</h1>
+          <p className="mt-1 text-sm text-[#476788]">Заказы, ближайшие сроки и выплаты.</p>
+        </div>
+        <Button variant="secondary" onClick={() => navigate('pub_orders')}>Все заказы</Button>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="grid grid-cols-2 gap-px bg-[#d4e0ed] xl:grid-cols-4">
+          {summary.map(([label, value, note]) => (
             <button
-              className={`mt-4 inline-flex items-center text-sm font-medium ${color === 'gray' ? 'text-[#476788] hover:text-[#0b3558]' : 'text-[#006bff] hover:text-[#004eba]'}`}
-              onClick={() => navigate(target)}
+              key={label}
+              className="min-h-[128px] bg-white p-5 text-left transition-colors hover:bg-[#f8fbff] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#006bff]"
+              onClick={() => navigate('pub_orders')}
             >
-              {action}
-              <ChevronRight className="w-4 h-4 ml-1" />
+              <div className="text-sm font-medium text-[#476788]">{label}</div>
+              <div className="mt-2 font-display text-3xl font-bold text-[#0b3558] tabular-nums">{value}</div>
+              <div className="mt-2 text-xs text-[#476788]">{note}</div>
             </button>
-          )}
-        </Card>
-      ))}
-    </div>
+          ))}
+        </div>
+      </Card>
 
-    <Card className="overflow-hidden">
-      <div className="px-6 py-5 border-b border-[#d4e0ed] bg-[#f8f9fb]">
-        <h2 className="font-display text-lg font-bold text-[#0b3558]">Что требуется сейчас</h2>
-        <p className="text-sm text-[#476788] mt-1">Только реальные задачи, которые сейчас блокируют движение заказа или выплаты.</p>
-      </div>
-      <div className="divide-y divide-[#d4e0ed]">
-        {[
-          ['#1048', 'Новая заявка', 'Принять или отклонить заявку', 'до 18:00 сегодня', 'pub_order_new_detail', 'Рассмотреть'],
-          ['#1045', 'Публикация', 'Загрузить ссылку', 'до 20.10', 'pub_order_detail', 'Загрузить'],
-          ['#1055', 'Жалоба', 'Предоставить доказательства по спору', '24 часа', 'pub_dispute_detail', 'Открыть спор'],
-        ].map(([order, type, task, deadline, target, action]) => (
-          <button key={order} className="w-full px-6 py-4 text-left hover:bg-[#f8f9fb] flex flex-col lg:flex-row lg:items-center gap-3" onClick={() => navigate(target)}>
-            <div className="lg:w-24 text-sm font-semibold text-[#0b3558]">{order}</div>
-            <div className="lg:w-36"><Badge color={type === 'Жалоба' ? 'red' : type === 'Публикация' ? 'amber' : 'blue'}>{type}</Badge></div>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-[#0b3558]">{task}</div>
-              <div className="text-xs text-[#476788] mt-1">Дедлайн: {deadline}</div>
-            </div>
-            <div className="text-sm font-medium text-[#006bff]">{action}</div>
+      <Card className="overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-lg font-bold text-[#0b3558]">Текущие заказы</h2>
+            <p className="mt-1 text-sm text-[#476788]">Сначала показаны заказы, по которым нужно принять решение.</p>
+          </div>
+          <button
+            className="inline-flex items-center self-start text-sm font-semibold text-[#006bff] hover:text-[#004eba] sm:self-auto"
+            onClick={() => navigate('pub_orders')}
+          >
+            Все заказы
+            <ChevronRight className="ml-1 h-4 w-4" />
           </button>
-        ))}
-      </div>
-    </Card>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] table-fixed divide-y divide-[#d4e0ed]">
+            <colgroup>
+              <col className="w-[12%]" />
+              <col className="w-[31%]" />
+              <col className="w-[18%]" />
+              <col className="w-[19%]" />
+              <col className="w-[20%]" />
+            </colgroup>
+            <thead className="bg-[#f8f9fb]">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#476788]">Заказ</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#476788]">Материал</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#476788]">Срок</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#476788]">Статус</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#476788]">Следующий шаг</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#d4e0ed] bg-white">
+              {currentOrders.map((order) => (
+                <tr
+                  key={order.id}
+                  className="cursor-pointer transition-colors hover:bg-[#f8f9fb]"
+                  onClick={() => openOrder(order)}
+                >
+                  <td className="px-6 py-4 align-top">
+                    <div className="text-sm font-semibold text-[#0b3558]">#{order.id}</div>
+                    <div className="mt-1 text-xs text-[#476788] tabular-nums">{order.date}</div>
+                  </td>
+                  <td className="px-6 py-4 align-top">
+                    <div className="line-clamp-2 text-sm font-medium leading-5 text-[#0b3558]">{order.material}</div>
+                    <div className="mt-1 text-xs text-[#476788]">{order.format}</div>
+                  </td>
+                  <td className="px-6 py-4 align-top text-sm text-[#476788]">{order.deadline}</td>
+                  <td className="px-6 py-4 align-top"><Badge color={order.statusColor}>{order.status}</Badge></td>
+                  <td className="px-6 py-4 align-top">
+                    <span className="inline-flex items-center text-sm font-semibold text-[#006bff]">
+                      {order.nextAction}
+                      <ChevronRight className="ml-1 h-4 w-4 shrink-0" />
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <Card className="p-6">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4">Выплаты</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between"><span className="text-[#476788]">Доступно</span><span className="font-semibold">{formatMoney(235000)}</span></div>
-          <div className="flex justify-between"><span className="text-[#476788]">На выводе</span><span>{formatMoney(180000)}</span></div>
-          <div className="flex justify-between"><span className="text-[#476788]">Ближайшая дата</span><span>01.11</span></div>
-        </div>
-        <Button variant="secondary" className="w-full mt-5" onClick={() => navigate('pub_finance')}>Открыть выплаты</Button>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4">Площадки</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between"><span className="text-[#476788]">Активные</span><span className="font-semibold">1</span></div>
-          <div className="flex justify-between"><span className="text-[#476788]">На проверке</span><span>1</span></div>
-          <div className="flex justify-between"><span className="text-[#476788]">Требуют правок</span><span>1</span></div>
-        </div>
-        <Button variant="secondary" className="w-full mt-5" onClick={() => navigate('pub_platforms')}>Мои площадки</Button>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4">Риски</h3>
-        <div className="rounded-lg bg-red-50 border border-red-100 p-4">
-          <Badge color="red">удержание</Badge>
-          <p className="text-sm text-red-800 mt-3">По заказу #1055 проверяется удаление публикации раньше срока хранения.</p>
+      <Card className="overflow-hidden">
+        <div className="grid gap-px bg-[#d4e0ed] lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
+          {finance.map(([label, value]) => (
+            <div key={label} className="bg-white p-5">
+              <div className="text-sm text-[#476788]">{label}</div>
+              <div className="mt-2 text-xl font-semibold text-[#0b3558] tabular-nums">{value}</div>
+            </div>
+          ))}
+          <div className="flex items-center bg-white p-5">
+            <Button variant="secondary" className="w-full whitespace-nowrap" onClick={() => navigate('pub_finance')}>
+              Открыть выплаты
+            </Button>
+          </div>
         </div>
       </Card>
     </div>
-
-    <Card className="overflow-hidden">
-      <div className="px-6 py-5 border-b border-[#d4e0ed] bg-[#f8f9fb]">
-        <h3 className="text-base font-semibold text-[#0b3558]">Последние входящие заказы</h3>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1120px] table-fixed divide-y divide-[#d4e0ed]">
-          <colgroup>
-            <col className="w-[10%]" />
-            <col className="w-[27%]" />
-            <col className="w-[20%]" />
-            <col className="w-[12%]" />
-            <col className="w-[31%]" />
-          </colgroup>
-          <thead className="bg-[#f8f9fb]">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Заказ / дата</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Материал</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Формат</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Начисление</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Статус</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-[#d4e0ed]">
-            {mockOrdersPublisher.slice(0, 4).map((order) => (
-              <tr key={order.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate(order.status === 'Ожидает приемки' ? 'pub_order_acceptance_detail' : order.id === 1048 ? 'pub_order_new_detail' : 'pub_order_detail')}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-[#0b3558]">#{order.id}</div>
-                  <div className="text-xs text-[#476788] mt-0.5 tabular-nums">{order.date}</div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="text-sm text-[#0b3558] font-medium truncate max-w-[240px]">{order.material}</div>
-                  <div className="text-xs text-[#476788] truncate max-w-[240px]">{order.advertiser}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#476788]">{order.format}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0b3558] tabular-nums">{formatMoney(order.price)}</td>
-                <td className="px-6 py-4 whitespace-nowrap"><Badge color={order.statusColor}>{order.status}</Badge></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  </div>
-);
+  );
+};
 
 const PublisherOrdersView = ({ navigate }) => (
   <div className="space-y-6">
@@ -4233,22 +4975,6 @@ const PublisherOrdersView = ({ navigate }) => (
         <h1 className="font-display text-2xl font-bold text-[#0b3558]">Ваши заказы</h1>
         <p className="text-sm text-[#476788] mt-1">Список рабочих заказов с быстрым фильтром по текущему статусу.</p>
       </div>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {[
-        ['Новые заявки', '1', 'blue'],
-        ['В работе', '2', 'amber'],
-        ['На приемке', '1', 'indigo'],
-        ['Со спором', '1', 'red'],
-      ].map(([label, value, color]) => (
-        <Card key={label} className="p-5">
-          <div className="text-xs font-medium uppercase text-[#476788]">{label}</div>
-          <div className="mt-2 flex items-center justify-between">
-            <div className="text-2xl font-semibold text-[#0b3558] tabular-nums">{value}</div>
-            <Badge color={color}>{label}</Badge>
-          </div>
-        </Card>
-      ))}
     </div>
     <Card className="p-4">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -4459,33 +5185,39 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
       </div>
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
+    <div className="space-y-6">
         <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Состав заказа</h3>
-          <div className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4">
-            <div className="min-w-0">
-              <div className="text-xs text-[#476788]">Материал</div>
-              <div className="mt-1 text-xl font-semibold text-[#0b3558]">{order.title}</div>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-[#476788]">
-                {order.description}
-              </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge color={order.statusColor}>{order.status}</Badge>
+            <span className="text-sm text-[#476788]">Заказ #{order.id}</span>
+          </div>
+          <h2 className="mt-4 max-w-5xl break-words font-display text-2xl font-bold leading-tight text-[#0b3558] sm:text-3xl">
+            {order.title}
+          </h2>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-[#476788]">{order.description}</p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.34fr)]">
+            <div className="min-w-0 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+              <div className="text-xs text-[#476788]">Площадка размещения</div>
+              <div className="mt-1 break-words text-sm font-semibold leading-5 text-[#0b3558]">РБК Инвестиции</div>
             </div>
-            <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              {[
-                ['Площадка', 'РБК Инвестиции'],
-                ['Формат', order.format],
-                ['Начисление', formatMoney(order.amount)],
-              ].map(([label, value]) => (
-                <div key={label} className="min-w-0 rounded-lg bg-white border border-[#d4e0ed] px-4 py-3">
-                  <div className="text-xs text-[#476788]">{label}</div>
-                  <div className="mt-1 font-medium text-[#0b3558] break-words">{value}</div>
-                </div>
-              ))}
+            <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+              <div className="text-xs text-[#476788]">Срок</div>
+              <div className="mt-1 text-sm font-semibold text-[#0b3558]">{order.subtitle}</div>
             </div>
           </div>
+          <div className="mt-4 grid gap-px overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#d4e0ed] sm:grid-cols-2">
+            {[
+              ['Формат', order.format],
+              ['Начисление', formatMoney(order.amount)],
+            ].map(([label, value]) => (
+              <div key={label} className="min-w-0 bg-white px-4 py-3">
+                <div className="text-xs text-[#476788]">{label}</div>
+                <div className="mt-1 break-words text-sm font-semibold text-[#0b3558]">{value}</div>
+              </div>
+            ))}
+          </div>
 
-          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
+          <div className="mt-5 overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]">
             <button
               className={`w-full px-4 py-3 flex items-center justify-between gap-3 text-left ${markingDataOpen ? 'border-b border-[#d4e0ed]' : ''}`}
               onClick={() => setMarkingDataOpen((value) => !value)}
@@ -4510,9 +5242,16 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
 
         </Card>
 
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Материал</h3>
-          <FullMaterialPreview context="publisher" showLinks={false} />
+        <Card className="overflow-hidden">
+          <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="font-display text-lg font-bold text-[#0b3558]">Текст и изображения материала</h3>
+              <p className="mt-1 text-sm text-[#476788]">Версия, переданная заказчиком для размещения</p>
+            </div>
+            <Badge color="blue"><ImageIcon className="mr-1.5 h-3.5 w-3.5" /> 3 изображения</Badge>
+          </div>
+          <div className="p-6">
+            <FullMaterialPreview context="publisher" showLinks={false} />
           <div className="mt-6 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#d4e0ed]">
               <div className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</div>
@@ -4550,13 +5289,12 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
               ))}
             </div>
           </div>
+          </div>
         </Card>
-      </div>
 
-      <div className="space-y-6">
         <Card className="p-6">
           <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Таймлайн</h3>
-          <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {[
               ['Заказ поступил', '18.10, 10:15', 'done'],
               ...(isNewState
@@ -4589,7 +5327,6 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
             ))}
           </div>
         </Card>
-      </div>
     </div>
   </div>
   );
@@ -4788,102 +5525,489 @@ const PublisherPlatformsView = ({ navigate }) => (
   </div>
 );
 
-const PublisherPlatformDetailView = ({ navigate }) => (
-  <div className="space-y-6 max-w-5xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('pub_platforms')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К площадкам
-    </button>
-    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Карточка площадки</h1>
-        <p className="text-sm text-[#476788] mt-1">Редактирование данных, которые видит заказчик после модерации.</p>
-      </div>
-      <Badge color="green">Активна</Badge>
-    </div>
-    <Card className="p-6">
-      <div className="mb-5 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-4 md:items-center">
-          <div>
-            <div className="text-sm font-semibold text-[#0b3558]">Активность площадки</div>
-            <div className="text-xs text-[#476788] mt-1">Управляет видимостью в каталоге и приемом новых заказов.</div>
-          </div>
-          <CustomSelect className="w-full" options={['Активна: принимает новые заказы', 'Пауза: не принимать новые заказы', 'Скрыта из каталога']} />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Название</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="РБК Инвестиции" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Тип площадки</span><CustomSelect className="mt-2" options={['СМИ', 'ТГ-канал', 'Паблик ВК']} /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Тематика</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Финансы, инвестиции, бизнес" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Регион</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Федеральная" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Форматы размещения</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Статья, новость, интервью" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Цены по форматам</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Статья 150 000 ₽, новость 95 000 ₽" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Срок ответа</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="8 часов" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Срок публикации</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="2 рабочих дня" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Минимальный срок хранения</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="2 года" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Метрики</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="2,5 млн посещений / месяц, Google News, Дзен" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Контакт ответственного</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Редакция, publisher@example.ru" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Реквизиты выплат</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="ООО Редакция, р/с **** 4432" /></label>
-        <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Требования к материалам</span><textarea className="mt-2 w-full min-h-[120px] border border-[#476788] rounded-lg px-4 py-3 text-sm" defaultValue="Не принимаем запрещенные тематики, материалы без рекламодателя и публикации с внешними контактами." /></label>
-      </div>
-      <div className="mt-6 rounded-lg bg-emerald-50 border border-emerald-100 p-4 text-sm text-emerald-800">
-        Последние изменения карточки приняты модерацией. Новые правки можно сохранить как черновик или отправить на проверку.
-      </div>
-      <div className="mt-6 flex justify-end gap-3"><Button variant="secondary">Сохранить черновик</Button><Button variant="primary">Отправить на проверку</Button></div>
-    </Card>
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <Card className="p-6">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4">Публичная карточка</h3>
-        <div className="rounded-2xl border border-[#d4e0ed] p-4">
-          <div className="w-10 h-10 rounded-lg bg-[#0b3558] text-white flex items-center justify-center font-bold">Р</div>
-          <div className="mt-3 text-sm font-semibold text-[#0b3558]">РБК Инвестиции</div>
-          <div className="text-xs text-[#476788] mt-1">СМИ · Финансы · федеральная</div>
-          <div className="mt-3 flex flex-wrap gap-1.5"><Badge color="green">активна</Badge><Badge color="blue">Google News</Badge><Badge color="gray">2 года</Badge></div>
-        </div>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4">Проверка админом</h3>
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between"><span className="text-[#476788]">Последняя проверка</span><span>18.10.2023</span></div>
-          <div className="flex justify-between"><span className="text-[#476788]">Изменения</span><Badge color="green">приняты</Badge></div>
-          <div className="flex justify-between"><span className="text-[#476788]">В каталоге</span><span>да</span></div>
-        </div>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4">Доступность заказов</h3>
-        <p className="text-sm text-[#476788]">Площадка получает новые заявки только если карточка активна, цены заполнены, срок хранения не меньше 2 лет и реквизиты выплат указаны.</p>
-      </Card>
-    </div>
-  </div>
-);
+const PublisherPlatformDetailView = ({ navigate }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isActive, setIsActive] = useState(true);
+  const platformPublications = mockOrdersPublisher.filter((order) => order.platform === 'РБК Инвестиции');
 
-const PublisherPlatformNewView = ({ navigate }) => (
-  <div className="space-y-6 max-w-5xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('pub_platforms')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К площадкам
-    </button>
-    <div>
-      <h1 className="font-display text-2xl font-bold text-[#0b3558]">Добавление новой площадки</h1>
-      <p className="text-sm text-[#476788] mt-1">После отправки карточка уйдет на модерацию. До принятия она не видна заказчикам.</p>
+  return (
+    <div className="platform-view-enter mx-auto max-w-6xl space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('pub_platforms')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К площадкам
+      </button>
+
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
+          <div className="platform-logo-motion flex h-16 w-16 flex-none flex-col items-center justify-center rounded-2xl border border-[#d4e0ed] bg-white shadow-sm" aria-label="Логотип РБК">
+            <span className="flex h-4 items-end gap-0.5" aria-hidden="true">
+              <span className="h-2.5 w-1.5 rounded-sm bg-[#f5a623]" />
+              <span className="h-3.5 w-1.5 rounded-sm bg-[#4dbb73]" />
+              <span className="h-4 w-1.5 rounded-sm bg-[#28a8df]" />
+              <span className="h-3 w-1.5 rounded-sm bg-[#405de6]" />
+            </span>
+            <span className="mt-1 text-xs font-bold leading-none text-[#0b3558]">РБК</span>
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h1 className="font-display text-2xl font-bold text-[#0b3558]">РБК Инвестиции</h1>
+              <Badge key={isActive ? 'active' : 'paused'} color={isActive ? 'green' : 'gray'} className="platform-status-pop">{isActive ? 'Активна' : 'На паузе'}</Badge>
+              <Badge color="blue">Проверено</Badge>
+              <Badge color="blue">Маркировка</Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#476788]">
+              <span>СМИ · Финансы · Федеральные</span>
+              <span className="hidden text-[#9bb6d3] sm:inline">·</span>
+              <a className="inline-flex items-center gap-1 font-medium text-[#006cff] hover:underline" href="https://invest.rbc.ru" target="_blank" rel="noreferrer">
+                invest.rbc.ru <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+        <Button variant="secondary" onClick={() => setIsEditing((current) => !current)}>
+          {isEditing ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+          {isEditing ? 'Вернуться к превью' : 'Редактировать'}
+        </Button>
+      </div>
+
+      {isEditing ? (
+        <PublisherPlatformNewView
+          navigate={navigate}
+          embedded
+          onDone={() => setIsEditing(false)}
+          initialValues={{
+            name: 'РБК Инвестиции',
+            url: 'https://invest.rbc.ru',
+            type: 'СМИ',
+            geography: 'Федеральные',
+            theme: 'Финансы, инвестиции, бизнес',
+            dailyReach: '82 000',
+            subscribers: '',
+            metrikaUrl: 'https://metrika.yandex.ru/dashboard?id=12345678',
+            mediologyRank: '5',
+            formats: ['Статья', 'Новость'],
+            formatPrices: { Статья: '150000', Новость: '85000' },
+            formatDeadlines: { Статья: '2 дня', Новость: '1 день' },
+            goals: ['Пиар', 'SEO'],
+            aggregators: ['Google News', 'Дзен'],
+            responseDeadline: '4 часа',
+            storage: '2 года',
+            seasonalOfferEnabled: true,
+            discount: '10',
+            coefficient: '1,0',
+            seasonStart: '2026-07-01',
+            seasonEnd: '2026-08-31',
+            requirements: 'Площадка принимает материалы о финансах, бизнесе и технологиях. Редакция может изменить заголовок и структуру текста без искажения смысла. Допускается до двух внешних ссылок, изображения обязательны. Не принимаются запрещенные тематики и обещания гарантированного дохода.',
+          }}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <Card className="platform-card-motion p-5" style={{ animationDelay: '80ms' }}>
+              <div className="text-xs uppercase text-[#476788]">Посещаемость в день</div>
+              <div className="mt-2 text-xl font-semibold text-[#0b3558]">82 тыс.</div>
+              <a className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#006cff] hover:underline" href="https://metrika.yandex.ru/dashboard?id=12345678" target="_blank" rel="noreferrer">
+                Яндекс Метрика <ExternalLink className="h-3 w-3" />
+              </a>
+            </Card>
+            <Card className="platform-card-motion p-5" style={{ animationDelay: '120ms' }}><div className="text-xs uppercase text-[#476788]">Срок публикации</div><div className="mt-2 text-xl font-semibold text-[#0b3558]">до 2 дней</div></Card>
+            <Card className="platform-card-motion p-5" style={{ animationDelay: '160ms' }}><div className="text-xs uppercase text-[#476788]">Хранение</div><div className="mt-2 text-xl font-semibold text-[#0b3558]">2 года</div></Card>
+            <Card className="platform-card-motion p-5" style={{ animationDelay: '200ms' }}><div className="flex items-center gap-1 text-xs uppercase text-[#476788]">Медиалогия <Info className="h-3.5 w-3.5" /></div><div className="mt-2 text-xl font-semibold text-[#0b3558]">#5</div><div className="mt-1 text-xs text-[#476788]">общий рейтинг</div></Card>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="space-y-6 lg:col-span-2">
+              <Card className="platform-section-motion overflow-hidden">
+                <div className="flex flex-col gap-2 border-b border-[#d4e0ed] bg-[#f8f9fb] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="font-display text-base font-bold text-[#0b3558]">Форматы и цены</h2>
+                    <p className="mt-1 text-xs text-[#476788]">Сезонная скидка 10% действует до 31 августа</p>
+                  </div>
+                  <Badge color="green">Коэффициент сезона ×1,0</Badge>
+                </div>
+                <div className="divide-y divide-[#d4e0ed]">
+                  {[
+                    { name: 'Статья', deadline: 'до 2 дней', basePrice: '150 000 ₽', price: '135 000 ₽' },
+                    { name: 'Новость', deadline: 'до 1 дня', basePrice: '85 000 ₽', price: '76 500 ₽' },
+                  ].map((format) => (
+                    <div key={format.name} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-6 py-4">
+                      <div>
+                        <div className="text-sm font-semibold text-[#0b3558]">{format.name}</div>
+                        <div className="mt-1 text-xs text-[#476788]">Публикация {format.deadline}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-[#7890aa] line-through">{format.basePrice}</div>
+                        <div className="mt-0.5 text-base font-semibold text-[#0b3558]">{format.price}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card className="platform-section-motion p-6">
+                <h2 className="font-display text-base font-bold text-[#0b3558]">Требования</h2>
+                <p className="mt-3 text-sm leading-6 text-[#476788]">
+                  Площадка принимает материалы о финансах, бизнесе и технологиях. Редакция может изменить заголовок и структуру текста без искажения смысла. Допускается до двух внешних ссылок, изображения обязательны. Не принимаются запрещенные тематики и обещания гарантированного дохода.
+                </p>
+                <div className="mt-5 grid gap-5 border-t border-[#d4e0ed] pt-5 sm:grid-cols-2 sm:gap-0">
+                  <div className="flex min-w-0 items-center gap-3 sm:pr-5">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e7f1ff] text-[#006cff]"><Megaphone className="h-5 w-5" /></span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold uppercase leading-none text-[#6f88a3]">Подходит для целей</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {['Пиар', 'SEO'].map((goal) => <span key={goal} className="rounded-full bg-[#e7f1ff] px-3 py-1 text-sm font-semibold text-[#075cc8]">{goal}</span>)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex min-w-0 items-center gap-3 border-t border-[#d4e0ed] pt-5 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ebf8f1] text-[#16834d]"><Newspaper className="h-5 w-5" /></span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold uppercase leading-none text-[#6f88a3]">Новостные агрегаторы</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {['Google News', 'Дзен'].map((aggregator) => <span key={aggregator} className="rounded-full bg-[#ebf8f1] px-3 py-1 text-sm font-semibold text-[#146b43]">{aggregator}</span>)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            <Card className="platform-section-motion h-fit p-6">
+              <h2 className="font-display text-base font-bold text-[#0b3558]">Управление площадкой</h2>
+              <p className="mt-2 text-sm leading-6 text-[#476788]">Активная площадка видна в каталоге и принимает новые заказы.</p>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isActive}
+                onClick={() => setIsActive((current) => !current)}
+                className="mt-5 flex w-full items-center justify-between gap-4 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3 text-left"
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-[#0b3558]">{isActive ? 'Площадка активна' : 'Площадка на паузе'}</span>
+                  <span className="mt-1 block text-xs text-[#476788]">{isActive ? 'Принимает новые заказы' : 'Новые заказы недоступны'}</span>
+                </span>
+                <span className={`relative h-6 w-11 flex-none rounded-full transition-colors ${isActive ? 'bg-[#18b875]' : 'bg-[#a6bbd1]'}`}>
+                  <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                </span>
+              </button>
+            </Card>
+          </div>
+        </>
+      )}
+
+      <Card className="platform-section-motion overflow-hidden">
+        <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-lg font-bold text-[#0b3558]">Публикации на площадке</h2>
+            <p className="mt-1 text-sm text-[#476788]">Заказы и размещения, связанные с РБК Инвестиции</p>
+          </div>
+          <Badge color="blue">{platformPublications.length} заказа</Badge>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] divide-y divide-[#d4e0ed]">
+            <thead className="bg-[#f8f9fb]">
+              <tr>
+                {['Заказ', 'Материал', 'Формат', 'Дата', 'Статус'].map((head) => (
+                  <th key={head} className="px-6 py-3 text-left text-xs font-medium uppercase text-[#476788]">{head}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#d4e0ed] bg-white">
+              {platformPublications.map((order) => (
+                <tr key={order.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => navigate('pub_order_detail')}>
+                  <td className="px-6 py-4 text-sm font-semibold text-[#006bff]">#{order.id}</td>
+                  <td className="max-w-[340px] px-6 py-4 text-sm font-medium text-[#0b3558]"><span className="line-clamp-2">{order.material}</span></td>
+                  <td className="px-6 py-4 text-sm text-[#476788]">{order.format.replace('СМИ (', '').replace(')', '')}</td>
+                  <td className="px-6 py-4 text-sm tabular-nums text-[#476788]">{order.date}</td>
+                  <td className="px-6 py-4"><Badge color={order.statusColor}>{order.status}</Badge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
-    <Card className="p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Название площадки</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" placeholder="Например, РБК Инвестиции" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Тип</span><CustomSelect className="mt-2" options={['СМИ', 'ТГ-канал', 'Паблик ВК']} /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Тематика</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" placeholder="Финансы, бизнес, ИТ" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Регион</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" placeholder="Федеральная, Москва, регионы" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Форматы и цены</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" placeholder="Статья 150 000 ₽, пост 60 000 ₽" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Сроки</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" placeholder="Ответ 8 часов, публикация 2 дня" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Минимальный срок хранения</span><CustomSelect className="mt-2" options={['2 года', 'Бессрочно']} /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Метрики</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" placeholder="Посещаемость, подписчики, вовлеченность, агрегаторы" /></label>
-        <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Требования к материалам</span><textarea className="mt-2 w-full min-h-[120px] border border-[#476788] rounded-lg px-4 py-3 text-sm" placeholder="Какие тематики и форматы редакция не принимает" /></label>
+  );
+};
+
+const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialValues = {} }) => {
+  const formatNames = ['Статья', 'Новость', 'Пост', 'Лонгрид'];
+  const goalNames = ['Пиар', 'SEO', 'SERM'];
+  const aggregatorNames = ['Google News', 'Дзен', 'Новости Mail.ru'];
+  const [selectedFormats, setSelectedFormats] = useState(initialValues.formats || ['Статья', 'Новость']);
+  const [selectedGoals, setSelectedGoals] = useState(initialValues.goals || ['Пиар']);
+  const [selectedAggregators, setSelectedAggregators] = useState(initialValues.aggregators || []);
+  const [seasonalOfferEnabled, setSeasonalOfferEnabled] = useState(Boolean(initialValues.seasonalOfferEnabled));
+
+  const toggleValue = (value, values, setValues) => {
+    setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+
+  const inputClassName = 'mt-2 w-full rounded-lg border border-[#476788] bg-white px-4 py-2.5 text-sm text-[#0b3558] outline-none transition focus:border-[#006cff] focus:ring-2 focus:ring-[#006cff]/15';
+  const sectionHeader = (icon, title, description) => (
+    <div className="flex items-center gap-3 border-b border-[#d4e0ed] px-6 py-5">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e7f1ff] text-[#006cff]">{icon}</span>
+      <div>
+        <h2 className="font-display text-base font-bold text-[#0b3558]">{title}</h2>
+        <p className="mt-1 text-xs text-[#476788]">{description}</p>
       </div>
-      <div className="mt-6 flex justify-end gap-3">
-        <Button variant="secondary">Сохранить черновик</Button>
-        <Button variant="primary">Отправить на модерацию</Button>
+    </div>
+  );
+
+  return (
+    <div className={embedded ? 'space-y-6' : 'mx-auto max-w-5xl space-y-6'}>
+      {!embedded && (
+        <>
+          <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('pub_platforms')}>
+            <ChevronRight className="h-4 w-4 rotate-180" /> К площадкам
+          </button>
+          <div>
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">Добавление новой площадки</h1>
+            <p className="mt-1 text-sm text-[#476788]">Заполните данные для карточки каталога. После отправки площадка уйдет на модерацию и не будет видна заказчикам до принятия.</p>
+          </div>
+        </>
+      )}
+
+      <Card className="overflow-hidden">
+        {sectionHeader(<Store className="h-5 w-5" />, 'Основные данные', 'Название, адрес и классификация площадки')}
+        <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Название площадки</span>
+            <input className={inputClassName} defaultValue={initialValues.name} placeholder="Например, Investor.ru" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Ссылка на площадку</span>
+            <input className={inputClassName} type="url" defaultValue={initialValues.url} placeholder="https://investor.ru" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Тип площадки</span>
+            <CustomSelect className="mt-2" defaultValue={initialValues.type} options={['СМИ', 'ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">География</span>
+            <CustomSelect className="mt-2" defaultValue={initialValues.geography} options={regionFilterOptions.slice(1)} />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-[#476788]">Тематика</span>
+            <input className={inputClassName} defaultValue={initialValues.theme} placeholder="Например, финансы, инвестиции, бизнес" />
+          </label>
+          <div className="md:col-span-2">
+            <span className="text-sm font-medium text-[#476788]">Логотип площадки</span>
+            {embedded && (
+              <div className="mt-2 flex items-center gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3">
+                <div className="flex h-12 w-12 flex-none flex-col items-center justify-center rounded-xl border border-[#d4e0ed] bg-white">
+                  <span className="flex h-3 items-end gap-0.5" aria-hidden="true">
+                    <span className="h-2 w-1 rounded-sm bg-[#f5a623]" />
+                    <span className="h-2.5 w-1 rounded-sm bg-[#4dbb73]" />
+                    <span className="h-3 w-1 rounded-sm bg-[#28a8df]" />
+                    <span className="h-2 w-1 rounded-sm bg-[#405de6]" />
+                  </span>
+                  <span className="mt-1 text-[10px] font-bold leading-none text-[#0b3558]">РБК</span>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-[#0b3558]">Текущий логотип</div>
+                  <div className="mt-1 text-xs text-[#476788]">Новый файл заменит изображение после сохранения.</div>
+                </div>
+              </div>
+            )}
+            <div className="mt-2">
+              <FileUploadField accept="image/png,image/jpeg,image/webp" multiple={false} compact />
+            </div>
+            <p className="mt-2 text-xs text-[#7890aa]">PNG, JPG или WEBP. Рекомендуемый размер от 256 × 256 px.</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        {sectionHeader(<BarChart3 className="h-5 w-5" />, 'Аудитория и распространение', 'Метрики, цели размещения и новостные агрегаторы')}
+        <div className="space-y-6 p-6">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Посещаемость в день</span>
+              <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.dailyReach} placeholder="Например, 82 000" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Подписчики</span>
+              <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.subscribers} placeholder="Для Telegram и ВК" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Ссылка на Яндекс Метрику</span>
+              <input className={inputClassName} type="url" defaultValue={initialValues.metrikaUrl} placeholder="https://metrika.yandex.ru/..." />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Ранг Медиалогии</span>
+              <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.mediologyRank} placeholder="Например, 5" />
+              <span className="mt-2 block text-xs text-[#7890aa]">Позиция в общем или отраслевом рейтинге.</span>
+            </label>
+          </div>
+          <div className="grid grid-cols-1 gap-6 border-t border-[#d4e0ed] pt-6 md:grid-cols-2">
+            <div>
+              <div className="text-sm font-semibold text-[#0b3558]">Подходит для целей</div>
+              <p className="mt-1 text-xs text-[#476788]">Используется в фильтре каталога.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {goalNames.map((goal) => {
+                  const selected = selectedGoals.includes(goal);
+                  return (
+                    <button
+                      key={goal}
+                      type="button"
+                      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${selected ? 'border-[#006cff] bg-[#e7f1ff] text-[#075cc8]' : 'border-[#d4e0ed] bg-white text-[#476788] hover:bg-[#f8f9fb]'}`}
+                      onClick={() => toggleValue(goal, selectedGoals, setSelectedGoals)}
+                      aria-pressed={selected}
+                    >
+                      <span className={`flex h-4 w-4 items-center justify-center rounded border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3]'}`}>
+                        {selected && <Check className="h-3 w-3" />}
+                      </span>
+                      {goal}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-[#0b3558]">Новостные агрегаторы</div>
+              <p className="mt-1 text-xs text-[#476788]">Показываются в карточке площадки.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {aggregatorNames.map((aggregator) => {
+                  const selected = selectedAggregators.includes(aggregator);
+                  return (
+                    <button
+                      key={aggregator}
+                      type="button"
+                      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${selected ? 'border-[#16834d] bg-[#ebf8f1] text-[#146b43]' : 'border-[#d4e0ed] bg-white text-[#476788] hover:bg-[#f8f9fb]'}`}
+                      onClick={() => toggleValue(aggregator, selectedAggregators, setSelectedAggregators)}
+                      aria-pressed={selected}
+                    >
+                      <span className={`flex h-4 w-4 items-center justify-center rounded border ${selected ? 'border-[#16834d] bg-[#16834d] text-white' : 'border-[#9bb6d3]'}`}>
+                        {selected && <Check className="h-3 w-3" />}
+                      </span>
+                      {aggregator}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        {sectionHeader(<CreditCard className="h-5 w-5" />, 'Форматы и условия', 'Стоимость и срок публикации задаются отдельно для каждого формата')}
+        <div className="space-y-6 p-6">
+          <div className="rounded-lg border border-[#d4e0ed]">
+            <div className="hidden grid-cols-[minmax(180px,1fr)_minmax(180px,0.8fr)_minmax(180px,0.8fr)] gap-4 bg-[#f8f9fb] px-5 py-3 text-xs font-medium uppercase text-[#6f88a3] md:grid">
+              <span>Формат</span>
+              <span>Цена</span>
+              <span>Срок публикации</span>
+            </div>
+            <div className="divide-y divide-[#d4e0ed]">
+              {formatNames.map((format) => {
+                const selected = selectedFormats.includes(format);
+                return (
+                  <div key={format} className={`grid gap-4 px-5 py-4 md:grid-cols-[minmax(180px,1fr)_minmax(180px,0.8fr)_minmax(180px,0.8fr)] md:items-center ${selected ? 'bg-white' : 'bg-[#f8f9fb]'}`}>
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 text-left text-sm font-semibold text-[#0b3558]"
+                      onClick={() => toggleValue(format, selectedFormats, setSelectedFormats)}
+                      aria-pressed={selected}
+                    >
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3] bg-white'}`}>
+                        {selected && <Check className="h-3.5 w-3.5" />}
+                      </span>
+                      {format}
+                    </button>
+                    <label className="block">
+                      <span className="text-xs text-[#7890aa] md:hidden">Цена</span>
+                      <div className="relative mt-1 md:mt-0">
+                        <input
+                          className={`${inputClassName} mt-0 pr-9 disabled:bg-[#f0f3f8] disabled:text-[#9bb0c5]`}
+                          inputMode="numeric"
+                          defaultValue={initialValues.formatPrices?.[format]}
+                          placeholder="0"
+                          disabled={!selected}
+                        />
+                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-[#7890aa]">₽</span>
+                      </div>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-[#7890aa] md:hidden">Срок публикации</span>
+                      <CustomSelect
+                        className="mt-1 md:mt-0"
+                        defaultValue={initialValues.formatDeadlines?.[format]}
+                        options={['1 день', '2 дня', '3 дня', '4 дня', '5 дней', '6 дней']}
+                        buttonClassName={!selected ? 'opacity-50 pointer-events-none' : ''}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Срок ответа на заказ</span>
+              <CustomSelect className="mt-2" defaultValue={initialValues.responseDeadline} options={['2 часа', '4 часа', '8 часов', '1 рабочий день']} />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Минимальный срок хранения</span>
+              <CustomSelect className="mt-2" defaultValue={initialValues.storage} options={['2 года', 'Бессрочно']} />
+            </label>
+          </div>
+          <div className="border-t border-[#d4e0ed] pt-5">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-4 text-left"
+              onClick={() => setSeasonalOfferEnabled((current) => !current)}
+              aria-expanded={seasonalOfferEnabled}
+            >
+              <span>
+                <span className="block text-sm font-semibold text-[#0b3558]">Сезонные условия</span>
+                <span className="mt-1 block text-xs text-[#476788]">Необязательная скидка или коэффициент на ограниченный период.</span>
+              </span>
+              <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${seasonalOfferEnabled ? 'bg-[#006cff]' : 'bg-[#c8d6e5]'}`}>
+                <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${seasonalOfferEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+              </span>
+            </button>
+            {seasonalOfferEnabled && (
+              <div className="mt-5 grid grid-cols-1 gap-5 rounded-lg bg-[#f8f9fb] p-5 md:grid-cols-4">
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Скидка</span>
+                  <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.discount} placeholder="10%" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Коэффициент</span>
+                  <input className={inputClassName} inputMode="decimal" defaultValue={initialValues.coefficient} placeholder="×1,0" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Начало</span>
+                  <input className={inputClassName} type="date" defaultValue={initialValues.seasonStart} />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Окончание</span>
+                  <input className={inputClassName} type="date" defaultValue={initialValues.seasonEnd} />
+                </label>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        {sectionHeader(<FileText className="h-5 w-5" />, 'Требования редакции', 'Условия, которые заказчик увидит до создания заказа')}
+        <div className="p-6">
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Требования к материалам</span>
+            <textarea className={`${inputClassName} min-h-[140px] resize-y py-3`} defaultValue={initialValues.requirements} placeholder="Укажите допустимые тематики, требования к изображениям, ссылкам, структуре текста и основания для отказа." />
+          </label>
+        </div>
+      </Card>
+
+      <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
+        <Button variant="secondary" onClick={() => (embedded ? onDone?.() : navigate('pub_platforms'))}>{embedded ? 'Отмена' : 'Сохранить черновик'}</Button>
+        <Button variant="primary" onClick={() => (embedded ? onDone?.() : navigate('pub_platforms'))}>{embedded ? 'Сохранить изменения' : 'Отправить на модерацию'}</Button>
       </div>
-    </Card>
-  </div>
-);
+    </div>
+  );
+};
 
 const PublisherFinanceView = () => (
   <div className="space-y-6">
@@ -5468,7 +6592,1042 @@ const PublisherSettingsView = () => {
   );
 };
 
-const AdminDashboardView = ({ navigate }) => (
+const publisherApplicationStatusColor = {
+  'Новая': 'blue',
+  'На проверке': 'amber',
+  'Нужны данные': 'amber',
+  'Одобрена': 'green',
+  'Отклонена': 'red',
+};
+
+const publisherAccountStatusColor = {
+  'Не создан': 'gray',
+  'Приглашение отправлено': 'blue',
+  'Активен': 'green',
+  'Заблокирован': 'red',
+};
+
+const AdminPublisherApplicationsView = ({ applications, onOpenApplication, onCreateApplication }) => {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState(undefined);
+  const [typeFilter, setTypeFilter] = useState(undefined);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualDraft, setManualDraft] = useState({
+    platform: '',
+    platformType: 'Онлайн-СМИ',
+    legalName: '',
+    inn: '',
+    applicant: '',
+    email: '',
+  });
+
+  const filteredApplications = applications.filter((application) => {
+    const source = `${application.id} ${application.platform} ${application.legalName} ${application.applicant} ${application.email}`.toLowerCase();
+    return source.includes(query.trim().toLowerCase())
+      && (!statusFilter || statusFilter === 'Все статусы' || application.status === statusFilter)
+      && (!typeFilter || typeFilter === 'Все типы' || application.platformType === typeFilter);
+  });
+
+  const createManualApplication = () => {
+    if (!manualDraft.platform.trim() || !manualDraft.legalName.trim() || !manualDraft.email.trim()) return;
+    onCreateApplication({
+      id: `PA-${String(applications.length + 15).padStart(3, '0')}`,
+      submittedAt: '23.07.2026, 15:20',
+      status: 'Одобрена',
+      accountStatus: 'Приглашение отправлено',
+      applicant: manualDraft.applicant || 'Не указан',
+      position: 'Представитель паблишера',
+      email: manualDraft.email,
+      phone: 'Не указан',
+      relation: 'Подтвержденный представитель',
+      platform: manualDraft.platform,
+      platformType: manualDraft.platformType,
+      platformUrl: '',
+      legalName: manualDraft.legalName,
+      inn: manualDraft.inn || 'Не указан',
+      theme: 'Будет заполнено паблишером',
+      reach: 'Будет заполнено паблишером',
+      comment: 'Кабинет создан администратором без входящей анкеты.',
+      checks: { resource: true, legal: true, representative: true, duplicate: true },
+      decisionComment: 'Паблишер подтвержден администратором.',
+    });
+    setManualOpen(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[#0b3558]">Заявки паблишеров</h1>
+          <p className="mt-1 text-sm text-[#476788]">Ручная проверка площадки и представителя до выдачи доступа к кабинету.</p>
+        </div>
+        <Button variant="primary" onClick={() => setManualOpen(true)}><Plus className="h-4 w-4" /> Создать паблишера</Button>
+      </div>
+
+      <Card className="p-5">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_230px_230px]">
+          <label className="relative block">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a6bbd1]" />
+            <input
+              className="h-[42px] w-full rounded-lg border border-[#476788] bg-white pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Заявка, площадка, юрлицо или контакт"
+            />
+          </label>
+          <CustomSelect
+            placeholder="Статус заявки"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={['Все статусы', 'Новая', 'На проверке', 'Нужны данные', 'Одобрена', 'Отклонена']}
+          />
+          <CustomSelect
+            placeholder="Тип площадки"
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={['Все типы', 'Онлайн-СМИ', 'Telegram-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене', 'Сайт']}
+          />
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-[1080px] w-full divide-y divide-[#d4e0ed]">
+            <thead className="bg-[#f8f9fb]">
+              <tr>
+                {['Заявка / дата', 'Площадка', 'Заявитель', 'Владелец', 'Статус заявки', 'Кабинет'].map((label) => (
+                  <th key={label} className="px-5 py-4 text-left text-xs font-medium uppercase text-[#476788]">{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#d4e0ed]">
+              {filteredApplications.map((application) => (
+                <tr
+                  key={application.id}
+                  className="cursor-pointer transition-colors hover:bg-[#f8fbff]"
+                  onClick={() => onOpenApplication(application.id)}
+                >
+                  <td className="px-5 py-4">
+                    <div className="text-sm font-semibold text-[#006bff]">{application.id}</div>
+                    <div className="mt-1 text-xs text-[#476788]">{application.submittedAt}</div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="max-w-[230px] truncate text-sm font-semibold text-[#0b3558]">{application.platform}</div>
+                    <div className="mt-1 text-xs text-[#476788]">{application.platformType}</div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="text-sm text-[#0b3558]">{application.applicant}</div>
+                    <div className="mt-1 max-w-[220px] truncate text-xs text-[#476788]">{application.email}</div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="max-w-[240px] truncate text-sm text-[#0b3558]">{application.legalName}</div>
+                    <div className="mt-1 text-xs text-[#476788]">ИНН {application.inn}</div>
+                  </td>
+                  <td className="px-5 py-4"><Badge color={publisherApplicationStatusColor[application.status]}>{application.status}</Badge></td>
+                  <td className="px-5 py-4"><Badge color={publisherAccountStatusColor[application.accountStatus]}>{application.accountStatus}</Badge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!filteredApplications.length && (
+          <div className="px-6 py-14 text-center">
+            <Store className="mx-auto h-8 w-8 text-[#a6bbd1]" />
+            <div className="mt-3 text-sm font-semibold text-[#0b3558]">Заявки не найдены</div>
+            <div className="mt-1 text-sm text-[#476788]">Измените запрос или параметры фильтра.</div>
+          </div>
+        )}
+      </Card>
+
+      <Modal isOpen={manualOpen} onClose={() => setManualOpen(false)} title="Создать паблишера" className="max-w-2xl">
+        <div className="space-y-5">
+          <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm leading-6 text-[#476788]">
+            Используйте ручное создание только для уже проверенного паблишера. Пользователь получит приглашение на почту и сам задаст пароль.
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[
+              ['Название площадки', 'platform', 'Investor.ru'],
+              ['Юридическое лицо', 'legalName', 'ООО «Инвестор Медиа»'],
+              ['ИНН', 'inn', '7701000000'],
+              ['Контактное лицо', 'applicant', 'Анна Смирнова'],
+              ['Рабочая почта', 'email', 'partner@investor.ru'],
+            ].map(([label, key, placeholder]) => (
+              <label key={key} className={key === 'email' ? 'sm:col-span-2' : ''}>
+                <span className="text-sm font-medium text-[#476788]">{label}</span>
+                <input
+                  className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+                  value={manualDraft[key]}
+                  onChange={(event) => setManualDraft({ ...manualDraft, [key]: event.target.value })}
+                  placeholder={placeholder}
+                />
+              </label>
+            ))}
+            <label className="sm:col-span-2">
+              <span className="text-sm font-medium text-[#476788]">Тип площадки</span>
+              <CustomSelect className="mt-2" value={manualDraft.platformType} onChange={(platformType) => setManualDraft({ ...manualDraft, platformType })} options={['Онлайн-СМИ', 'Telegram-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене', 'Сайт']} />
+            </label>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setManualOpen(false)}>Отмена</Button>
+            <Button variant="primary" disabled={!manualDraft.platform.trim() || !manualDraft.legalName.trim() || !manualDraft.email.trim()} onClick={createManualApplication}>Создать и отправить приглашение</Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateApplication }) => {
+  const [comment, setComment] = useState(application?.decisionComment || '');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState(application?.email || '');
+
+  useEffect(() => {
+    setComment(application?.decisionComment || '');
+    setInviteEmail(application?.email || '');
+  }, [application?.id]);
+
+  if (!application) {
+    return <div className="py-20 text-center text-sm text-[#476788]">Заявка не найдена.</div>;
+  }
+
+  const update = (patch) => onUpdateApplication(application.id, patch);
+  const toggleCheck = (key) => update({
+    checks: { ...application.checks, [key]: !application.checks[key] },
+    status: application.status === 'Новая' ? 'На проверке' : application.status,
+  });
+  const approveReady = Object.values(application.checks).every(Boolean);
+  const makeDecision = (status) => {
+    if (['Нужны данные', 'Отклонена'].includes(status) && !comment.trim()) return;
+    update({ status, decisionComment: comment });
+  };
+  const sendInvite = () => {
+    update({ status: 'Одобрена', accountStatus: 'Приглашение отправлено', email: inviteEmail });
+    setInviteOpen(false);
+  };
+
+  const checkItems = [
+    ['resource', 'Ресурс существует', 'Ссылка открывается, название и тип площадки совпадают с анкетой.'],
+    ['legal', 'Юрлицо существует', 'Наименование и ИНН подтверждены по открытым данным.'],
+    ['representative', 'Представитель подтвержден', 'Контакт связан с владельцем, редакцией или официальным представителем.'],
+    ['duplicate', 'Дубли не обнаружены', 'Паблишер и площадка не заведены в системе повторно.'],
+  ];
+  const verifiedCount = Object.values(application.checks).filter(Boolean).length;
+  const DetailField = ({ label, children }) => (
+    <div className="grid grid-cols-[minmax(110px,0.42fr)_minmax(0,0.58fr)] items-start gap-4 border-b border-[#e6edf5] py-3.5 last:border-b-0">
+      <dt className="text-xs leading-5 text-[#6b86a4]">{label}</dt>
+      <dd className="min-w-0 break-words text-right text-sm font-semibold leading-5 text-[#0b3558]">{children || 'Не указано'}</dd>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('admin_publisher_applications')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К заявкам
+      </button>
+
+      <div className="flex flex-col gap-4 border-b border-[#d4e0ed] pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">Заявка {application.id}</h1>
+            <Badge color={publisherApplicationStatusColor[application.status]}>{application.status}</Badge>
+          </div>
+          <p className="mt-1 text-sm text-[#476788]">{application.platform} · поступила {application.submittedAt}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#6b86a4]">Кабинет паблишера</span>
+          <Badge color={publisherAccountStatusColor[application.accountStatus]}>{application.accountStatus}</Badge>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="space-y-6">
+          <Card className="overflow-hidden">
+            <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold">Данные заявки</h2>
+                <p className="mt-1 text-sm text-[#476788]">Контакт, площадка и юридическое лицо из анкеты.</p>
+              </div>
+              <span className="text-xs font-medium text-[#6b86a4]">{application.id}</span>
+            </div>
+            <div>
+              <section className="p-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#eef5ff] text-[#006bff]">
+                    <Briefcase className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#0b3558]">Заявитель</h3>
+                    <p className="mt-0.5 text-xs text-[#6b86a4]">Представитель паблишера</p>
+                  </div>
+                </div>
+                <dl className="mt-4">
+                  <DetailField label="Имя">{application.applicant}</DetailField>
+                  <DetailField label="Должность">{application.position}</DetailField>
+                  <DetailField label="Рабочая почта">{application.email}</DetailField>
+                  <DetailField label="Телефон">{application.phone}</DetailField>
+                  <DetailField label="Связь с площадкой">{application.relation}</DetailField>
+                </dl>
+              </section>
+
+              <section className="border-t border-[#d4e0ed] p-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#eef5ff] text-[#006bff]">
+                    <Store className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#0b3558]">Площадка и владелец</h3>
+                    <p className="mt-0.5 text-xs text-[#6b86a4]">Данные ресурса и правообладателя</p>
+                  </div>
+                </div>
+                <dl className="mt-4">
+                  <DetailField label="Название">{application.platform}</DetailField>
+                  <DetailField label="Тип">{application.platformType}</DetailField>
+                  <DetailField label="Ссылка">
+                    {application.platformUrl ? (
+                      <a className="inline-flex max-w-full items-center justify-end gap-1.5 text-[#006bff] hover:underline" href={application.platformUrl} target="_blank" rel="noreferrer">
+                        {application.platformUrl}<ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : 'Не указано'}
+                  </DetailField>
+                  <DetailField label="Юридическое лицо">{application.legalName}</DetailField>
+                  <DetailField label="ИНН">{application.inn}</DetailField>
+                  <DetailField label="Аудитория">{application.reach}</DetailField>
+                  <DetailField label="Тематика">{application.theme}</DetailField>
+                </dl>
+              </section>
+            </div>
+            {application.comment && (
+              <div className="border-t border-[#d4e0ed] bg-[#f8fbff] px-6 py-4">
+                <div className="text-xs font-semibold uppercase text-[#6b86a4]">Комментарий заявителя</div>
+                <p className="mt-2 text-sm leading-6 text-[#476788]">{application.comment}</p>
+              </div>
+            )}
+          </Card>
+
+          <Card className="overflow-hidden">
+            <div className="flex flex-col gap-3 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold">Проверка заявки</h2>
+                <p className="mt-1 text-sm text-[#476788]">Отметьте только подтвержденные пункты.</p>
+              </div>
+              <Badge color={approveReady ? 'green' : 'blue'}>{verifiedCount} из {checkItems.length}</Badge>
+            </div>
+            <div className="grid grid-cols-1 gap-px bg-[#d4e0ed] md:grid-cols-2">
+              {checkItems.map(([key, title, description]) => (
+                <button key={key} type="button" className="flex min-h-[112px] w-full items-start gap-4 bg-white px-6 py-5 text-left transition-colors hover:bg-[#f8fbff]" onClick={() => toggleCheck(key)}>
+                  <span className={`mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-md border transition-colors ${application.checks[key] ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#a6bbd1] bg-white text-transparent'}`}><Check className="h-4 w-4" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-[#0b3558]">{title}</span>
+                    <span className="mt-1 block text-xs leading-5 text-[#476788]">{description}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        <aside className="xl:sticky xl:top-6">
+          <Card className="overflow-hidden">
+            <div className="border-b border-[#d4e0ed] px-6 py-5">
+              <h2 className="font-display text-lg font-bold">Решение по заявке</h2>
+              <p className="mt-1 text-sm text-[#476788]">Комментарий обязателен только при запросе данных или отказе.</p>
+            </div>
+            <div className="p-6">
+              <label className="block">
+                <span className="text-sm font-medium text-[#476788]">Комментарий модератора</span>
+                <textarea
+                  className="mt-2 min-h-[120px] w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  placeholder="Укажите, какие данные нужно дополнить или причину отказа"
+                />
+              </label>
+              {!approveReady && (
+                <div className="mt-4 flex gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8fbff] p-4">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-[#006bff]" />
+                  <p className="text-xs leading-5 text-[#476788]">До одобрения осталось подтвердить {checkItems.length - verifiedCount} {checkItems.length - verifiedCount === 1 ? 'пункт' : 'пункта'}.</p>
+                </div>
+              )}
+              <div className="mt-5 grid gap-3">
+                <Button variant="primary" disabled={!approveReady} onClick={() => makeDecision('Одобрена')}>Одобрить заявку</Button>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                  <Button variant="secondary" disabled={!comment.trim()} onClick={() => makeDecision('Нужны данные')}>Запросить данные</Button>
+                  <Button variant="danger" disabled={!comment.trim()} onClick={() => makeDecision('Отклонена')}>Отклонить</Button>
+                </div>
+              </div>
+            </div>
+
+            {application.status === 'Одобрена' && (
+              <div className="border-t border-[#d4e0ed] bg-[#f8fbff] p-6">
+                <h3 className="font-display text-base font-bold">Доступ паблишера</h3>
+              {application.accountStatus === 'Не создан' && (
+                <>
+                  <p className="mt-2 text-sm leading-6 text-[#476788]">Создайте организацию паблишера и отправьте владельцу приглашение.</p>
+                  <Button className="mt-5 w-full" variant="primary" onClick={() => setInviteOpen(true)}>Создать кабинет</Button>
+                </>
+              )}
+              {application.accountStatus === 'Приглашение отправлено' && (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+                    <div className="text-xs text-[#476788]">Приглашение отправлено</div>
+                    <div className="mt-1 break-all text-sm font-semibold">{application.email}</div>
+                  </div>
+                  <Button className="w-full" variant="primary" onClick={() => update({ accountStatus: 'Активен' })}>Активировать кабинет</Button>
+                  <Button className="w-full" variant="secondary">Отправить повторно</Button>
+                </div>
+              )}
+              {application.accountStatus === 'Активен' && (
+                <div className="mt-4 rounded-xl border border-[#b7ebca] bg-[#effcf4] p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[#15803d]"><CheckCircle2 className="h-4 w-4" /> Кабинет активен</div>
+                  <p className="mt-2 text-xs leading-5 text-[#476788]">Площадка создана как черновик и проходит отдельную модерацию перед публикацией в каталоге.</p>
+                </div>
+              )}
+              </div>
+            )}
+          </Card>
+        </aside>
+      </div>
+
+      <Modal isOpen={inviteOpen} onClose={() => setInviteOpen(false)} title="Создать кабинет паблишера" className="max-w-2xl">
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">Организация</div><div className="mt-1 text-sm font-semibold">{application.legalName}</div></div>
+            <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">Первая площадка</div><div className="mt-1 text-sm font-semibold">{application.platform}</div></div>
+          </div>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Почта владельца кабинета</span>
+            <input type="email" className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} />
+          </label>
+          <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm leading-6 text-[#476788]">
+            Пароль не задается администратором. Владелец получит одноразовую ссылку, подтвердит почту и настроит вход.
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setInviteOpen(false)}>Отмена</Button>
+            <Button variant="primary" disabled={!inviteEmail.trim()} onClick={sendInvite}>Создать и отправить приглашение</Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+const informerStatusColor = {
+  'Черновик': 'gray',
+  'Запланирован': 'blue',
+  'Опубликован': 'green',
+  'Приостановлен': 'amber',
+  'Завершен': 'gray',
+};
+
+const AdminInformerEditorPage = ({
+  editingId,
+  draft,
+  setDraft,
+  validDraft,
+  validTargetUrl,
+  selectionOptions,
+  selectedContent,
+  iconMap,
+  accentMap,
+  onBack,
+  onSave,
+  onPublish,
+  onPause,
+}) => {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingSelectionIds, setPendingSelectionIds] = useState([]);
+  const [pickerQuery, setPickerQuery] = useState('');
+  const [pickerType, setPickerType] = useState(undefined);
+  const [pickerTheme, setPickerTheme] = useState(undefined);
+  const [pickerRegion, setPickerRegion] = useState(undefined);
+  const PreviewIcon = iconMap[draft.icon] || FileText;
+  const usesPlatformPicker = draft.format === 'Подборка площадок';
+  const selectedPackagePlatforms = mockCatalog.filter((platform) => (draft.selectionIds || []).includes(String(platform.id)));
+  const packageBaseTotal = selectedPackagePlatforms.reduce((total, platform) => total + platform.price, 0);
+  const displayWithoutEndDate = draft.endsAt === 'Без срока';
+  const startDateValue = toDateInputValue(draft.startsAt);
+  const endDateValue = toDateInputValue(draft.endsAt);
+  const invalidDateRange = Boolean(startDateValue && endDateValue && endDateValue < startDateValue);
+  const filteredPlatforms = mockCatalog.filter((platform) => {
+    const matchesQuery = `${platform.name} ${platform.type} ${platform.theme} ${platform.region}`.toLowerCase().includes(pickerQuery.trim().toLowerCase());
+    const matchesType = !pickerType || pickerType === 'Все типы' || platform.type === pickerType;
+    const matchesTheme = !pickerTheme || pickerTheme === 'Все тематики' || platform.theme === pickerTheme;
+    const matchesRegion = matchesGeographyFilter(platform.region, pickerRegion);
+    return matchesQuery && matchesType && matchesTheme && matchesRegion;
+  });
+
+  const openPicker = () => {
+    setPendingSelectionIds([...(draft.selectionIds || [])]);
+    setPickerQuery('');
+    setPickerType(undefined);
+    setPickerTheme(undefined);
+    setPickerRegion(undefined);
+    setPickerOpen(true);
+  };
+  const togglePendingPlatform = (platformId) => {
+    const value = String(platformId);
+    setPendingSelectionIds((current) => current.includes(value)
+      ? current.filter((id) => id !== value)
+      : [...current, value]);
+  };
+  const applyPlatformSelection = () => {
+    setDraft({ ...draft, selectionIds: pendingSelectionIds });
+    setPickerOpen(false);
+  };
+  const changeFormat = (format) => {
+    setDraft({
+      ...draft,
+      format,
+      selectionIds: [],
+      packagePrice: '',
+      targetUrl: '',
+      target: format === 'Внешняя ссылка' ? 'Внешняя ссылка' : 'Каталог',
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <button type="button" className="inline-flex items-center gap-2 text-sm font-medium text-[#476788] hover:text-[#0b3558]" onClick={onBack}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К информеру
+      </button>
+
+      <div className="flex flex-col gap-4 border-b border-[#d4e0ed] pb-6 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">{editingId ? 'Редактировать карточку' : 'Новая карточка информера'}</h1>
+            <Badge color={informerStatusColor[draft.status]}>{draft.status}</Badge>
+          </div>
+          <p className="mt-2 text-sm text-[#476788]">Настройте содержание, состав подборки и период показа в кабинете заказчика.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {editingId && draft.status === 'Опубликован' && <Button variant="secondary" onClick={onPause}>Приостановить</Button>}
+          <Button variant="secondary" disabled={!validDraft} onClick={onSave}>Сохранить</Button>
+          <Button variant="primary" disabled={!validDraft} onClick={onPublish}>Опубликовать</Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="mb-5">
+              <h2 className="font-display text-lg font-bold text-[#0b3558]">Содержание карточки</h2>
+              <p className="mt-1 text-sm text-[#476788]">Основной текст и оформление информера.</p>
+            </div>
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label><span className="text-sm font-medium text-[#476788]">Формат</span><CustomSelect className="mt-2" value={draft.format} onChange={changeFormat} options={['Подборка площадок', 'Внешняя ссылка']} /></label>
+                <label><span className="text-sm font-medium text-[#476788]">Статус</span><CustomSelect className="mt-2" value={draft.status} onChange={(status) => setDraft({ ...draft, status })} options={['Черновик', 'Запланирован', 'Опубликован', 'Приостановлен', 'Завершен']} /></label>
+              </div>
+              {[
+                ['Подзаголовок', 'eyebrow', 32],
+                ['Заголовок', 'title', 70],
+                ['Текст', 'text', 150],
+                ['Текст кнопки', 'action', 36],
+              ].map(([label, key, limit]) => (
+                <label key={key} className="block">
+                  <span className="flex items-center justify-between gap-3 text-sm font-medium text-[#476788]"><span>{label}</span><span className="text-xs">{draft[key].length} / {limit}</span></span>
+                  {key === 'text' ? (
+                    <textarea className="mt-2 min-h-[100px] w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" maxLength={limit} value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />
+                  ) : (
+                    <input className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" maxLength={limit} value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />
+                  )}
+                </label>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="mb-5">
+              <h2 className="font-display text-lg font-bold text-[#0b3558]">Состав карточки</h2>
+              <p className="mt-1 text-sm leading-5 text-[#476788]">
+                {draft.format === 'Внешняя ссылка'
+                  ? 'Добавьте любую целевую ссылку, которая откроется по кнопке информера.'
+                  : 'Сформируйте подборку площадок. При необходимости укажите единую стоимость предложения.'}
+              </p>
+            </div>
+
+            {draft.format === 'Внешняя ссылка' ? (
+              <label className="block">
+                <span className="text-sm font-medium text-[#476788]">Целевая ссылка</span>
+                <input
+                  type="url"
+                  className={`mt-2 h-[48px] w-full rounded-lg border bg-white px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff] ${draft.targetUrl && !validTargetUrl ? 'border-[#dc2626]' : 'border-[#476788]'}`}
+                  value={draft.targetUrl || ''}
+                  onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value, target: 'Внешняя ссылка' })}
+                  placeholder="https://example.ru/page"
+                />
+                <span className="mt-2 block text-xs text-[#476788]">Можно указать статью, новость, подборку, страницу акции или другой внешний ресурс.</span>
+                {draft.targetUrl && !validTargetUrl && <span className="mt-2 block text-xs text-[#dc2626]">Укажите полную ссылку, начинающуюся с http:// или https://</span>}
+              </label>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8fbff] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-[#0b3558]">{selectedContent.length ? `Выбрано площадок: ${selectedContent.length}` : 'Площадки не выбраны'}</div>
+                    <div className="mt-1 text-xs text-[#476788]">Используйте поиск и фильтры в отдельном окне.</div>
+                  </div>
+                  <Button variant="secondary" onClick={openPicker}><Filter className="h-4 w-4" /> Выбрать площадки</Button>
+                </div>
+                {selectedContent.length > 0 && (
+                  <div className="divide-y divide-[#d4e0ed] overflow-hidden rounded-lg border border-[#d4e0ed]">
+                    {selectedContent.map((option) => (
+                      <div key={option.value} className="flex items-center justify-between gap-4 px-4 py-3">
+                        <div className="min-w-0"><div className="truncate text-sm font-medium text-[#0b3558]">{option.label}</div><div className="mt-0.5 truncate text-xs text-[#476788]">{option.description}</div></div>
+                        <button type="button" className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-[#476788] hover:bg-[#f8f9fb]" onClick={() => setDraft({ ...draft, selectionIds: draft.selectionIds.filter((id) => id !== option.value) })} aria-label={`Убрать ${option.label}`}><X className="h-4 w-4" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-4 rounded-lg border border-[#d4e0ed] bg-white p-4 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs font-medium text-[#476788]">Стоимость по прайсу</div>
+                      <div className="mt-2 text-xl font-semibold tabular-nums text-[#0b3558]">{formatMoney(packageBaseTotal)}</div>
+                      <div className="mt-1 text-xs text-[#476788]">Сумма цен выбранных площадок.</div>
+                    </div>
+                    <label>
+                      <span className="text-xs font-medium text-[#476788]">Единая цена подборки</span>
+                      <div className="relative mt-2">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1000"
+                          className="h-[42px] w-full rounded-lg border border-[#476788] px-4 pr-10 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+                          value={draft.packagePrice || ''}
+                          onChange={(event) => setDraft({ ...draft, packagePrice: event.target.value })}
+                          placeholder="Например, 320000"
+                        />
+                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-[#476788]">₽</span>
+                      </div>
+                      <span className="mt-1 block text-xs text-[#476788]">Необязательно. Оставьте поле пустым, если действует обычный прайс.</span>
+                    </label>
+                  </div>
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-6">
+            <div className="mb-5">
+              <h2 className="font-display text-lg font-bold text-[#0b3558]">Показ и оформление</h2>
+              <p className="mt-1 text-sm text-[#476788]">Переход, визуальный акцент и период публикации.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {draft.format === 'Подборка площадок' && <label><span className="text-sm font-medium text-[#476788]">Переход</span><CustomSelect className="mt-2" value={draft.target} onChange={(target) => setDraft({ ...draft, target })} options={['Каталог', 'Карточка площадки']} /></label>}
+              <label><span className="text-sm font-medium text-[#476788]">Иконка</span><CustomSelect className="mt-2" value={draft.icon} onChange={(icon) => setDraft({ ...draft, icon })} options={informerIconOptions} /></label>
+              <label><span className="text-sm font-medium text-[#476788]">Цветовой акцент</span><CustomSelect className="mt-2" value={draft.accent} onChange={(accent) => setDraft({ ...draft, accent })} options={informerAccentOptions} /></label>
+              <label>
+                <span className="text-sm font-medium text-[#476788]">Начало показа</span>
+                <input
+                  type="date"
+                  className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm"
+                  value={startDateValue}
+                  onChange={(event) => setDraft({ ...draft, startsAt: event.target.value })}
+                />
+                <span className="mt-1 block text-xs text-[#476788]">Карточка станет доступна с начала выбранного дня.</span>
+              </label>
+              <div>
+                <label>
+                  <span className="text-sm font-medium text-[#476788]">Окончание показа</span>
+                  <input
+                    type="date"
+                    min={startDateValue || undefined}
+                    disabled={displayWithoutEndDate}
+                    className={`mt-2 h-[42px] w-full rounded-lg border px-4 text-sm disabled:bg-[#f1f4f8] disabled:text-[#7d96af] ${invalidDateRange ? 'border-[#dc2626]' : 'border-[#476788]'}`}
+                    value={endDateValue}
+                    onChange={(event) => setDraft({ ...draft, endsAt: event.target.value })}
+                  />
+                </label>
+                <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[#476788]">
+                  <input
+                    type="checkbox"
+                    checked={displayWithoutEndDate}
+                    onChange={(event) => setDraft({ ...draft, endsAt: event.target.checked ? 'Без срока' : startDateValue || '' })}
+                    className="h-4 w-4 rounded border-[#8badcf] accent-[#006bff]"
+                  />
+                  Показывать без ограничения по дате
+                </label>
+                {invalidDateRange && <span className="mt-1 block text-xs text-[#dc2626]">Дата окончания не может быть раньше даты начала.</span>}
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div>
+          <div className="sticky top-6">
+            <div className="mb-3 text-xs font-semibold uppercase text-[#476788]">Предпросмотр</div>
+            <Card className="flex h-[400px] flex-col overflow-hidden bg-[#f8fbff]">
+              <div className="border-b border-[#d4e0ed] px-5 py-4"><h2 className="font-display text-lg font-bold">Актуальное</h2><p className="mt-1 text-xs text-[#476788]">Предложения и новости платформы</p></div>
+              <div className="grid flex-1 grid-rows-[48px_116px_1fr] gap-y-3 p-5">
+                <div className="flex min-w-0 items-center gap-3"><div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${accentMap[draft.accent]}`}><PreviewIcon className="h-6 w-6" /></div><div className="truncate text-xs font-bold uppercase text-[#006bff]">{draft.eyebrow || 'Подзаголовок'}</div></div>
+                <div><h3 className="line-clamp-2 font-display text-xl font-bold leading-7">{draft.title || 'Заголовок карточки'}</h3><p className="mt-3 line-clamp-2 text-sm leading-6 text-[#476788]">{draft.text || 'Краткое описание предложения или новости.'}</p></div>
+                <div className="flex items-end"><Button variant="primary" className="w-full">{draft.action || 'Подробнее'}<ArrowRight className="h-4 w-4" /></Button></div>
+              </div>
+            </Card>
+            {!validDraft && <div className="mt-3 rounded-lg bg-[#fff4df] px-4 py-3 text-xs leading-5 text-[#7a4a00]">Заполните текстовые поля и настройте состав карточки, чтобы сохранить или опубликовать ее.</div>}
+          </div>
+        </div>
+      </div>
+
+      <Modal isOpen={pickerOpen && usesPlatformPicker} onClose={() => setPickerOpen(false)} title="Выбрать площадки" className="max-w-6xl">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+          <label className="relative block">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a6bbd1]" />
+            <input className="h-[48px] w-full rounded-lg border border-[#476788] pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Название площадки" />
+          </label>
+          <CustomSelect placeholder="Тип" value={pickerType} onChange={setPickerType} options={['Все типы', ...new Set(mockCatalog.map((platform) => platform.type))]} />
+          <CustomSelect placeholder="Тематика" value={pickerTheme} onChange={setPickerTheme} options={['Все тематики', ...new Set(mockCatalog.map((platform) => platform.theme))]} />
+          <CustomSelect placeholder="География" value={pickerRegion} onChange={setPickerRegion} options={regionFilterOptions} />
+        </div>
+
+        <div className="mt-5 max-h-[430px] overflow-y-auto rounded-lg border border-[#d4e0ed]">
+          <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1.5fr)_120px_130px_130px_130px] gap-4 border-b border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3 text-xs font-medium uppercase text-[#476788]">
+            <span>Площадка</span><span>Тип</span><span>Тематика</span><span>Регион</span><span>Цена</span>
+          </div>
+          <div className="divide-y divide-[#d4e0ed]">
+            {filteredPlatforms.map((platform) => {
+              const selected = pendingSelectionIds.includes(String(platform.id));
+              return (
+                <button
+                  key={platform.id}
+                  type="button"
+                  className={`grid w-full grid-cols-[minmax(0,1.5fr)_120px_130px_130px_130px] items-center gap-4 px-4 py-3 text-left transition-colors ${selected ? 'bg-[#e8f1ff]' : 'hover:bg-[#f8fbff]'}`}
+                  onClick={() => togglePendingPlatform(platform.id)}
+                >
+                  <span className="flex min-w-0 items-center gap-3"><span className={`flex h-5 w-5 flex-none items-center justify-center rounded border ${selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf] bg-white'}`}>{selected && <Check className="h-3.5 w-3.5" />}</span><span className="min-w-0"><span className="block truncate text-sm font-semibold text-[#0b3558]">{platform.name}</span></span></span>
+                  <span className="text-sm text-[#476788]">{platform.type}</span>
+                  <span className="text-sm text-[#476788]">{platform.theme}</span>
+                  <span className="text-sm text-[#476788]">{platform.region}</span>
+                  <span className="text-sm font-semibold tabular-nums text-[#0b3558]">{formatMoney(platform.price)}</span>
+                </button>
+              );
+            })}
+            {filteredPlatforms.length === 0 && <div className="px-5 py-12 text-center text-sm text-[#476788]">По заданным фильтрам площадки не найдены.</div>}
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 border-t border-[#d4e0ed] pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm font-semibold text-[#0b3558]">Выбрано площадок: {pendingSelectionIds.length}</div>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="secondary" onClick={() => setPendingSelectionIds([])}>Сбросить</Button>
+            <Button variant="secondary" onClick={() => setPickerOpen(false)}>Отмена</Button>
+            <Button variant="primary" onClick={applyPlatformSelection}>Применить выбор</Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+const AdminInformerView = ({ items, onChangeItems }) => {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState(undefined);
+  const [formatFilter, setFormatFilter] = useState(undefined);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const emptyDraft = {
+    format: 'Подборка площадок',
+    eyebrow: '',
+    title: '',
+    text: '',
+    action: '',
+    target: 'Каталог',
+    icon: 'store',
+    accent: 'blue',
+    status: 'Черновик',
+    startsAt: '23.07.2026',
+    endsAt: 'Без срока',
+    selectionIds: [],
+    packagePrice: '',
+    targetUrl: '',
+  };
+  const [draft, setDraft] = useState(emptyDraft);
+
+  const iconMap = informerIconMap;
+  const accentMap = informerAccentMap;
+  const filteredItems = items.filter((item) => (
+    `${item.id} ${item.title} ${item.eyebrow}`.toLowerCase().includes(query.trim().toLowerCase())
+    && (!statusFilter || statusFilter === 'Все статусы' || item.status === statusFilter)
+    && (!formatFilter || formatFilter === 'Все форматы' || getInformerFormat(item) === formatFilter)
+  ));
+  const PreviewIcon = iconMap[draft.icon] || FileText;
+  const selectionOptions = getInformerSelectionOptions(draft.format);
+  const selectedContent = selectionOptions.filter((option) => (draft.selectionIds || []).includes(option.value));
+  const requiresSelection = draft.format === 'Подборка площадок';
+  const validTargetUrl = draft.format !== 'Внешняя ссылка' || /^https?:\/\/\S+$/i.test(draft.targetUrl || '');
+  const validPackagePrice = !String(draft.packagePrice || '').trim() || Number(draft.packagePrice) > 0;
+  const startDateValue = toDateInputValue(draft.startsAt);
+  const endDateValue = toDateInputValue(draft.endsAt);
+  const validDisplayPeriod = Boolean(startDateValue && (draft.endsAt === 'Без срока' || (endDateValue && endDateValue >= startDateValue)));
+  const validDraft = Boolean(
+    draft.eyebrow.trim()
+    && draft.title.trim()
+    && draft.text.trim()
+    && draft.action.trim()
+    && (!requiresSelection || selectedContent.length > 0)
+    && validTargetUrl
+    && validPackagePrice
+    && validDisplayPeriod
+  );
+
+  const openEditor = (item = null) => {
+    setEditingId(item?.id || null);
+    setDraft(item
+      ? { selectionIds: [], packagePrice: '', targetUrl: '', ...item, format: getInformerFormat(item) }
+      : { ...emptyDraft, selectionIds: [], packagePrice: '', targetUrl: '' });
+    setEditorOpen(true);
+  };
+  const saveItem = (status = draft.status) => {
+    if (!validDraft) return;
+    const nextItem = {
+      ...draft,
+      id: editingId || `INF-${String(items.length + 1).padStart(3, '0')}`,
+      status,
+      updatedAt: '23.07.2026, 15:20',
+    };
+    onChangeItems((currentItems) => editingId
+      ? currentItems.map((item) => item.id === editingId ? nextItem : item)
+      : [nextItem, ...currentItems]);
+    setEditorOpen(false);
+  };
+  const pauseItem = () => {
+    if (!editingId) return;
+    onChangeItems((currentItems) => currentItems.map((item) => item.id === editingId ? { ...item, status: 'Приостановлен', updatedAt: '23.07.2026, 15:20' } : item));
+    setEditorOpen(false);
+  };
+
+  if (editorOpen) {
+    return (
+      <AdminInformerEditorPage
+        editingId={editingId}
+        draft={draft}
+        setDraft={setDraft}
+        validDraft={validDraft}
+        validTargetUrl={validTargetUrl}
+        selectionOptions={selectionOptions}
+        selectedContent={selectedContent}
+        iconMap={iconMap}
+        accentMap={accentMap}
+        onBack={() => setEditorOpen(false)}
+        onSave={() => saveItem(draft.status)}
+        onPublish={() => saveItem('Опубликован')}
+        onPause={pauseItem}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Информер заказчика</h1>
+          <p className="mt-1 text-sm text-[#476788]">Управление предложениями и материалами в сводке кабинета заказчика.</p>
+        </div>
+        <Button variant="primary" onClick={() => openEditor()}><Plus className="h-4 w-4" /> Создать карточку</Button>
+      </div>
+
+      <Card className="p-5">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_230px_230px]">
+          <label className="relative block">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a6bbd1]" />
+            <input className="h-[42px] w-full rounded-lg border border-[#476788] pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID, заголовок или подзаголовок" />
+          </label>
+          <CustomSelect placeholder="Формат" value={formatFilter} onChange={setFormatFilter} options={['Все форматы', 'Подборка площадок', 'Внешняя ссылка']} />
+          <CustomSelect placeholder="Статус" value={statusFilter} onChange={setStatusFilter} options={['Все статусы', 'Черновик', 'Запланирован', 'Опубликован', 'Приостановлен', 'Завершен']} />
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-[980px] w-full divide-y divide-[#d4e0ed]">
+            <thead className="bg-[#f8f9fb]">
+              <tr>{['Формат', 'Карточка', 'CTA', 'Период', 'Статус', 'Обновлено'].map((label) => <th key={label} className="px-5 py-4 text-left text-xs font-medium uppercase text-[#476788]">{label}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-[#d4e0ed]">
+              {filteredItems.map((item) => (
+                <tr key={item.id} className="cursor-pointer hover:bg-[#f8fbff]" onClick={() => openEditor(item)}>
+                  <td className="px-5 py-4"><div className="text-sm font-semibold">{getInformerFormat(item)}</div><div className="mt-1 text-xs text-[#476788]">{item.id}</div></td>
+                  <td className="px-5 py-4"><div className="max-w-[320px] truncate text-sm font-semibold">{item.title}</div><div className="mt-1 max-w-[320px] truncate text-xs text-[#476788]">{item.eyebrow}</div></td>
+                  <td className="px-5 py-4"><div className="max-w-[210px] truncate text-sm">{item.action}</div><div className="mt-1 text-xs text-[#476788]">{item.target}</div></td>
+                  <td className="px-5 py-4 text-sm text-[#476788]">{formatInformerDate(item.startsAt)}<div className="mt-1 text-xs">{item.endsAt === 'Без срока' ? 'без ограничения' : `до ${formatInformerDate(item.endsAt)}`}</div></td>
+                  <td className="px-5 py-4"><Badge color={informerStatusColor[item.status]}>{item.status}</Badge></td>
+                  <td className="px-5 py-4 text-sm text-[#476788]">{item.updatedAt}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Modal isOpen={editorOpen} onClose={() => setEditorOpen(false)} title={editingId ? 'Редактировать карточку' : 'Новая карточка информера'} className="max-w-6xl">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label><span className="text-sm font-medium text-[#476788]">Категория</span><CustomSelect className="mt-2" value={draft.category} onChange={(category) => setDraft({
+                ...draft,
+                category,
+                selectionIds: [],
+                targetUrl: '',
+                target: category === 'Полезное' ? 'База знаний' : 'Каталог',
+              })} options={['Новинки', 'Пакеты', 'Скидки', 'Полезное']} /></label>
+              <label><span className="text-sm font-medium text-[#476788]">Статус</span><CustomSelect className="mt-2" value={draft.status} onChange={(status) => setDraft({ ...draft, status })} options={['Черновик', 'Запланирован', 'Опубликован', 'Приостановлен', 'Завершен']} /></label>
+            </div>
+            {[
+              ['Подзаголовок', 'eyebrow', 32],
+              ['Заголовок', 'title', 70],
+              ['Текст', 'text', 150],
+              ['Текст кнопки', 'action', 36],
+            ].map(([label, key, limit]) => (
+              <label key={key} className="block">
+                <span className="flex items-center justify-between gap-3 text-sm font-medium text-[#476788]"><span>{label}</span><span className="text-xs">{draft[key].length} / {limit}</span></span>
+                {key === 'text' ? (
+                  <textarea className="mt-2 min-h-[100px] w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" maxLength={limit} value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />
+                ) : (
+                  <input className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" maxLength={limit} value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />
+                )}
+              </label>
+            ))}
+            <div className="border-t border-[#d4e0ed] pt-5">
+              <div className="mb-4">
+                <h3 className="font-display text-base font-bold text-[#0b3558]">Состав карточки</h3>
+                <p className="mt-1 text-sm leading-5 text-[#476788]">
+                  {draft.category === 'Полезное'
+                    ? 'Добавьте любую целевую ссылку, которая откроется по кнопке информера.'
+                    : draft.category === 'Пакеты'
+                      ? 'Выберите один или несколько готовых пакетов, которые увидит заказчик.'
+                      : `Выберите площадки для подборки «${draft.category}».`}
+                </p>
+              </div>
+
+              {draft.category === 'Полезное' ? (
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Целевая ссылка</span>
+                  <input
+                    type="url"
+                    className={`mt-2 h-[48px] w-full rounded-lg border bg-white px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff] ${draft.targetUrl && !validTargetUrl ? 'border-[#dc2626]' : 'border-[#476788]'}`}
+                    value={draft.targetUrl || ''}
+                    onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value, target: 'Внешняя ссылка' })}
+                    placeholder="https://example.ru/page"
+                  />
+                  {draft.targetUrl && !validTargetUrl && <span className="mt-2 block text-xs text-[#dc2626]">Укажите полную ссылку, начинающуюся с http:// или https://</span>}
+                </label>
+              ) : (
+                <div className="space-y-3">
+                  <CheckboxMultiSelect
+                    options={selectionOptions}
+                    value={draft.selectionIds || []}
+                    onChange={(selectionIds) => setDraft({ ...draft, selectionIds })}
+                    placeholder={draft.category === 'Пакеты' ? 'Выберите пакеты' : 'Выберите площадки'}
+                    selectedNoun={draft.category === 'Пакеты' ? 'пакетов' : 'площадок'}
+                  />
+                  {selectedContent.length > 0 && (
+                    <div className="divide-y divide-[#d4e0ed] overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8fbff]">
+                      {selectedContent.map((option) => (
+                        <div key={option.value} className="flex items-center justify-between gap-4 px-4 py-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-[#0b3558]">{option.label}</div>
+                            <div className="mt-0.5 truncate text-xs text-[#476788]">{option.description}</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-[#476788] hover:bg-white hover:text-[#0b3558]"
+                            onClick={() => setDraft({ ...draft, selectionIds: draft.selectionIds.filter((id) => id !== option.value) })}
+                            aria-label={`Убрать ${option.label}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {selectedContent.length === 0 && <p className="text-xs text-[#b46b00]">Для публикации выберите хотя бы одну позицию.</p>}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {draft.category !== 'Полезное' && <label><span className="text-sm font-medium text-[#476788]">Переход</span><CustomSelect className="mt-2" value={draft.target} onChange={(target) => setDraft({ ...draft, target })} options={['Каталог', 'Карточка площадки']} /></label>}
+              <label><span className="text-sm font-medium text-[#476788]">Иконка</span><CustomSelect className="mt-2" value={draft.icon} onChange={(icon) => setDraft({ ...draft, icon })} options={['store', 'briefcase', 'credit', 'file']} /></label>
+              <label><span className="text-sm font-medium text-[#476788]">Акцент</span><CustomSelect className="mt-2" value={draft.accent} onChange={(accent) => setDraft({ ...draft, accent })} options={['blue', 'green', 'amber', 'violet']} /></label>
+              <label><span className="text-sm font-medium text-[#476788]">Начало показа</span><input className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm" value={draft.startsAt} onChange={(event) => setDraft({ ...draft, startsAt: event.target.value })} /></label>
+              <label className="sm:col-span-2"><span className="text-sm font-medium text-[#476788]">Окончание показа</span><input className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm" value={draft.endsAt} onChange={(event) => setDraft({ ...draft, endsAt: event.target.value })} /></label>
+            </div>
+          </div>
+
+          <div>
+            <div className="sticky top-0">
+              <div className="mb-3 text-xs font-semibold uppercase text-[#476788]">Предпросмотр</div>
+              <Card className="flex h-[400px] flex-col overflow-hidden bg-[#f8fbff]">
+                <div className="border-b border-[#d4e0ed] px-5 py-4">
+                  <h2 className="font-display text-lg font-bold">Актуальное</h2>
+                  <p className="mt-1 text-xs text-[#476788]">Предложения и новости платформы</p>
+                </div>
+                <div className={`grid flex-1 gap-y-3 p-5 ${selectedContent.length ? 'grid-rows-[48px_92px_58px_1fr]' : 'grid-rows-[48px_116px_1fr]'}`}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${accentMap[draft.accent]}`}><PreviewIcon className="h-6 w-6" /></div>
+                    <div className="truncate text-xs font-bold uppercase text-[#006bff]">{draft.eyebrow || 'Подзаголовок'}</div>
+                  </div>
+                  <div>
+                    <h3 className="line-clamp-2 font-display text-xl font-bold leading-7">{draft.title || 'Заголовок карточки'}</h3>
+                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-[#476788]">{draft.text || 'Краткое описание предложения или новости.'}</p>
+                  </div>
+                  {selectedContent.length > 0 && (
+                    <div className="flex min-w-0 flex-wrap content-start gap-1.5 overflow-hidden">
+                      {selectedContent.slice(0, 3).map((option) => (
+                        <span key={option.value} className="max-w-full truncate rounded-full bg-white px-2.5 py-1 text-xs font-medium text-[#0b3558] ring-1 ring-[#d4e0ed]">{option.label}</span>
+                      ))}
+                      {selectedContent.length > 3 && <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-[#476788] ring-1 ring-[#d4e0ed]">+{selectedContent.length - 3}</span>}
+                    </div>
+                  )}
+                  <div className="flex items-end"><Button variant="primary" className="w-full">{draft.action || 'Подробнее'}<ArrowRight className="h-4 w-4" /></Button></div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+        <div className="mt-6 flex flex-col-reverse gap-3 border-t border-[#d4e0ed] pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>{editingId && draft.status === 'Опубликован' && <Button variant="secondary" onClick={pauseItem}>Приостановить</Button>}</div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button variant="secondary" disabled={!validDraft} onClick={() => saveItem(draft.status)}>Сохранить</Button>
+            <Button variant="primary" disabled={!validDraft} onClick={() => saveItem('Опубликован')}>Опубликовать</Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+const AdminExpeditedModerationQueue = ({ navigate, onSelect }) => (
+  <Card className="overflow-hidden border-[#ffd98f]">
+    <div className="flex items-center gap-3 border-b border-[#ffe3aa] bg-[#fff9ec] px-6 py-5">
+      <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#fff0c9] text-[#b46b00]">
+        <Zap className="h-5 w-5" />
+      </span>
+      <h2 className="font-display text-base font-bold text-[#0b3558]">Ускоренная модерация</h2>
+      <Badge color="amber">{mockExpeditedModeration.length} материала</Badge>
+    </div>
+    <div className="divide-y divide-[#d4e0ed]">
+      {mockExpeditedModeration.map((material) => (
+        <button
+          key={material.id}
+          type="button"
+          className="grid w-full gap-3 px-6 py-4 text-left transition-colors hover:bg-[#fffdf7] sm:grid-cols-[110px_minmax(0,1fr)_190px_24px] sm:items-center"
+          onClick={() => onSelect
+            ? onSelect('admin_moderation', material.row, 'admin_moderation_detail')
+            : navigate('admin_moderation_detail')}
+        >
+          <span className="text-sm font-semibold text-[#006bff]">{material.id}</span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-[#0b3558]">{material.title}</span>
+            <span className="mt-1 block text-xs text-[#476788]">{material.customer} · поступил {material.submittedAt}</span>
+          </span>
+          <span className="text-sm font-medium tabular-nums text-[#8a5700]">{material.deadline}</span>
+          <ChevronRight className="h-4 w-4 text-[#6b86a4]" />
+        </button>
+      ))}
+    </div>
+  </Card>
+);
+
+const AdminDashboardView = ({ navigate, onSelect }) => (
   <div className="space-y-8">
     <h1 className="font-display text-2xl font-bold text-[#0b3558]">Админ-панель</h1>
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -5477,6 +7636,7 @@ const AdminDashboardView = ({ navigate }) => (
       <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Заморожено</div><div className="text-2xl font-semibold mt-2">12,4 млн ₽</div></Card>
       <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Комиссия 15%</div><div className="text-2xl font-semibold mt-2">1,8 млн ₽</div></Card>
     </div>
+    <AdminExpeditedModerationQueue navigate={navigate} onSelect={onSelect} />
     <Card className="overflow-hidden">
       <div className="px-6 py-5 border-b border-[#d4e0ed] bg-[#f8f9fb]"><h2 className="font-display text-base font-bold text-[#0b3558]">Операционная очередь</h2></div>
       <table className="min-w-full divide-y divide-[#d4e0ed]">
@@ -5512,9 +7672,9 @@ const AdminPlatformsCatalogView = ({ navigate, onSelect }) => {
       const matchesQuery = text.includes(query.toLowerCase());
       const matchesType = !typeFilter || typeFilter === 'Все типы' || item.type === typeFilter;
       const matchesStatus = !statusFilter || statusFilter === 'Все статусы' || item.adminStatus === statusFilter;
-      const matchesRegion = !regionFilter || regionFilter === 'Все регионы' || item.region === regionFilter;
+      const matchesRegion = matchesGeographyFilter(item.region, regionFilter);
       const matchesTheme = !themeFilter || themeFilter === 'Любая тематика' || item.theme === themeFilter;
-      const matchesFormat = !formatFilter || formatFilter === 'Все форматы' || item.format === formatFilter || (formatFilter === 'Статья / лонгрид' && ['Статья', 'Лонгрид'].includes(item.format));
+      const matchesFormat = !formatFilter || formatFilter === 'Все форматы' || item.formats.includes(formatFilter);
       const matchesAggregator = !aggregatorFilter || aggregatorFilter === 'Любые агрегаторы' || item.aggregators.includes(aggregatorFilter);
       const matchesPrice = !priceFilter || priceFilter === 'Любая цена'
         || (priceFilter === 'До 50 000 ₽' && item.price < 50000)
@@ -5552,10 +7712,10 @@ const AdminPlatformsCatalogView = ({ navigate, onSelect }) => {
           </div>
           <CustomSelect placeholder="Статус" options={['Все статусы', 'Активна', 'На проверке', 'Требуются правки', 'Приостановлена']} value={statusFilter} onChange={setStatusFilter} />
           <CustomSelect placeholder="Сортировка" options={['Сначала требуют внимания', 'Сначала дороже', 'Сначала дешевле', 'По названию']} value={sortMode} onChange={setSortMode} />
-          <CustomSelect placeholder="Тип площадки" options={['Все типы', 'СМИ', 'ТГ-канал', 'Паблик ВК']} value={typeFilter} onChange={setTypeFilter} />
-          <CustomSelect placeholder="Регион" options={['Все регионы', 'Федеральные', 'Москва', 'Регионы']} value={regionFilter} onChange={setRegionFilter} />
+          <CustomSelect placeholder="Тип площадки" options={['Все типы', 'СМИ', 'ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} value={typeFilter} onChange={setTypeFilter} />
+          <CustomSelect placeholder="География" options={regionFilterOptions} value={regionFilter} onChange={setRegionFilter} />
           <CustomSelect placeholder="Тематика" options={['Любая тематика', 'Финансы', 'ИТ', 'Бизнес']} value={themeFilter} onChange={setThemeFilter} />
-          <CustomSelect placeholder="Формат" options={['Все форматы', 'Статья', 'Пост', 'Статья / лонгрид']} value={formatFilter} onChange={setFormatFilter} />
+          <CustomSelect placeholder="Формат" options={placementFormatFilterOptions} value={formatFilter} onChange={setFormatFilter} />
           <CustomSelect placeholder="Агрегаторы" options={['Любые агрегаторы', 'Google News', 'Дзен', 'нет']} value={aggregatorFilter} onChange={setAggregatorFilter} />
           <CustomSelect placeholder="Цена" options={['Любая цена', 'До 50 000 ₽', '50 000-100 000 ₽', '100 000+ ₽']} value={priceFilter} onChange={setPriceFilter} />
         </div>
@@ -5599,7 +7759,7 @@ const AdminPlatformsCatalogView = ({ navigate, onSelect }) => {
                     <td className="px-4 py-4 whitespace-nowrap"><Badge color={statusColor}>{item.adminStatus}</Badge></td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <div className="text-sm font-semibold text-[#0b3558]">#{mediologyRank}</div>
-                      <div className="text-[11px] text-[#476788]">{item.region === 'Федеральные' ? 'общий' : 'по сегменту'}</div>
+                      <div className="text-[11px] text-[#476788]">{item.region === 'Федеральный охват' ? 'общий' : 'по сегменту'}</div>
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex flex-wrap gap-1">
@@ -5679,6 +7839,9 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
         />
         <CustomSelect options={['Сначала срочные', 'Сначала новые', 'Сначала старые']} />
       </div>
+      {section === 'admin_moderation' && (
+        <AdminExpeditedModerationQueue navigate={navigate} onSelect={onSelect} />
+      )}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
         <table className="min-w-[900px] w-full divide-y divide-[#d4e0ed]">
@@ -5763,7 +7926,7 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
     platform: 'РБК Инвестиции',
     customer: 'Заказчик #842',
     advertiser: 'ООО "Финтех Решения"',
-    format: row[0] === '#M-1054' ? 'Интервью' : 'Статья',
+    format: 'Статья',
     amount: row[0] === '#M-1054' ? 60000 : 127500,
     deadline: row[0] === '#M-1054' ? 'публикация до 22.10.2023' : 'публикация до 20.10.2023',
   };
@@ -5788,40 +7951,89 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
       </div>
       <div className="text-left lg:text-right"><div className="text-sm text-[#476788]">SLA проверки</div><div className="text-xl font-semibold text-[#0b3558]">1 ч 18 мин</div></div>
     </div>
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
+
+    <Card className="overflow-hidden">
+      <div className="flex flex-col gap-5 p-6 xl:flex-row xl:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-4">
+          <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full border border-[#d4e0ed] bg-[#f8fbff] text-[#006bff]">
+            <ShieldCheck className="h-6 w-6" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="font-display text-lg font-bold text-[#0b3558]">{isPlatform ? 'Площадка ожидает решения' : 'Материал ожидает решения'}</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-[#476788]">
+              Сверьте данные заявки и содержимое. Комментарий обязателен при запросе доработки или отклонении.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3 xl:justify-end">
+          <Button variant="primary" onClick={() => submitDecision('Принят')}>Принять</Button>
+          {!isPlatform && <Button variant="secondary" onClick={() => submitDecision('Возвращен на доработку')}>Вернуть на доработку</Button>}
+          <Button variant="danger" onClick={() => submitDecision('Отклонен')}>Отклонить</Button>
+        </div>
+      </div>
+      <div className="grid gap-4 border-t border-[#d4e0ed] bg-[#f8fbff] p-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.42fr)]">
+        <label className="block">
+          <span className="text-sm font-medium text-[#476788]">Комментарий модератора</span>
+          <textarea
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            className="mt-2 min-h-[92px] w-full resize-y rounded-lg border border-[#476788] bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+            placeholder={isPlatform ? 'Укажите причину отклонения' : 'Укажите, что нужно доработать, или причину отклонения'}
+          />
+        </label>
+        <div className="flex min-h-[92px] items-end">
+          <div className="w-full">
+            <div className="text-xs leading-5 text-[#476788]">Решение и комментарий сохраняются в журнале аудита и отображаются заявителю.</div>
+            <div className="mt-3"><ActionResult text={result} tone={result.startsWith('Добавьте') ? 'error' : 'success'} /></div>
+          </div>
+        </div>
+      </div>
+    </Card>
+
+    <div className="space-y-6">
         {!isPlatform && (
           <Card className="p-6">
-            <h2 className="font-display text-base font-bold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Состав заказа</h2>
-            <div className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4">
-              <div className="min-w-0">
-                <div className="text-xs text-[#476788]">Материал</div>
-                <div className="mt-1 text-xl font-semibold text-[#0b3558]">{moderationOrder.material}</div>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-[#476788]">
-                  {moderationOrder.format} для {moderationOrder.platform}, публикация от редакции. {moderationOrder.deadline}.
-                </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge color="amber">{row[3]}</Badge>
+              <span className="text-sm text-[#476788]">{moderationOrder.customer}</span>
+            </div>
+            <h2 className="mt-4 max-w-5xl break-words font-display text-2xl font-bold leading-tight text-[#0b3558] sm:text-3xl">
+              {moderationOrder.material}
+            </h2>
+            <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(200px,0.34fr)]">
+              <div className="min-w-0 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+                <div className="text-xs text-[#476788]">Площадка размещения</div>
+                <div className="mt-1 break-words text-sm font-semibold leading-5 text-[#0b3558]">{moderationOrder.platform}</div>
               </div>
-              <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                {[
-                  ['Заказчик', moderationOrder.customer],
-                  ['Площадка', moderationOrder.platform],
-                  ['Формат', moderationOrder.format],
-                  ['Начисление', formatMoney(moderationOrder.amount)],
-                  ['Рекламодатель', moderationOrder.advertiser],
-                  ['Срок', moderationOrder.deadline],
-                ].map(([label, value]) => (
-                  <div key={label} className="min-w-0 rounded-lg bg-white border border-[#d4e0ed] px-4 py-3">
-                    <div className="text-xs text-[#476788]">{label}</div>
-                    <div className="mt-1 font-medium text-[#0b3558] break-words">{value}</div>
-                  </div>
-                ))}
+              <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+                <div className="text-xs text-[#476788]">Срок публикации</div>
+                <div className="mt-1 text-sm font-semibold text-[#0b3558]">{moderationOrder.deadline.replace('публикация ', '')}</div>
               </div>
+            </div>
+            <div className="mt-4 grid gap-px overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#d4e0ed] sm:grid-cols-3">
+              {[
+                ['Формат', moderationOrder.format],
+                ['Рекламодатель', moderationOrder.advertiser],
+                ['Начисление', formatMoney(moderationOrder.amount)],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0 bg-white px-4 py-3">
+                  <div className="text-xs text-[#476788]">{label}</div>
+                  <div className="mt-1 break-words text-sm font-semibold text-[#0b3558]">{value}</div>
+                </div>
+              ))}
             </div>
           </Card>
         )}
 
-        <Card className="p-6">
-          <h2 className="font-display text-base font-bold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">{isPlatform ? 'Карточка площадки' : 'Материал на проверке'}</h2>
+        <Card className="overflow-hidden">
+          <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#0b3558]">{isPlatform ? 'Карточка площадки' : 'Текст и изображения материала'}</h2>
+              <p className="mt-1 text-sm text-[#476788]">{isPlatform ? 'Данные, переданные паблишером' : 'Версия, отправленная заказчиком на модерацию'}</p>
+            </div>
+            {!isPlatform && <Badge color="blue"><ImageIcon className="mr-1.5 h-3.5 w-3.5" /> 3 изображения</Badge>}
+          </div>
+          <div className="p-6">
           {isPlatform ? (
             <div className="space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -5968,23 +8180,8 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
               </div>
             </>
           )}
-        </Card>
-      </div>
-      <div className="space-y-6">
-        <Card className="p-6">
-          <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Решение</h2>
-          <label className="block">
-            <span className="text-sm font-medium text-[#476788]">Комментарий модератора</span>
-            <textarea value={comment} onChange={(event) => setComment(event.target.value)} className="mt-2 min-h-[140px] w-full rounded-lg border border-[#476788] px-3 py-2.5 text-sm" placeholder={isPlatform ? 'Обязателен при отклонении' : 'Обязателен при отклонении или возврате на доработку'} />
-          </label>
-          <div className="mt-4 space-y-2">
-            <Button variant="primary" className="w-full" onClick={() => submitDecision('Принят')}>Принять</Button>
-            {!isPlatform && <Button variant="secondary" className="w-full" onClick={() => submitDecision('Возвращен на доработку')}>Вернуть на доработку</Button>}
-            <Button variant="danger" className="w-full" onClick={() => submitDecision('Отклонен')}>Отклонить</Button>
           </div>
-          <div className="mt-4"><ActionResult text={result} tone={result.startsWith('Добавьте') ? 'error' : 'success'} /></div>
         </Card>
-      </div>
     </div>
   </div>
   );
@@ -6325,58 +8522,139 @@ const AdminPlatformDetailView = ({ navigate, selection }) => {
   const [result, setResult] = useState('');
   const item = mockCatalog[0];
   const row = selection?.row;
-  const status = row?.[3] || 'Активен';
-  const suspendPlatform = () => {
-    setResult('Площадка приостановлена и скрыта из каталога до повторной проверки.');
+  const initialStatus = row?.[3] || 'Активна';
+  const [isSuspended, setIsSuspended] = useState(initialStatus === 'Приостановлена');
+  const displayStatus = isSuspended
+    ? 'Приостановлена'
+    : ['На проверке', 'Требуются правки'].includes(initialStatus) ? initialStatus : 'Активна';
+  const platformPublications = mockOrdersPublisher.filter((order) => order.platform === item.name);
+  const togglePlatformStatus = () => {
+    const nextSuspended = !isSuspended;
+    setIsSuspended(nextSuspended);
+    setResult(nextSuspended
+      ? 'Площадка приостановлена и скрыта из каталога. Текущие заказы сохранены.'
+      : 'Площадка возвращена в каталог и снова принимает новые заказы.');
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="platform-view-enter mx-auto max-w-6xl space-y-6">
       <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('admin_platforms')}>
         <ChevronRight className="w-4 h-4 rotate-180" /> Назад к списку
       </button>
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl ${item.logo}`}>{item.name.charAt(0)}</div>
-          <div>
-            <h1 className="font-display text-2xl font-bold text-[#0b3558] flex flex-wrap items-center gap-3">
-              {item.name}
-              <Badge color={status === 'Принята' || status === 'Активен' ? 'green' : status === 'На проверке' ? 'blue' : 'amber'}>{status}</Badge>
-            </h1>
-            <p className="text-sm text-[#476788] mt-1">{item.type} · {item.theme} · {item.region} · Паблишер P-017</p>
+
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
+          <div className="platform-logo-motion flex h-16 w-16 flex-none flex-col items-center justify-center rounded-2xl border border-[#d4e0ed] bg-white shadow-sm" aria-label="Логотип РБК">
+            <span className="flex h-4 items-end gap-0.5" aria-hidden="true">
+              <span className="h-2.5 w-1.5 rounded-sm bg-[#f5a623]" />
+              <span className="h-3.5 w-1.5 rounded-sm bg-[#4dbb73]" />
+              <span className="h-4 w-1.5 rounded-sm bg-[#28a8df]" />
+              <span className="h-3 w-1.5 rounded-sm bg-[#405de6]" />
+            </span>
+            <span className="mt-1 text-xs font-bold leading-none text-[#0b3558]">РБК</span>
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h1 className="font-display text-2xl font-bold text-[#0b3558]">{item.name}</h1>
+              <Badge
+                key={displayStatus}
+                color={displayStatus === 'Активна' ? 'green' : displayStatus === 'На проверке' ? 'blue' : displayStatus === 'Приостановлена' ? 'gray' : 'amber'}
+                className="platform-status-pop"
+              >
+                {displayStatus}
+              </Badge>
+              <Badge color="blue">Проверено</Badge>
+              <Badge color="blue">Маркировка</Badge>
+              <Badge color="green">Реквизиты проверены</Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#476788]">
+              <span>{item.type} · {item.theme} · Федеральные · Паблишер P-017</span>
+              <span className="hidden text-[#9bb6d3] sm:inline">·</span>
+              <a className="inline-flex items-center gap-1 font-medium text-[#006cff] hover:underline" href="https://invest.rbc.ru" target="_blank" rel="noreferrer">
+                invest.rbc.ru <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
           </div>
         </div>
-        <Button variant="secondary" onClick={suspendPlatform}>Приостановить площадку</Button>
+        <Button variant="secondary" onClick={togglePlatformStatus}>
+          {isSuspended ? 'Вернуть в каталог' : 'Приостановить'}
+        </Button>
       </div>
 
-      <div className="flex flex-wrap justify-start gap-2">
-        {item.tags.map(tag => <Badge key={tag} color="blue">{tag}</Badge>)}
-        <Badge color="green">реквизиты проверены</Badge>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Цена</div><div className="mt-2 text-xl font-semibold">{formatMoney(item.price)}</div></Card>
-        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Срок публикации</div><div className="mt-2 text-xl font-semibold">{item.deadline}</div></Card>
-        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Хранение</div><div className="mt-2 text-xl font-semibold">{item.storage}</div></Card>
-        <Card className="p-5"><div className="text-xs text-[#476788] uppercase flex items-center gap-1">Медиалогия <Info className="w-3.5 h-3.5" /></div><div className="mt-2 text-xl font-semibold">#5</div><div className="text-xs text-[#476788] mt-1">общий рейтинг</div></Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-6 lg:col-span-2">
-          <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Метрики и требования</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div><div className="text-[#476788]">Посещаемость</div><div className="font-medium text-[#0b3558]">{item.reach}</div></div>
-            <div><div className="text-[#476788]">Агрегаторы</div><div className="font-medium text-[#0b3558]">{item.aggregators.join(', ')}</div></div>
-            <div><div className="text-[#476788]">Доступные форматы</div><div className="font-medium text-[#0b3558]">Статья, новость, интервью, нативная интеграция</div></div>
-            <div><div className="text-[#476788]">SEO-параметры</div><div className="font-medium text-[#0b3558]">Индексация, dofollow по согласованию, Google News</div></div>
-          </div>
-          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4 text-sm text-[#476788]">
-            Не принимаются запрещенные тематики, материалы без рекламодателя, внешние контакты в тексте и обещания гарантированного дохода.
-          </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '80ms' }}>
+          <div className="text-xs uppercase text-[#476788]">Посещаемость в день</div>
+          <div className="mt-2 text-xl font-semibold text-[#0b3558]">82 тыс.</div>
+          <a className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#006cff] hover:underline" href="https://metrika.yandex.ru/dashboard?id=12345678" target="_blank" rel="noreferrer">
+            Яндекс Метрика <ExternalLink className="h-3 w-3" />
+          </a>
         </Card>
-        <Card className="p-6">
-          <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Администрирование</h2>
-          <div className="space-y-3 text-sm">
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '120ms' }}><div className="text-xs uppercase text-[#476788]">Срок публикации</div><div className="mt-2 text-xl font-semibold text-[#0b3558]">до 2 дней</div></Card>
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '160ms' }}><div className="text-xs uppercase text-[#476788]">Хранение</div><div className="mt-2 text-xl font-semibold text-[#0b3558]">2 года</div></Card>
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '200ms' }}><div className="flex items-center gap-1 text-xs uppercase text-[#476788]">Медиалогия <Info className="h-3.5 w-3.5" /></div><div className="mt-2 text-xl font-semibold text-[#0b3558]">#5</div><div className="mt-1 text-xs text-[#476788]">общий рейтинг</div></Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <Card className="platform-section-motion overflow-hidden">
+            <div className="flex flex-col gap-2 border-b border-[#d4e0ed] bg-[#f8f9fb] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-display text-base font-bold text-[#0b3558]">Форматы и цены</h2>
+                <p className="mt-1 text-xs text-[#476788]">Сезонная скидка 10% действует до 31 августа</p>
+              </div>
+              <Badge color="green">Коэффициент сезона ×1,0</Badge>
+            </div>
+            <div className="divide-y divide-[#d4e0ed]">
+              {[
+                { name: 'Статья', deadline: 'до 2 дней', basePrice: '150 000 ₽', price: '135 000 ₽' },
+                { name: 'Новость', deadline: 'до 1 дня', basePrice: '85 000 ₽', price: '76 500 ₽' },
+              ].map((format) => (
+                <div key={format.name} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-6 py-4">
+                  <div>
+                    <div className="text-sm font-semibold text-[#0b3558]">{format.name}</div>
+                    <div className="mt-1 text-xs text-[#476788]">Публикация {format.deadline}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-[#7890aa] line-through">{format.basePrice}</div>
+                    <div className="mt-0.5 text-base font-semibold text-[#0b3558]">{format.price}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="platform-section-motion p-6">
+            <h2 className="font-display text-base font-bold text-[#0b3558]">Требования</h2>
+            <p className="mt-3 text-sm leading-6 text-[#476788]">
+              Площадка принимает материалы о финансах, бизнесе и технологиях. Редакция может изменить заголовок и структуру текста без искажения смысла. Допускается до двух внешних ссылок, изображения обязательны. Не принимаются запрещенные тематики и обещания гарантированного дохода.
+            </p>
+            <div className="mt-5 grid gap-5 border-t border-[#d4e0ed] pt-5 sm:grid-cols-2 sm:gap-0">
+              <div className="flex min-w-0 items-center gap-3 sm:pr-5">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e7f1ff] text-[#006cff]"><Megaphone className="h-5 w-5" /></span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase leading-none text-[#6f88a3]">Подходит для целей</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {['Пиар', 'SEO'].map((goal) => <span key={goal} className="rounded-full bg-[#e7f1ff] px-3 py-1 text-sm font-semibold text-[#075cc8]">{goal}</span>)}
+                  </div>
+                </div>
+              </div>
+              <div className="flex min-w-0 items-center gap-3 border-t border-[#d4e0ed] pt-5 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ebf8f1] text-[#16834d]"><Newspaper className="h-5 w-5" /></span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase leading-none text-[#6f88a3]">Новостные агрегаторы</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {['Google News', 'Дзен'].map((aggregator) => <span key={aggregator} className="rounded-full bg-[#ebf8f1] px-3 py-1 text-sm font-semibold text-[#146b43]">{aggregator}</span>)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <Card className="platform-section-motion h-fit p-6">
+          <h2 className="font-display text-base font-bold text-[#0b3558]">Администрирование</h2>
+          <p className="mt-2 text-sm leading-6 text-[#476788]">Управление площадкой и связанными сущностями без изменения коммерческой карточки.</p>
+          <div className="mt-5 space-y-3 text-sm">
             {[
               ['Паблишер', 'Редакция РБК Инвестиции'],
               ['Статус реквизитов', 'проверены'],
@@ -6385,15 +8663,47 @@ const AdminPlatformDetailView = ({ navigate, selection }) => {
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4">
                 <span className="text-[#476788]">{label}</span>
-                <span className="font-medium text-[#0b3558] text-right">{value}</span>
+                <span className="text-right font-medium text-[#0b3558]">{value}</span>
               </div>
             ))}
           </div>
-          <Button variant="secondary" className="w-full mt-5" onClick={() => navigate('admin_users')}>Открыть паблишера</Button>
-          <Button variant="secondary" className="w-full mt-3" onClick={() => navigate('admin_orders')}>Заказы площадки</Button>
+          <Button variant="secondary" className="mt-5 w-full" onClick={() => navigate('admin_users')}>Открыть паблишера</Button>
+          <Button variant="secondary" className="mt-3 w-full" onClick={() => navigate('admin_orders')}>Заказы площадки</Button>
           <div className="mt-4"><ActionResult text={result} /></div>
         </Card>
       </div>
+
+      <Card className="platform-section-motion overflow-hidden">
+        <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-lg font-bold text-[#0b3558]">Публикации на площадке</h2>
+            <p className="mt-1 text-sm text-[#476788]">Заказы и размещения, связанные с РБК Инвестиции</p>
+          </div>
+          <Badge color="blue">{platformPublications.length} заказа</Badge>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] divide-y divide-[#d4e0ed]">
+            <thead className="bg-[#f8f9fb]">
+              <tr>
+                {['Заказ', 'Материал', 'Формат', 'Дата', 'Статус'].map((head) => (
+                  <th key={head} className="px-6 py-3 text-left text-xs font-medium uppercase text-[#476788]">{head}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#d4e0ed] bg-white">
+              {platformPublications.map((order) => (
+                <tr key={order.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => navigate('admin_order_detail')}>
+                  <td className="px-6 py-4 text-sm font-semibold text-[#006bff]">#{order.id}</td>
+                  <td className="max-w-[340px] px-6 py-4 text-sm font-medium text-[#0b3558]"><span className="line-clamp-2">{order.material}</span></td>
+                  <td className="px-6 py-4 text-sm text-[#476788]">{order.format.replace('СМИ (', '').replace(')', '')}</td>
+                  <td className="px-6 py-4 text-sm tabular-nums text-[#476788]">{order.date}</td>
+                  <td className="px-6 py-4"><Badge color={order.statusColor}>{order.status}</Badge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 };
@@ -6898,7 +9208,7 @@ const AdminUserDetailView = ({ navigate, selection }) => {
           <div className="space-y-3">
             {[
               ['РБК Инвестиции', 'СМИ', 'Активна', '2,5 млн/мес', 'Статья, новость', '150 000 ₽'],
-              ['РБК Телеграм', 'ТГ-канал', 'На проверке', '210 тыс. подписчиков', 'Нативный пост', '60 000 ₽'],
+              ['РБК Телеграм', 'ТГ-канал', 'На проверке', '210 тыс. подписчиков', 'Пост', '60 000 ₽'],
               ['РБК Бизнес ВК', 'Паблик ВК', 'Требуются правки', '480 тыс. подписчиков', 'Пост, карточки', '85 000 ₽'],
             ].map(([name, type, status, metric, formats, price]) => (
               <button key={name} type="button" onClick={() => navigate('admin_platform_detail')} className="w-full rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-left transition-colors hover:border-[#006bff] hover:bg-[#e6f0ff] focus:outline-none focus:ring-2 focus:ring-[#006bff]">
@@ -7053,6 +9363,10 @@ export default function App() {
 
   // Состояние админки
   const [adminView, setAdminView] = useState('admin_dashboard');
+  const [publisherApplications, setPublisherApplications] = useState(initialPublisherApplications);
+  const [selectedPublisherApplicationId, setSelectedPublisherApplicationId] = useState(initialPublisherApplications[0].id);
+  const [informerItems, setInformerItems] = useState(initialInformerItems);
+  const [adminNavOpenGroup, setAdminNavOpenGroup] = useState('participants');
 
   const toggleFavoritePlatform = (id) => {
     setFavoritePlatforms((current) =>
@@ -7082,22 +9396,61 @@ export default function App() {
     { id: 'pub_settings', label: 'Настройки', icon: Settings },
   ];
 
-  const adminNav = [
+  const adminPrimaryNav = [
     { id: 'admin_dashboard', label: 'Панель', icon: LayoutDashboard },
     { id: 'admin_moderation', label: 'Модерация', icon: ShieldCheck },
     { id: 'admin_orders', label: 'Заказы', icon: Briefcase },
-    { id: 'admin_users', label: 'Пользователи', icon: Settings },
-    { id: 'admin_advertisers', label: 'Рекламодатели', icon: Briefcase },
-    { id: 'admin_platforms', label: 'Площадки', icon: Store },
-    { id: 'admin_balances', label: 'Балансы', icon: CreditCard },
-    { id: 'admin_operations', label: 'Операции', icon: Download },
-    { id: 'admin_complaints', label: 'Жалобы', icon: AlertCircle },
-    { id: 'admin_payouts', label: 'Выплаты', icon: Download },
-    { id: 'admin_support', label: 'Поддержка', icon: MessageSquare },
-    { id: 'admin_documents', label: 'Документы', icon: FileText },
-    { id: 'admin_audit', label: 'Аудит', icon: ShieldCheck },
-    { id: 'admin_settings', label: 'Настройки', icon: Settings },
+    { id: 'admin_publisher_applications', label: 'Заявки паблишеров', icon: Store },
   ];
+  const adminNavGroups = [
+    {
+      id: 'participants',
+      label: 'Участники',
+      icon: Settings,
+      items: [
+        { id: 'admin_users', label: 'Пользователи', icon: Settings },
+        { id: 'admin_advertisers', label: 'Рекламодатели', icon: Briefcase },
+        { id: 'admin_platforms', label: 'Площадки', icon: Store },
+      ],
+    },
+    {
+      id: 'finance',
+      label: 'Финансы',
+      icon: CreditCard,
+      items: [
+        { id: 'admin_balances', label: 'Балансы', icon: CreditCard },
+        { id: 'admin_operations', label: 'Операции', icon: Download },
+        { id: 'admin_payouts', label: 'Выплаты', icon: Download },
+        { id: 'admin_documents', label: 'Документы', icon: FileText },
+      ],
+    },
+    {
+      id: 'requests',
+      label: 'Обращения',
+      icon: MessageSquare,
+      items: [
+        { id: 'admin_complaints', label: 'Жалобы', icon: AlertCircle },
+        { id: 'admin_support', label: 'Поддержка', icon: MessageSquare },
+      ],
+    },
+    {
+      id: 'system',
+      label: 'Система',
+      icon: Settings,
+      items: [
+        { id: 'admin_informer', label: 'Информер', icon: Bell },
+        { id: 'admin_audit', label: 'Аудит', icon: ShieldCheck },
+        { id: 'admin_settings', label: 'Настройки', icon: Settings },
+      ],
+    },
+  ];
+  const adminNav = [...adminPrimaryNav, ...adminNavGroups.flatMap((group) => group.items)];
+
+  useEffect(() => {
+    if (globalMode !== 'admin') return;
+    const activeGroup = adminNavGroups.find((group) => group.items.some((item) => item.id === adminView));
+    if (activeGroup) setAdminNavOpenGroup(activeGroup.id);
+  }, [adminView, globalMode]);
 
   // Логика маршрутизации
   if (globalMode === 'landing') {
@@ -7112,6 +9465,7 @@ export default function App() {
   const notifications = isAdmin
     ? [
         ['Новый материал на модерации', 'Материал #M-1052 ожидает проверки', 'admin_moderation', 'blue'],
+        ['Новая заявка паблишера', 'Investor.ru ожидает ручной проверки', 'admin_publisher_applications', 'blue'],
         ['Тикет с высоким приоритетом', 'Паблишер РБК Инвестиции ждет ответ по выплате', 'admin_support', 'red'],
         ['Выплата ожидает подтверждения', 'W-112 · 235 000 ₽ на выводе', 'admin_payouts', 'amber'],
       ]
@@ -7133,6 +9487,7 @@ export default function App() {
   const parentViewByDetail = {
     project_detail: 'projects',
     material_detail: 'materials',
+    material_edit: 'materials',
     create_material: 'materials',
     order_detail: 'orders',
     order_pending_detail: 'orders',
@@ -7146,6 +9501,7 @@ export default function App() {
     admin_moderation_detail: 'admin_moderation',
     admin_order_detail: 'admin_orders',
     admin_order_chat: 'admin_orders',
+    admin_publisher_application_detail: 'admin_publisher_applications',
     admin_user_detail: 'admin_users',
     admin_advertiser_detail: 'admin_advertisers',
     admin_platform_detail: 'admin_platforms',
@@ -7169,6 +9525,18 @@ export default function App() {
     const row = mockAdminSections.admin_orders.rows.find((orderRow) => orderRow[0] === orderId) || mockAdminSections.admin_orders.rows[0];
     setAdminSelection({ section: 'admin_orders', row });
     setAdminView('admin_order_detail');
+  };
+  const openPublisherApplication = (applicationId) => {
+    setSelectedPublisherApplicationId(applicationId);
+    setAdminView('admin_publisher_application_detail');
+  };
+  const updatePublisherApplication = (applicationId, patch) => {
+    setPublisherApplications((items) => items.map((item) => item.id === applicationId ? { ...item, ...patch } : item));
+  };
+  const createPublisherApplication = (application) => {
+    setPublisherApplications((items) => [application, ...items]);
+    setSelectedPublisherApplicationId(application.id);
+    setAdminView('admin_publisher_application_detail');
   };
   const openProject = (projectId) => {
     setSelectedProjectId(projectId);
@@ -7235,6 +9603,9 @@ export default function App() {
       setProjects((items) => items.map((project) => project.id === material.projectId ? { ...project, updatedAt: '23.07.2026' } : project));
     }
   };
+  const updateMaterial = (materialId, patch) => {
+    setClientMaterials((items) => items.map((material) => material.id === materialId ? { ...material, ...patch } : material));
+  };
   const changeMaterialProject = (materialId, projectId) => {
     setClientMaterials((items) => items.map((material) => material.id === materialId ? { ...material, projectId } : material));
   };
@@ -7270,11 +9641,12 @@ export default function App() {
   const renderContent = () => {
     if (isClient) {
       switch (clientView) {
-        case 'dashboard': return <ClientDashboardView navigate={setClientView} />;
+        case 'dashboard': return <ClientDashboardView navigate={setClientView} informerItems={informerItems} />;
         case 'projects': return <ClientProjectsView projects={projects} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openProject={openProject} onCreateProject={createProject} />;
         case 'project_detail': return <ClientProjectDetailView project={projects.find((project) => project.id === selectedProjectId)} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openMaterial={openMaterial} openOrder={openOrder} onAddMaterial={startCreateMaterial} onToggleStatus={toggleProjectStatus} onDelete={deleteProject} />;
         case 'materials': return <ClientMaterialsView navigate={setClientView} projects={projects} materials={clientMaterials} openProject={openProject} openMaterial={openMaterial} startCreateMaterial={startCreateMaterial} />;
         case 'material_detail': return <ClientMaterialDetailView navigate={setClientView} material={clientMaterials.find((material) => material.id === selectedMaterialId)} projects={projects} openProject={openProject} onChangeProject={changeMaterialProject} />;
+        case 'material_edit': return <ClientEditMaterialView navigate={setClientView} material={clientMaterials.find((material) => material.id === selectedMaterialId)} projects={projects} onUpdateMaterial={updateMaterial} />;
         case 'create_material': return <ClientCreateMaterialView navigate={setClientView} projects={projects} defaultProjectId={materialProjectPreset} onCreateMaterial={createMaterial} />;
         case 'advertisers': return <ClientAdvertisersView navigate={setClientView} />;
         case 'advertiser_new': return <ClientAdvertiserNewView navigate={setClientView} />;
@@ -7333,12 +9705,14 @@ export default function App() {
       }
     } else {
       switch (adminView) {
-        case 'admin_dashboard': return <AdminDashboardView navigate={setAdminView} />;
+        case 'admin_dashboard': return <AdminDashboardView navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_moderation': return <AdminWorklistView section="admin_moderation" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_moderation_detail': return <AdminModerationDetailView navigate={setAdminView} selection={adminSelection} onOpenPublisher={openAdminPublisherProfile} />;
         case 'admin_orders': return <AdminWorklistView section="admin_orders" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_order_detail': return <AdminOrderDetailView navigate={setAdminView} selection={adminSelection} />;
         case 'admin_order_chat': return <OrderChatView navigate={setAdminView} role="admin" />;
+        case 'admin_publisher_applications': return <AdminPublisherApplicationsView applications={publisherApplications} onOpenApplication={openPublisherApplication} onCreateApplication={createPublisherApplication} />;
+        case 'admin_publisher_application_detail': return <AdminPublisherApplicationDetailView application={publisherApplications.find((application) => application.id === selectedPublisherApplicationId)} navigate={setAdminView} onUpdateApplication={updatePublisherApplication} />;
         case 'admin_users': return <AdminWorklistView section="admin_users" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_user_detail': return <AdminUserDetailView navigate={setAdminView} selection={adminSelection} />;
         case 'admin_advertisers': return <AdminWorklistView section="admin_advertisers" navigate={setAdminView} onSelect={openAdminDetail} />;
@@ -7356,6 +9730,7 @@ export default function App() {
         case 'admin_ticket_detail': return <AdminTicketDetailView navigate={setAdminView} selection={adminSelection} />;
         case 'admin_documents': return <AdminWorklistView section="admin_documents" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_document_detail': return <AdminEntityDetailView navigate={setAdminView} type="document" selection={adminSelection} />;
+        case 'admin_informer': return <AdminInformerView items={informerItems} onChangeItems={setInformerItems} />;
         case 'admin_audit': return <AdminWorklistView section="admin_audit" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_audit_detail': return <AdminEntityDetailView navigate={setAdminView} type="audit" selection={adminSelection} />;
         case 'admin_settings': return <AdminSettingsView />;
@@ -7380,27 +9755,65 @@ export default function App() {
         
         <div className="p-4 flex-1 overflow-y-auto">
           <div className="space-y-1">
-            {navItems.map((item) => {
+            {(isAdmin ? adminPrimaryNav : navItems).map((item) => {
               const Icon = item.icon;
               const isActive = activeNavView === item.id;
-              
-              let activeClass = '';
-              let inactiveClass = '';
-              
-              activeClass = 'bg-[#f0f3f8] text-[#0b3558] font-medium shadow-[inset_0_0_0_1px_rgba(0,107,255,0.18)]';
-              inactiveClass = 'hover:bg-[#f8f9fb] hover:text-[#0b3558]';
 
               return (
                 <button
                   key={item.id}
                   onClick={() => setView(item.id)}
-                  className={`w-full flex items-center px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive ? activeClass : inactiveClass}`}
+                  className={`w-full flex items-center px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive ? 'bg-[#f0f3f8] text-[#0b3558] font-medium shadow-[inset_0_0_0_1px_rgba(0,107,255,0.18)]' : 'hover:bg-[#f8f9fb] hover:text-[#0b3558]'}`}
                 >
                   <Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? 'text-[#006bff]' : 'text-[#476788]'}`} />
                   {item.label}
                 </button>
               );
             })}
+            {isAdmin && (
+              <div className="space-y-1 pt-2">
+                {adminNavGroups.map((group) => {
+                  const GroupIcon = group.icon;
+                  const hasActiveItem = group.items.some((item) => item.id === activeNavView);
+                  const isOpen = adminNavOpenGroup === group.id;
+                  return (
+                    <div key={group.id}>
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() => setAdminNavOpenGroup((current) => current === group.id ? null : group.id)}
+                        className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm transition-colors ${hasActiveItem ? 'bg-[#f0f3f8] font-medium text-[#0b3558]' : 'hover:bg-[#f8f9fb] hover:text-[#0b3558]'}`}
+                      >
+                        <GroupIcon className={`mr-3 h-5 w-5 flex-shrink-0 ${hasActiveItem ? 'text-[#006bff]' : 'text-[#476788]'}`} />
+                        <span className="flex-1 text-left">{group.label}</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                      </button>
+                      {isOpen && (
+                        <div className="ml-5 mt-1 space-y-1 border-l border-[#d4e0ed] pl-2">
+                          {group.items.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = activeNavView === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => {
+                                  setAdminNavOpenGroup(group.id);
+                                  setView(item.id);
+                                }}
+                                className={`flex w-full items-center rounded-lg px-3 py-2 text-sm transition-colors ${isActive ? 'bg-[#eef5ff] font-medium text-[#0b3558]' : 'hover:bg-[#f8f9fb] hover:text-[#0b3558]'}`}
+                              >
+                                <Icon className={`mr-2.5 h-4 w-4 flex-shrink-0 ${isActive ? 'text-[#006bff]' : 'text-[#6b86a4]'}`} />
+                                <span className="truncate">{item.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
         

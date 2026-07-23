@@ -98,6 +98,72 @@ textarea {
   animation: ui-pop 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.platform-view-enter {
+  animation: platform-view-enter 440ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.platform-logo-motion {
+  animation: platform-logo-enter 520ms 60ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 240ms ease;
+}
+
+.platform-logo-motion:hover {
+  transform: translateY(-2px) rotate(-1deg);
+  box-shadow: 0 14px 32px -18px rgba(11, 53, 88, 0.45);
+}
+
+.platform-card-motion {
+  animation: platform-card-enter 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease, box-shadow 220ms ease;
+}
+
+.platform-card-motion:hover {
+  transform: translateY(-2px);
+  border-color: #b8cbe0;
+  box-shadow: 0 18px 34px -24px rgba(11, 53, 88, 0.38);
+}
+
+.platform-section-motion {
+  animation: platform-card-enter 540ms 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.platform-status-pop {
+  animation: ui-pop 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes platform-view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes platform-logo-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes platform-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .premium-shadow {
   box-shadow: 0 10px 30px -10px rgba(0, 55, 152, 0.08), 0 4px 12px -4px rgba(0, 55, 152, 0.03);
 }
@@ -219,10 +285,29 @@ textarea {
   overflow: hidden;
 }
 
+.ui-collapsible[data-open="true"] > .ui-collapsible-inner {
+  overflow: visible;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ui-enter,
-  .ui-pop {
+  .ui-pop,
+  .platform-view-enter,
+  .platform-logo-motion,
+  .platform-card-motion,
+  .platform-section-motion,
+  .platform-status-pop {
     animation: none;
+  }
+
+  .platform-logo-motion,
+  .platform-card-motion {
+    transition: none;
+  }
+
+  .platform-logo-motion:hover,
+  .platform-card-motion:hover {
+    transform: none;
   }
 
   .ui-collapsible {
