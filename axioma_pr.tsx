@@ -17,6 +17,7 @@ import {
   Download,
   MessageSquare,
   Clock,
+  CalendarDays,
   Check,
   CheckCircle2,
   ExternalLink,
@@ -52,7 +53,7 @@ const mockMaterials = [
   { id: 4, name: 'Кейс внедрения системы управления клиентами', advertiser: 'ТехКорп', type: 'Кейс', status: 'Используется в заказах', statusColor: 'indigo', placements: 5, date: '10.10.2023', projectId: 3 },
   { id: 5, name: 'Заметка о новом продукте', advertiser: 'Урбан Групп', type: 'Новость', status: 'Черновик', statusColor: 'gray', placements: 0, date: '17.10.2023', projectId: null },
   { id: 6, name: 'Материал с запрещенными обещаниями', advertiser: 'ТехКорп', type: 'Статья', status: 'Отклонен', statusColor: 'red', placements: 0, date: '11.10.2023', projectId: null },
-  { id: 7, name: 'Архивная публикация про конференцию', advertiser: 'ООО "Финтех Решения"', type: 'Пресс-релиз', status: 'Архивирован', statusColor: 'gray', placements: 2, date: '01.09.2023', projectId: 3 },
+  { id: 7, name: 'Публикация про отраслевую конференцию', advertiser: 'ООО "Финтех Решения"', type: 'Пресс-релиз', status: 'Принят в систему', statusColor: 'green', placements: 2, date: '01.09.2023', projectId: 3 },
 ];
 
 const initialProjects = [
@@ -127,9 +128,12 @@ const mockAdvertisers = [
 ];
 
 const mockReports = [
-  { order: '#1045', material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', link: 'invest.rbc.ru/news/652a9f', status: 'Ожидает приемки', color: 'indigo', projectId: 1 },
-  { order: '#1048', material: 'Пресс-релиз: Запуск новой платформы', platform: 'Технологии сегодня', link: 'будет после публикации', status: 'В работе', color: 'blue', projectId: 1 },
-  { order: '#1052', material: 'Кейс внедрения системы управления клиентами', platform: 'VC.ru', link: 'vc.ru/services/1052', status: 'Завершено', color: 'gray', projectId: 3 },
+  { order: '#1045', materialId: 1, material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', date: '18.10.2023', link: 'https://invest.rbc.ru/news/652a9f', price: 150000, status: 'Ожидает приемки', color: 'indigo', projectId: 1 },
+  { order: '#1046', materialId: 1, material: 'Пресс-релиз: Запуск новой платформы', platform: 'investor.ru', date: '17.10.2023', link: 'https://investor.ru/news/axioma-analytics', price: 85000, status: 'Завершено', color: 'gray', projectId: 1 },
+  { order: '#1047', materialId: 3, material: 'Интервью с генеральным директором', platform: 'Код Дурова', date: '16.10.2023', link: 'https://kod.ru/axioma-interview', price: 60000, status: 'Завершено', color: 'gray', projectId: 1 },
+  { order: '#1048', materialId: 1, material: 'Пресс-релиз: Запуск новой платформы', platform: 'Технологии сегодня', date: null, link: null, price: 45000, status: 'В работе', color: 'blue', projectId: 1 },
+  { order: '#1052', materialId: 4, material: 'Кейс внедрения системы управления клиентами', platform: 'VC.ru', date: '10.10.2023', link: 'https://vc.ru/services/1052', price: 80000, status: 'Завершено', color: 'gray', projectId: 3 },
+  { order: '#1056', materialId: 2, material: 'Обзор рынка недвижимости за третий квартал', platform: 'Бизнес Среда', date: '05.10.2023', link: 'https://business-sreda.ru/research/q3', price: 146000, status: 'Завершено', color: 'gray', projectId: 2 },
 ];
 
 const mockAdminQueue = [
@@ -138,7 +142,7 @@ const mockAdminQueue = [
   { id: '#C-019', object: 'Жалоба по заказу #1045', type: 'Спор', risk: 'Маркировка', status: 'Решить', color: 'red' },
 ];
 
-const materialStates = ['Черновик', 'На модерации', 'Требуются правки', 'Отклонен', 'Принят в систему', 'Используется в заказах', 'Архивирован'];
+const materialStates = ['Черновик', 'На модерации', 'Требуются правки', 'Отклонен', 'Принят в систему', 'Используется в заказах'];
 const orderStates = ['Заявка создана', 'Средства заморожены', 'Площадка рассматривает', 'Площадка приняла', 'Площадка запросила правки', 'Маркировка подтверждена', 'Публикация загружена', 'Ожидает приемки', 'Оплачено', 'Завершено', 'Отклонено', 'Автоматически отозвано'];
 const complaintStates = ['Черновик', 'Открыта', 'На рассмотрении', 'Нужны доказательства', 'Решена в пользу заказчика', 'Решена в пользу паблишера', 'Удержание применено'];
 
@@ -265,6 +269,28 @@ const mockAdminSections = {
 
 const formatMoney = (amount) => {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(amount);
+};
+
+const parseReportDate = (value) => {
+  if (!value) return null;
+  const [day, month, year] = value.split('.').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatInputDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatReportPeriod = (from, to) => {
+  const format = (value) => {
+    if (!value) return '';
+    const [year, month, day] = value.split('-');
+    return `${day}.${month}.${year}`;
+  };
+  return `${format(from)} — ${format(to)}`;
 };
 
 
@@ -510,11 +536,102 @@ const CustomSelect = ({ options, defaultValue = undefined, value: controlledValu
                 event.stopPropagation();
                 selectOption(option);
               }}
+              onClick={() => selectOption(option)}
             >
               <span className="truncate">{option}</span>
               {selectedValue === option && <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const CheckboxMultiSelect = ({ options, value, onChange, placeholder = 'Выберите значения', className = '' }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef(null);
+  const selectIdRef = useRef(`checkbox-select-${Math.random().toString(36).slice(2)}`);
+  const selectedOptions = options.filter((option) => value.includes(option.value));
+  const listboxId = `${selectIdRef.current}-listbox`;
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const closeOnOutsideClick = (event) => {
+      if (selectRef.current && !selectRef.current.contains(event.target)) setIsOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    const closeOnOtherSelectOpen = (event) => {
+      if (event.detail !== selectIdRef.current) setIsOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('axioma-select-open', closeOnOtherSelectOpen);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('axioma-select-open', closeOnOtherSelectOpen);
+    };
+  }, [isOpen]);
+
+  const toggleOpen = () => {
+    if (!isOpen) window.dispatchEvent(new CustomEvent('axioma-select-open', { detail: selectIdRef.current }));
+    setIsOpen((current) => !current);
+  };
+  const toggleOption = (optionValue) => {
+    onChange(value.includes(optionValue)
+      ? value.filter((item) => item !== optionValue)
+      : [...value, optionValue]);
+  };
+
+  return (
+    <div ref={selectRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-lg border border-[#476788] bg-white px-4 py-2.5 text-left text-sm text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+        onClick={toggleOpen}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-controls={listboxId}
+      >
+        <span className={`min-w-0 truncate ${selectedOptions.length ? 'font-medium' : 'text-[#7d96af]'}`}>
+          {selectedOptions.length
+            ? selectedOptions.length === 1
+              ? selectedOptions[0].label
+              : `Выбрано рекламодателей: ${selectedOptions.length}`
+            : placeholder}
+        </span>
+        <ChevronRight className={`h-4 w-4 flex-none text-[#476788] transition-transform ${isOpen ? '-rotate-90' : 'rotate-90'}`} />
+      </button>
+      {isOpen && (
+        <div id={listboxId} role="listbox" aria-multiselectable="true" className="ui-enter absolute left-0 right-0 top-full z-[70] mt-2 max-h-72 overflow-y-auto rounded-2xl border border-[#d4e0ed] bg-white p-1.5 shadow-[rgba(11,53,88,0.08)_0px_10px_24px,rgba(11,53,88,0.10)_0px_24px_60px]">
+          {options.map((option) => {
+            const selected = value.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${selected ? 'bg-[#e6f0ff]' : 'hover:bg-[#f8f9fb]'}`}
+                onClick={() => toggleOption(option.value)}
+              >
+                <span className={`flex h-5 w-5 flex-none items-center justify-center rounded border ${selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf] bg-white'}`}>
+                  {selected && <Check className="h-3.5 w-3.5" />}
+                </span>
+                <span className="min-w-0">
+                  <span className={`block truncate text-sm font-medium ${selected ? 'text-[#004eba]' : 'text-[#0b3558]'}`}>{option.label}</span>
+                  <span className="mt-0.5 block text-xs text-[#476788]">{option.description}</span>
+                </span>
+              </button>
+            );
+          })}
+          <div className="mt-1 flex items-center justify-between border-t border-[#d4e0ed] px-3 pt-2">
+            <span className="text-xs text-[#476788]">Выбрано: {selectedOptions.length}</span>
+            <button type="button" className="text-xs font-semibold text-[#006bff]" onClick={() => setIsOpen(false)}>Готово</button>
+          </div>
         </div>
       )}
     </div>
@@ -2042,14 +2159,6 @@ const ClientProjectsView = ({ projects, materials, orders, navigate, openProject
     setCreateOpen(false);
   };
 
-  const toggleAdvertiser = (advertiserName) => {
-    setSelectedAdvertisers((current) => (
-      current.includes(advertiserName)
-        ? current.filter((item) => item !== advertiserName)
-        : [...current, advertiserName]
-    ));
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -2136,32 +2245,17 @@ const ClientProjectsView = ({ projects, materials, orders, navigate, openProject
           <fieldset>
             <legend className="text-sm font-medium text-[#476788]">Рекламодатели</legend>
             <p className="mt-1 text-xs text-[#7d96af]">Выберите одного или нескольких рекламодателей проекта.</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {mockAdvertisers.map((item) => {
-                const selected = selectedAdvertisers.includes(item.name);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => toggleAdvertiser(item.name)}
-                    className={`flex min-h-[52px] items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
-                      selected
-                        ? 'border-[#006bff] bg-[#e6f0ff] text-[#004eba]'
-                        : 'border-[#d4e0ed] bg-white text-[#0b3558] hover:border-[#8badcf]'
-                    }`}
-                  >
-                    <span className={`flex h-5 w-5 flex-none items-center justify-center rounded border ${selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf]'}`}>
-                      {selected && <Check className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{item.name}</span>
-                      <span className="mt-0.5 block text-xs text-[#476788]">{item.code} · {item.type}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <CheckboxMultiSelect
+              className="mt-3"
+              value={selectedAdvertisers}
+              onChange={setSelectedAdvertisers}
+              placeholder="Выберите рекламодателей"
+              options={mockAdvertisers.map((item) => ({
+                value: item.name,
+                label: item.name,
+                description: `${item.code} · ${item.type}`,
+              }))}
+            />
           </fieldset>
           <label className="block">
             <span className="text-sm font-medium text-[#476788]">Описание</span>
@@ -2271,11 +2365,11 @@ const ClientProjectDetailView = ({ project, materials, orders, navigate, openMat
           {projectOrders.length ? (
             <div className="divide-y divide-[#d4e0ed]">
               {projectOrders.map((order) => (
-                <button key={order.id} className="grid w-full gap-3 px-6 py-4 text-left hover:bg-[#f8f9fb] sm:grid-cols-[90px_minmax(0,1fr)_180px_150px] sm:items-center" onClick={() => openOrder(order)}>
+                <button key={order.id} className="grid w-full gap-3 px-6 py-4 text-left hover:bg-[#f8f9fb] sm:grid-cols-[90px_minmax(0,1fr)_150px_minmax(220px,auto)] sm:items-center" onClick={() => openOrder(order)}>
                   <div className="text-sm font-semibold text-[#006bff]">#{order.id}</div>
                   <div className="min-w-0"><div className="truncate text-sm font-medium text-[#0b3558]">{order.material}</div><div className="mt-1 text-xs text-[#476788]">{order.platform}</div></div>
                   <div className="text-sm font-semibold tabular-nums text-[#0b3558]">{formatMoney(order.price)}</div>
-                  <Badge color={order.statusColor}>{order.status}</Badge>
+                  <Badge color={order.statusColor} className="w-full max-w-[220px] justify-center justify-self-start">{order.status}</Badge>
                 </button>
               ))}
             </div>
@@ -2618,91 +2712,155 @@ const OrderChatView = ({ navigate, role = 'client' }) => (
   </div>
 );
 
-const ClientReportDetailView = ({ navigate }) => (
-  <div className="space-y-6 max-w-6xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('reports')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К отчетам
-    </button>
-    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчет по размещению</h1>
-        <p className="text-sm text-[#476788] mt-1">Заказ #1045 · РБК Инвестиции · публикация от 18.10.2023</p>
-      </div>
-      <div className="flex flex-wrap gap-2"><Button variant="secondary"><Download className="h-4 w-4" /> Скачать отчет</Button><Button variant="primary">Принять размещение</Button></div>
-    </div>
-
-    <Card className="p-5">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2"><Badge color="indigo">ожидает приемки</Badge><Badge color="green">ссылка загружена</Badge></div>
-          <h2 className="font-display text-lg font-bold text-[#0b3558] mt-3">Публикация готова к проверке</h2>
-          <p className="text-sm text-[#476788] mt-1">Проверьте ссылку, полноту материала и корректность маркировки. После приемки средства будут списаны с холда.</p>
+const ClientReportDetailView = ({ navigate, report, projects, openProject }) => {
+  const currentReport = report || mockReports[0];
+  const project = projects.find((item) => item.id === currentReport.projectId);
+  return (
+    <div className="mx-auto max-w-6xl space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('reports')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К отчетам
+      </button>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчет по размещению</h1>
+          <p className="mt-1 text-sm text-[#476788]">{currentReport.order} · сформирован 23.07.2026</p>
         </div>
-        <Button variant="secondary" onClick={() => navigate('complaint')}>Открыть жалобу</Button>
+        <Button variant="primary"><Download className="h-4 w-4" /> Скачать отчет</Button>
       </div>
-    </Card>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <Card className="p-6 lg:col-span-2">
-        <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Размещение</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          {[
-            ['Материал', 'Пресс-релиз: Запуск новой платформы'],
-            ['Площадка', 'РБК Инвестиции'],
-            ['Формат', 'СМИ · статья'],
-            ['Дата публикации', '18.10.2023'],
-            ['Сумма', formatMoney(150000)],
-            ['Срок хранения', 'минимум 2 года'],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-              <div className="text-xs text-[#476788]">{label}</div>
-              <div className="mt-1 text-sm font-medium text-[#0b3558]">{value}</div>
-            </div>
-          ))}
-          <div className="md:col-span-2 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-            <div className="text-xs text-[#476788]">Ссылка на публикацию</div>
-            <div className="mt-2 flex items-center gap-2 text-sm text-[#004eba] break-all">
-              <ExternalLink className="w-4 h-4 flex-shrink-0" />
-              <span>https://invest.rbc.ru/news/652a9f</span>
-            </div>
-          </div>
-        </div>
-      </Card>
       <Card className="p-6">
-        <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Проверка</h2>
-        <div className="space-y-3">
-          {[
-            ['Ссылка открывается', 'green'],
-            ['Материал опубликован полностью', 'green'],
-            ['Изображения на месте', 'green'],
-            ['Маркировка подтверждена площадкой', 'green'],
-          ].map(([item, color]) => (
-            <div key={item} className="flex items-center gap-2 text-sm text-[#476788]">
-              <CheckCircle2 className={`w-4 h-4 ${color === 'green' ? 'text-emerald-500' : 'text-[#d4e0ed]'}`} />
-              <span>{item}</span>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge color={currentReport.color}>{currentReport.status}</Badge>
+          {project && <ProjectLink project={project} onOpen={openProject} />}
+        </div>
+        <h2 className="mt-4 max-w-5xl break-words font-display text-2xl font-bold leading-tight text-[#0b3558] sm:text-3xl">
+          {currentReport.material}
+        </h2>
+        <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(180px,0.32fr)]">
+          <div className="min-w-0 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+            <div className="text-xs text-[#476788]">Площадка размещения</div>
+            <div className="mt-1 break-words text-sm font-semibold leading-5 text-[#0b3558]">{currentReport.platform}</div>
+          </div>
+          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+            <div className="text-xs text-[#476788]">Дата размещения</div>
+            <div className="mt-1 whitespace-nowrap text-sm font-semibold tabular-nums text-[#0b3558]">{currentReport.date || 'Ожидается'}</div>
+          </div>
+        </div>
+        <div className="mt-5 rounded-lg border border-[#b8d2ff] bg-[#edf4ff] p-4">
+          <div className="text-xs text-[#476788]">Ссылка на размещение</div>
+          {currentReport.link ? (
+            <a className="mt-2 flex items-center gap-2 break-all text-sm font-medium text-[#006bff] hover:text-[#004eba]" href={currentReport.link} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-4 w-4 flex-none" />
+              {currentReport.link}
+            </a>
+          ) : (
+            <div className="mt-2 text-sm text-[#476788]">Ссылка появится после публикации.</div>
+          )}
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-lg font-bold text-[#0b3558]">Текст и изображения материала</h2>
+            <p className="mt-1 text-sm text-[#476788]">Версия, переданная площадке для размещения</p>
+          </div>
+          <Badge color="blue"><ImageIcon className="mr-1.5 h-3.5 w-3.5" /> 3 изображения</Badge>
+        </div>
+        <div className="p-6">
+          <FullMaterialPreview />
         </div>
       </Card>
     </div>
+  );
+};
 
-    <Card className="p-6">
-        <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Файлы отчета</h2>
-	        {[
-	          ['отчет размещения', 'отчет'],
-	          ['версия-материала документ', 'исходный материал'],
-	        ].map(([file, type]) => (
-          <div key={file} className="flex items-center justify-between gap-4 py-3 border-b border-[#d4e0ed]">
-            <div>
-              <div className="text-sm font-medium text-[#0b3558]">{file}</div>
-              <div className="text-xs text-[#476788] mt-0.5">{type}</div>
-            </div>
-            <Download className="w-4 h-4 text-[#a6bbd1]" />
+const ClientProjectReportView = ({ navigate, config, projects, reports, onOpenPlacementReport }) => {
+  const project = projects.find((item) => item.id === config.projectId) || projects[0];
+  const fromDate = config.from ? new Date(`${config.from}T00:00:00`) : null;
+  const toDate = config.to ? new Date(`${config.to}T23:59:59`) : null;
+  const publications = reports.filter((report) => {
+    if (report.projectId !== project?.id || !report.date || !report.link) return false;
+    const date = parseReportDate(report.date);
+    return (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
+  });
+  const materialCount = new Set(publications.map((report) => report.materialId)).size;
+  const platformCount = new Set(publications.map((report) => report.platform)).size;
+  const total = publications.reduce((sum, report) => sum + report.price, 0);
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('reports')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К отчетам
+      </button>
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчет по проекту</h1>
+            <Badge color="green">сформирован</Badge>
           </div>
+          <p className="mt-2 text-sm text-[#476788]">{project?.name} · {formatReportPeriod(config.from, config.to)}</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => navigate('reports')}><CalendarDays className="h-4 w-4" /> Изменить период</Button>
+          <Button variant="secondary"><Download className="h-4 w-4" /> Скачать таблицу</Button>
+          <Button variant="primary"><Download className="h-4 w-4" /> Скачать отчет</Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ['Публикации', publications.length],
+          ['Материалы', materialCount],
+          ['Площадки', platformCount],
+          ['Стоимость размещений', formatMoney(total)],
+        ].map(([label, value]) => (
+          <Card key={label} className="p-5">
+            <div className="text-xs uppercase text-[#476788]">{label}</div>
+            <div className="mt-2 text-2xl font-semibold tabular-nums text-[#0b3558]">{value}</div>
+          </Card>
         ))}
-    </Card>
-  </div>
-);
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-[#d4e0ed] px-6 py-5">
+          <h2 className="font-display text-lg font-bold text-[#0b3558]">Публикации проекта</h2>
+          <p className="mt-1 text-sm text-[#476788]">В выгрузку войдут сведения о размещении, ссылка, текст и изображения каждого материала.</p>
+        </div>
+        {publications.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] divide-y divide-[#d4e0ed]">
+              <thead className="bg-[#f8f9fb]">
+                <tr>
+                  {['Материал', 'Площадка', 'Дата', 'Ссылка', 'Стоимость'].map((label) => (
+                    <th key={label} className="px-6 py-4 text-left text-xs font-medium uppercase text-[#476788]">{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#d4e0ed]">
+                {publications.map((report) => (
+                  <tr key={report.order} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => onOpenPlacementReport(report)}>
+                    <td className="px-6 py-4"><div className="text-sm font-semibold text-[#0b3558]">{report.material}</div><div className="mt-1 text-xs text-[#476788]">{report.order}</div></td>
+                    <td className="px-6 py-4 text-sm text-[#476788]">{report.platform}</td>
+                    <td className="px-6 py-4 text-sm tabular-nums text-[#476788]">{report.date}</td>
+                    <td className="max-w-[260px] px-6 py-4"><div className="truncate text-sm text-[#006bff]">{report.link}</div></td>
+                    <td className="px-6 py-4 text-sm font-semibold tabular-nums text-[#0b3558]">{formatMoney(report.price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-10 text-center">
+            <CalendarDays className="mx-auto h-8 w-8 text-[#a6bbd1]" />
+            <h3 className="mt-3 font-display text-base font-bold text-[#0b3558]">За выбранный период публикаций нет</h3>
+            <p className="mt-1 text-sm text-[#476788]">Измените период или выберите другой проект.</p>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
 
 const ClientBalanceView = ({ navigate }) => (
   <div className="space-y-8">
@@ -2975,13 +3133,27 @@ const ClientMaterialsView = ({ navigate, projects, materials, openProject, openM
 
 const ClientMaterialDetailView = ({ navigate, material, projects, openProject, onChangeProject }) => {
   const [projectName, setProjectName] = useState(projects.find((project) => project.id === material?.projectId)?.name || 'Без проекта');
+  const [pendingProjectName, setPendingProjectName] = useState(null);
+  const [confirmProjectOpen, setConfirmProjectOpen] = useState(false);
   const [result, setResult] = useState('');
   const currentMaterial = material || mockMaterials[0];
   const selectedProject = projects.find((project) => project.name === projectName);
-  const changeProject = (nextName) => {
-    setProjectName(nextName);
-    onChangeProject(currentMaterial.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
+  const requestProjectChange = (nextName) => {
+    if (nextName === projectName) return;
+    setPendingProjectName(nextName);
+    setConfirmProjectOpen(true);
+  };
+  const confirmProjectChange = () => {
+    if (!pendingProjectName) return;
+    setProjectName(pendingProjectName);
+    onChangeProject(currentMaterial.id, pendingProjectName === 'Без проекта' ? null : projects.find((project) => project.name === pendingProjectName)?.id ?? null);
     setResult('Проект материала изменен. Связанные заказы остались в прежних проектах.');
+    setPendingProjectName(null);
+    setConfirmProjectOpen(false);
+  };
+  const cancelProjectChange = () => {
+    setPendingProjectName(null);
+    setConfirmProjectOpen(false);
   };
   return (
   <div className="space-y-6 max-w-5xl mx-auto">
@@ -3010,7 +3182,6 @@ const ClientMaterialDetailView = ({ navigate, material, projects, openProject, o
         <FullMaterialPreview />
         <div className="mt-6 flex flex-wrap gap-3">
           <Button variant="secondary"><Download className="h-4 w-4" /> Скачать документ</Button>
-          <Button variant="ghost">Архивировать</Button>
         </div>
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           При редактировании материал вернется в черновики и станет недоступен для новых размещений до повторной модерации.
@@ -3020,7 +3191,7 @@ const ClientMaterialDetailView = ({ navigate, material, projects, openProject, o
         <Card className="p-6">
           <h3 className="text-base font-semibold text-[#0b3558]">Проект</h3>
           <p className="mt-2 text-sm leading-6 text-[#476788]">Проект задает группировку для новых заказов этого материала.</p>
-          <CustomSelect className="mt-4" value={projectName} onChange={changeProject} options={[...projects.map((project) => project.name), 'Без проекта']} />
+          <CustomSelect className="mt-4" value={projectName} onChange={requestProjectChange} options={[...projects.map((project) => project.name), 'Без проекта']} />
           {result && <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3 text-xs leading-5 text-[#476788]">{result}</div>}
         </Card>
         <Card className="p-6">
@@ -3047,6 +3218,31 @@ const ClientMaterialDetailView = ({ navigate, material, projects, openProject, o
         </Card>
       </div>
     </div>
+    <Modal isOpen={confirmProjectOpen} onClose={cancelProjectChange} title="Изменить проект материала?" className="max-w-lg">
+      <div className="space-y-5">
+        <p className="text-sm leading-6 text-[#476788]">
+          Материал будет перемещен в другой проект. Это повлияет на группировку новых заказов, созданных для этого материала.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+            <div className="text-xs text-[#7d96af]">Текущий проект</div>
+            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{projectName}</div>
+          </div>
+          <ChevronRight className="mx-auto h-5 w-5 rotate-90 text-[#8badcf] sm:rotate-0" />
+          <div className="rounded-lg border border-[#b8d2ff] bg-[#edf4ff] p-4">
+            <div className="text-xs text-[#476788]">Новый проект</div>
+            <div className="mt-1 text-sm font-semibold text-[#004eba]">{pendingProjectName}</div>
+          </div>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+          Уже созданные заказы останутся в прежних проектах. При необходимости их можно перенести отдельно в списке заказов.
+        </div>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="secondary" onClick={cancelProjectChange}>Отмена</Button>
+          <Button variant="primary" onClick={confirmProjectChange}>Изменить проект</Button>
+        </div>
+      </div>
+    </Modal>
   </div>
   );
 };
@@ -3652,18 +3848,56 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
   );
 };
 
-const ClientReportsView = ({ navigate, projects, openProject }) => {
+const ClientReportsView = ({ projects, openProject, onOpenReport, onCreateProjectReport }) => {
   const [projectFilter, setProjectFilter] = useState('Все проекты');
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportProject, setReportProject] = useState(projects[0]?.name || '');
+  const [periodPreset, setPeriodPreset] = useState('Текущий месяц');
+  const [dateFrom, setDateFrom] = useState('2023-10-01');
+  const [dateTo, setDateTo] = useState('2023-10-31');
   const visibleReports = mockReports.filter((report) => {
     if (projectFilter === 'Все проекты') return true;
     if (projectFilter === 'Без проекта') return !report.projectId;
     return projects.find((project) => project.id === report.projectId)?.name === projectFilter;
   });
+  const applyPeriodPreset = (preset) => {
+    setPeriodPreset(preset);
+    const periods = {
+      'Последние 7 дней': ['2023-10-12', '2023-10-18'],
+      'Последние 30 дней': ['2023-09-19', '2023-10-18'],
+      'Текущий месяц': ['2023-10-01', '2023-10-31'],
+      'Прошлый месяц': ['2023-09-01', '2023-09-30'],
+      'За все время': ['2023-01-01', '2023-12-31'],
+    };
+    const nextPeriod = periods[preset];
+    if (nextPeriod) {
+      setDateFrom(nextPeriod[0]);
+      setDateTo(nextPeriod[1]);
+    }
+  };
+  const createProjectReport = () => {
+    const project = projects.find((item) => item.name === reportProject);
+    if (!project || !dateFrom || !dateTo || dateFrom > dateTo) return;
+    onCreateProjectReport({
+      projectId: project.id,
+      from: dateFrom,
+      to: dateTo,
+      label: periodPreset,
+    });
+    setReportOpen(false);
+  };
+
   return (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчеты</h1>
-      <div className="flex gap-3"><Button variant="secondary"><Download className="h-4 w-4" /> Скачать таблицу</Button><Button variant="primary">Сформировать отчет</Button></div>
+      <div>
+        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчеты</h1>
+        <p className="mt-1 text-sm text-[#476788]">Размещения и сводные отчеты по проектам</p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Button variant="secondary"><Download className="h-4 w-4" /> Скачать таблицу</Button>
+        <Button variant="primary" onClick={() => setReportOpen(true)}><CalendarDays className="h-4 w-4" /> Отчет по проекту</Button>
+      </div>
     </div>
     <Card className="p-4">
       <div className="max-w-sm">
@@ -3671,32 +3905,85 @@ const ClientReportsView = ({ navigate, projects, openProject }) => {
       </div>
     </Card>
     <Card className="overflow-hidden">
-      <table className="min-w-full divide-y divide-[#d4e0ed]">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[980px] divide-y divide-[#d4e0ed]">
         <thead className="bg-[#f8f9fb]">
           <tr>
             <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Заказ</th>
             <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Материал</th>
-            <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Площадка</th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Площадка / дата</th>
             <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Ссылка</th>
             <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Статус</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[#d4e0ed]">
           {visibleReports.map(row => (
-            <tr key={row.order} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('report_detail')}>
+            <tr key={row.order} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => onOpenReport(row)}>
               <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">{row.order}</td>
               <td className="px-6 py-4">
-                <div className="text-sm text-[#476788]">{row.material}</div>
+                <div className="text-sm font-medium text-[#0b3558]">{row.material}</div>
                 <div className="mt-1"><ProjectLink project={projects.find((project) => project.id === row.projectId)} onOpen={openProject} /></div>
               </td>
-              <td className="px-6 py-4 text-sm text-[#476788]">{row.platform}</td>
-              <td className="px-6 py-4 text-sm text-[#006bff]">{row.link}</td>
+              <td className="px-6 py-4">
+                <div className="text-sm font-medium text-[#0b3558]">{row.platform}</div>
+                <div className="mt-1 text-xs tabular-nums text-[#476788]">{row.date || 'Дата не указана'}</div>
+              </td>
+              <td className="max-w-[260px] px-6 py-4 text-sm text-[#006bff]"><div className="truncate">{row.link || 'Ожидается'}</div></td>
               <td className="px-6 py-4"><Badge color={row.color}>{row.status}</Badge></td>
             </tr>
           ))}
         </tbody>
       </table>
+      </div>
     </Card>
+
+    <Modal isOpen={reportOpen} onClose={() => setReportOpen(false)} title="Отчет по проекту" className="max-w-2xl">
+      <div className="space-y-5">
+        <div>
+          <label className="text-sm font-medium text-[#476788]">Проект</label>
+          <CustomSelect className="mt-2" value={reportProject} onChange={setReportProject} options={projects.map((project) => project.name)} />
+        </div>
+        <div>
+          <div className="text-sm font-medium text-[#476788]">Период отчета</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {['Последние 7 дней', 'Последние 30 дней', 'Текущий месяц', 'Прошлый месяц', 'За все время'].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => applyPeriodPreset(preset)}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${periodPreset === preset ? 'border-[#006bff] bg-[#e6f0ff] text-[#004eba]' : 'border-[#d4e0ed] bg-white text-[#476788] hover:border-[#8badcf]'}`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Дата начала</span>
+            <div className="relative mt-2">
+              <input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPeriodPreset('Произвольный период'); }} className="min-h-[44px] w-full rounded-lg border border-[#476788] bg-white px-4 py-2.5 pr-10 text-sm text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
+              <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#476788]" />
+            </div>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Дата окончания</span>
+            <div className="relative mt-2">
+              <input type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPeriodPreset('Произвольный период'); }} className="min-h-[44px] w-full rounded-lg border border-[#476788] bg-white px-4 py-2.5 pr-10 text-sm text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
+              <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#476788]" />
+            </div>
+          </label>
+        </div>
+        {dateFrom && dateTo && dateFrom > dateTo && <ActionResult tone="error" text="Дата начала не может быть позже даты окончания." />}
+        <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm leading-6 text-[#476788]">
+          В отчет войдут сводка проекта, публикации за выбранный период, площадки, даты, ссылки, полные тексты и изображения материалов.
+        </div>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setReportOpen(false)}>Отмена</Button>
+          <Button variant="primary" disabled={!reportProject || !dateFrom || !dateTo || dateFrom > dateTo} onClick={createProjectReport}>Сформировать отчет</Button>
+        </div>
+      </div>
+    </Modal>
   </div>
   );
 };
@@ -5362,8 +5649,7 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
       : statusFilter === 'Все статусы'
       || (statusFilter === 'Требует действия' && !String(row[4]).match(/Открыть|Проверено|Завершено|Закрыто/))
       || (statusFilter === 'Завершено' && String(row.join(' ')).match(/Завершено|Закрыто|Выплачено|Проверен/))
-      || (statusFilter === 'В работе' && String(row.join(' ')).match(/ожидает|провер|работ|актив/i))
-      || (statusFilter === 'Архив' && String(row.join(' ')).match(/архив/i));
+      || (statusFilter === 'В работе' && String(row.join(' ')).match(/ожидает|провер|работ|актив/i));
     return matchesQuery && matchesUserType && matchesStatus;
   });
 
@@ -5387,7 +5673,7 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
         <CustomSelect
           options={section === 'admin_users'
             ? ['Все статусы', 'Активен', 'На проверке', 'Заблокирован']
-            : ['Все статусы', 'Требует действия', 'В работе', 'Завершено', 'Архив']}
+            : ['Все статусы', 'Требует действия', 'В работе', 'Завершено']}
           value={statusFilter}
           onChange={setStatusFilter}
         />
@@ -6753,6 +7039,13 @@ export default function App() {
   const [selectedMaterialId, setSelectedMaterialId] = useState(mockMaterials[0].id);
   const [selectedOrderId, setSelectedOrderId] = useState(mockOrdersClient[0].id);
   const [materialProjectPreset, setMaterialProjectPreset] = useState(null);
+  const [selectedReportOrder, setSelectedReportOrder] = useState(mockReports[0].order);
+  const [projectReportConfig, setProjectReportConfig] = useState({
+    projectId: initialProjects[0].id,
+    from: '2023-10-01',
+    to: '2023-10-31',
+    label: 'Текущий месяц',
+  });
 
   // Состояние кабинета паблишера
   const [publisherView, setPublisherView] = useState('pub_dashboard');
@@ -6849,6 +7142,7 @@ export default function App() {
     dispute_detail: 'orders',
     order_chat: 'orders',
     report_detail: 'reports',
+    project_report: 'reports',
     admin_moderation_detail: 'admin_moderation',
     admin_order_detail: 'admin_orders',
     admin_order_chat: 'admin_orders',
@@ -6895,6 +7189,14 @@ export default function App() {
             ? 'order_completed_detail'
             : 'order_detail',
     );
+  };
+  const openPlacementReport = (report) => {
+    setSelectedReportOrder(report.order);
+    setClientView('report_detail');
+  };
+  const openProjectReport = (config) => {
+    setProjectReportConfig(config);
+    setClientView('project_report');
   };
   const startCreateMaterial = (projectId = null) => {
     setMaterialProjectPreset(projectId);
@@ -6987,9 +7289,10 @@ export default function App() {
         case 'complaint': return <ClientComplaintView navigate={setClientView} />;
         case 'dispute_detail': return <DisputeDetailView navigate={setClientView} />;
         case 'order_chat': return <OrderChatView navigate={setClientView} />;
-        case 'report_detail': return <ClientReportDetailView navigate={setClientView} />;
+        case 'report_detail': return <ClientReportDetailView navigate={setClientView} report={mockReports.find((report) => report.order === selectedReportOrder)} projects={projects} openProject={openProject} />;
+        case 'project_report': return <ClientProjectReportView navigate={setClientView} config={projectReportConfig} projects={projects} reports={mockReports} onOpenPlacementReport={openPlacementReport} />;
         case 'orders': return <ClientOrdersView navigate={setClientView} projects={projects} orders={clientOrders} openProject={openProject} openOrder={openOrder} onMoveOrders={moveOrders} />;
-        case 'reports': return <ClientReportsView navigate={setClientView} projects={projects} openProject={openProject} />;
+        case 'reports': return <ClientReportsView projects={projects} openProject={openProject} onOpenReport={openPlacementReport} onCreateProjectReport={openProjectReport} />;
         case 'support': return <ClientSupportView navigate={setClientView} />;
         case 'balance': return <ClientBalanceView navigate={setClientView} />;
         case 'topup': return <ClientTopUpView navigate={setClientView} />;
