@@ -17,6 +17,7 @@ import {
   Download,
   MessageSquare,
   Clock,
+  Check,
   CheckCircle2,
   ExternalLink,
   Info,
@@ -38,19 +39,50 @@ import {
   Trash2,
   Copy,
   Paperclip,
-  UploadCloud
+  UploadCloud,
+  FolderKanban
 } from 'lucide-react';
 
 
 // --- ДАННЫЕ ПРОТОТИПА ---
 const mockMaterials = [
-  { id: 1, name: 'Пресс-релиз: Запуск новой платформы', advertiser: 'ООО "Финтех Решения"', type: 'Статья', status: 'Принят в систему', statusColor: 'green', placements: 3, date: '12.10.2023' },
-  { id: 2, name: 'Обзор рынка недвижимости за третий квартал', advertiser: 'Урбан Групп', type: 'Пост в Телеграме', status: 'На модерации', statusColor: 'blue', placements: 0, date: '14.10.2023' },
-  { id: 3, name: 'Интервью с генеральным директором', advertiser: 'ООО "Финтех Решения"', type: 'Интервью', status: 'Требуются правки', statusColor: 'amber', placements: 0, date: '15.10.2023' },
-  { id: 4, name: 'Кейс внедрения системы управления клиентами', advertiser: 'ТехКорп', type: 'Кейс', status: 'Используется в заказах', statusColor: 'indigo', placements: 5, date: '10.10.2023' },
-  { id: 5, name: 'Заметка о новом продукте', advertiser: 'Урбан Групп', type: 'Новость', status: 'Черновик', statusColor: 'gray', placements: 0, date: '17.10.2023' },
-  { id: 6, name: 'Материал с запрещенными обещаниями', advertiser: 'ТехКорп', type: 'Статья', status: 'Отклонен', statusColor: 'red', placements: 0, date: '11.10.2023' },
-  { id: 7, name: 'Архивная публикация про конференцию', advertiser: 'ООО "Финтех Решения"', type: 'Пресс-релиз', status: 'Архивирован', statusColor: 'gray', placements: 2, date: '01.09.2023' },
+  { id: 1, name: 'Пресс-релиз: Запуск новой платформы', advertiser: 'ООО "Финтех Решения"', type: 'Статья', status: 'Принят в систему', statusColor: 'green', placements: 3, date: '12.10.2023', projectId: 1 },
+  { id: 2, name: 'Обзор рынка недвижимости за третий квартал', advertiser: 'Урбан Групп', type: 'Пост в Телеграме', status: 'На модерации', statusColor: 'blue', placements: 0, date: '14.10.2023', projectId: 2 },
+  { id: 3, name: 'Интервью с генеральным директором', advertiser: 'ООО "Финтех Решения"', type: 'Интервью', status: 'Требуются правки', statusColor: 'amber', placements: 0, date: '15.10.2023', projectId: 1 },
+  { id: 4, name: 'Кейс внедрения системы управления клиентами', advertiser: 'ТехКорп', type: 'Кейс', status: 'Используется в заказах', statusColor: 'indigo', placements: 5, date: '10.10.2023', projectId: 3 },
+  { id: 5, name: 'Заметка о новом продукте', advertiser: 'Урбан Групп', type: 'Новость', status: 'Черновик', statusColor: 'gray', placements: 0, date: '17.10.2023', projectId: null },
+  { id: 6, name: 'Материал с запрещенными обещаниями', advertiser: 'ТехКорп', type: 'Статья', status: 'Отклонен', statusColor: 'red', placements: 0, date: '11.10.2023', projectId: null },
+  { id: 7, name: 'Архивная публикация про конференцию', advertiser: 'ООО "Финтех Решения"', type: 'Пресс-релиз', status: 'Архивирован', statusColor: 'gray', placements: 2, date: '01.09.2023', projectId: 3 },
+];
+
+const initialProjects = [
+  {
+    id: 1,
+    code: 'PR-001',
+    name: 'Запуск платформы аналитики',
+    description: 'Серия публикаций о запуске продукта и его возможностях для пиар-команд.',
+    advertisers: ['ООО "Финтех Решения"'],
+    status: 'Активный',
+    updatedAt: '18.10.2023',
+  },
+  {
+    id: 2,
+    code: 'PR-002',
+    name: 'Рынок недвижимости: третий квартал',
+    description: 'Публикации с итогами квартала для деловых и отраслевых площадок.',
+    advertisers: ['Урбан Групп'],
+    status: 'Активный',
+    updatedAt: '17.10.2023',
+  },
+  {
+    id: 3,
+    code: 'PR-003',
+    name: 'Кейсы цифровой трансформации',
+    description: 'Завершенная серия кейсов внедрения корпоративных решений.',
+    advertisers: ['ТехКорп', 'ООО "Финтех Решения"'],
+    status: 'Завершен',
+    updatedAt: '10.10.2023',
+  },
 ];
 
 const mockCatalog = [
@@ -62,11 +94,11 @@ const mockCatalog = [
 ];
 
 const mockOrdersClient = [
-  { id: 1045, material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', price: 150000, frozen: 150000, status: 'Ожидает приемки', statusColor: 'indigo', date: '15.10.2023', action: 'Проверить публикацию' },
-  { id: 1048, material: 'Пресс-релиз: Запуск новой платформы', platform: 'Технологии сегодня', price: 45000, frozen: 45000, status: 'Площадка рассматривает', statusColor: 'blue', date: '16.10.2023', action: 'Дождаться площадки' },
-  { id: 1052, material: 'Кейс внедрения системы управления клиентами', platform: 'VC.ru', price: 80000, frozen: 0, status: 'Завершено', statusColor: 'gray', date: '10.10.2023', action: 'Открыть отчет' },
-  { id: 1054, material: 'Интервью с генеральным директором', platform: 'Код Дурова', price: 60000, frozen: 60000, status: 'Площадка запросила правки', statusColor: 'amber', date: '18.10.2023', action: 'Внести правки' },
-  { id: 1055, material: 'Обзор рынка недвижимости за третий квартал', platform: 'Бизнес Среда', price: 146000, frozen: 0, status: 'Площадка отказала', statusColor: 'red', date: '19.10.2023', action: 'Посмотреть причину' },
+  { id: 1045, material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', price: 150000, frozen: 150000, status: 'Ожидает приемки', statusColor: 'indigo', date: '15.10.2023', action: 'Проверить публикацию', projectId: 1 },
+  { id: 1048, material: 'Пресс-релиз: Запуск новой платформы', platform: 'Технологии сегодня', price: 45000, frozen: 45000, status: 'Площадка рассматривает', statusColor: 'blue', date: '16.10.2023', action: 'Дождаться площадки', projectId: 1 },
+  { id: 1052, material: 'Кейс внедрения системы управления клиентами', platform: 'VC.ru', price: 80000, frozen: 0, status: 'Завершено', statusColor: 'gray', date: '10.10.2023', action: 'Открыть отчет', projectId: 3 },
+  { id: 1054, material: 'Интервью с генеральным директором', platform: 'Код Дурова', price: 60000, frozen: 60000, status: 'Площадка запросила правки', statusColor: 'amber', date: '18.10.2023', action: 'Внести правки', projectId: 1 },
+  { id: 1055, material: 'Обзор рынка недвижимости за третий квартал', platform: 'Бизнес Среда', price: 146000, frozen: 0, status: 'Площадка отказала', statusColor: 'red', date: '19.10.2023', action: 'Посмотреть причину', projectId: 2 },
 ];
 
 const mockOrdersPublisher = [
@@ -95,9 +127,9 @@ const mockAdvertisers = [
 ];
 
 const mockReports = [
-  { order: '#1045', material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', link: 'invest.rbc.ru/news/652a9f', status: 'Ожидает приемки', color: 'indigo' },
-  { order: '#1048', material: 'Пресс-релиз: Запуск новой платформы', platform: 'Технологии сегодня', link: 'будет после публикации', status: 'В работе', color: 'blue' },
-  { order: '#1052', material: 'Кейс внедрения системы управления клиентами', platform: 'VC.ru', link: 'vc.ru/services/1052', status: 'Завершено', color: 'gray' },
+  { order: '#1045', material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', link: 'invest.rbc.ru/news/652a9f', status: 'Ожидает приемки', color: 'indigo', projectId: 1 },
+  { order: '#1048', material: 'Пресс-релиз: Запуск новой платформы', platform: 'Технологии сегодня', link: 'будет после публикации', status: 'В работе', color: 'blue', projectId: 1 },
+  { order: '#1052', material: 'Кейс внедрения системы управления клиентами', platform: 'VC.ru', link: 'vc.ru/services/1052', status: 'Завершено', color: 'gray', projectId: 3 },
 ];
 
 const mockAdminQueue = [
@@ -254,16 +286,23 @@ const Badge = ({ children, color = 'gray', className = '', ...props }) => {
   );
 };
 
-const Button = ({ children, variant = 'primary', className = '', ...props }) => {
-  const baseStyle = "inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-150 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#006bff] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100";
+const Button = ({ children, variant = 'primary', size = 'md', className = '', ...props }) => {
+  const baseStyle = "inline-flex min-w-0 shrink-0 items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006bff] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100";
+  const sizes = {
+    sm: "h-9 rounded-lg px-3.5 text-xs",
+    md: "h-11 rounded-xl px-5 text-sm",
+    lg: "h-12 rounded-xl px-6 text-base",
+    icon: "h-10 w-10 rounded-xl p-0",
+  };
   const variants = {
-    primary: "bg-[#006bff] text-white hover:bg-[#0057d6] border border-[#006bff] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.06)_0px_15px_30px_0px]",
-    secondary: "bg-white border border-[#d4e0ed] text-[#0b3558] hover:bg-[#f0f3f8]",
-    ghost: "text-[#0b3558] hover:bg-[#f0f3f8]",
-    dark: "bg-[#0b3558] text-white hover:bg-[#092c49] border border-[#0b3558] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.06)_0px_15px_30px_0px]",
+    primary: "border border-[#006bff] bg-[#006bff] text-white shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.06)_0px_15px_30px_0px] hover:border-[#0057d6] hover:bg-[#0057d6]",
+    secondary: "border border-[#d4e0ed] bg-white text-[#0b3558] hover:border-[#a6bbd1] hover:bg-[#f0f3f8]",
+    ghost: "border border-transparent bg-transparent text-[#0b3558] hover:bg-[#f0f3f8]",
+    dark: "border border-[#0b3558] bg-[#0b3558] text-white shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.06)_0px_15px_30px_0px] hover:border-[#092c49] hover:bg-[#092c49]",
+    danger: "border border-[#fecaca] bg-white text-[#dc2626] hover:border-[#ef4444] hover:bg-[#fef2f2]",
   };
   return (
-    <button className={`${baseStyle} ${variants[variant]} ${className}`} {...props}>
+    <button className={`${baseStyle} ${sizes[size]} ${variants[variant]} ${className}`} {...props}>
       {children}
     </button>
   );
@@ -639,10 +678,14 @@ const AiAssistModal = ({ isOpen, onClose, type = 'rewrite' }) => (
   </Modal>
 );
 
-const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = [] }) => {
+const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = [], materials = mockMaterials, projects = [], onCreateOrders }) => {
   const initialPlatforms = platforms.length ? platforms : platform ? [platform] : [];
   const [removedPlatformIds, setRemovedPlatformIds] = useState([]);
+  const availableMaterials = materials.filter((material) => ['Принят в систему', 'Используется в заказах'].includes(material.status));
+  const [selectedMaterialName, setSelectedMaterialName] = useState(availableMaterials[0]?.name);
   const selectedPlatforms = initialPlatforms.filter((item) => !removedPlatformIds.includes(item.id));
+  const selectedMaterial = availableMaterials.find((material) => material.name === selectedMaterialName);
+  const selectedProject = projects.find((project) => project.id === selectedMaterial?.projectId);
   const totalPrice = selectedPlatforms.reduce((sum, item) => sum + item.price, 0);
   const isBulk = selectedPlatforms.length > 1;
   return (
@@ -679,8 +722,13 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
       <div className="space-y-5">
         <label className="block">
           <span className="text-sm font-medium text-[#476788]">Материал</span>
-          <CustomSelect className="mt-2" options={mockMaterials.filter((material) => ['Принят в систему', 'Используется в заказах'].includes(material.status)).map((material) => `${material.name} · ${material.advertiser}`)} />
+          <CustomSelect className="mt-2" value={selectedMaterialName} onChange={setSelectedMaterialName} options={availableMaterials.map((material) => material.name)} />
         </label>
+        <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+          <div className="text-xs text-[#476788]">Проект новых заказов</div>
+          <div className="mt-2"><ProjectLink project={selectedProject} muted /></div>
+          <p className="mt-2 text-xs leading-5 text-[#476788]">Каждый созданный заказ унаследует проект материала. Позже заказ можно перенести отдельно.</p>
+        </div>
         <label className="flex items-start gap-3 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 cursor-pointer">
           <input type="checkbox" className="mt-1" />
           <span className="text-sm text-[#476788]"><span className="font-semibold text-[#0b3558]">Автоприемка</span><br />Автоматически принять размещение, если жалоба не открыта в течение 72 часов после загрузки ссылки.</span>
@@ -691,7 +739,16 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
         </div>
         <div className="flex flex-col sm:flex-row justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button variant="primary" onClick={onClose}>Создать заказ</Button>
+          <Button
+            variant="primary"
+            disabled={!selectedMaterial || !selectedPlatforms.length}
+            onClick={() => {
+              onCreateOrders?.(selectedMaterial, selectedPlatforms);
+              onClose();
+            }}
+          >
+            Создать заказ
+          </Button>
         </div>
       </div>
     </div>
@@ -746,10 +803,11 @@ const LandingView = ({ setGlobalMode }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
-  const [registrationRole, setRegistrationRole] = useState('client');
   const [loginRole, setLoginRole] = useState('client');
   const [authStep, setAuthStep] = useState('credentials');
   const [recoverySent, setRecoverySent] = useState(false);
+  const [publisherApplicationOpen, setPublisherApplicationOpen] = useState(false);
+  const [publisherApplicationSubmitted, setPublisherApplicationSubmitted] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
   const handleLogin = (role) => {
@@ -762,10 +820,22 @@ const LandingView = ({ setGlobalMode }) => {
     setRecoverySent(false);
     setLoginModalOpen(true);
   };
-  const openRegistrationModal = (role = 'client') => {
+  const openRegistrationModal = () => {
     setAuthMode('registration');
-    setRegistrationRole(role);
     setLoginModalOpen(true);
+  };
+  const openPublisherApplication = () => {
+    setPublisherApplicationSubmitted(false);
+    setPublisherApplicationOpen(true);
+  };
+  const openPublisherLogin = () => {
+    setPublisherApplicationOpen(false);
+    setLoginRole('publisher');
+    openLoginModal();
+  };
+  const submitPublisherApplication = (event) => {
+    event.preventDefault();
+    setPublisherApplicationSubmitted(true);
   };
 
   useEffect(() => {
@@ -833,7 +903,7 @@ const LandingView = ({ setGlobalMode }) => {
 
             <div className="hidden md:flex items-center gap-3">
               <button className="px-3 py-2 text-sm font-bold text-[#102f4f] hover:text-[#004cca]" onClick={openLoginModal}>Вход</button>
-              <button className="rounded-xl bg-[#004cca] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(0,76,202,0.18)] transition-colors hover:bg-[#003798]" onClick={() => openRegistrationModal('client')}>Зарегистрироваться</button>
+              <button className="rounded-xl bg-[#004cca] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(0,76,202,0.18)] transition-colors hover:bg-[#003798]" onClick={openRegistrationModal}>Зарегистрироваться</button>
             </div>
 
             <button className="md:hidden p-2 text-[#476788]" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -868,7 +938,7 @@ const LandingView = ({ setGlobalMode }) => {
               Закрытый каталог площадок, выбор нескольких медиа для одного текста, безопасная оплата через баланс и контроль публикаций в одном кабинете.
             </p>
             <div className="flex flex-col gap-4 pt-2 sm:flex-row">
-              <button className="landing-shimmer inline-flex items-center justify-center gap-3 rounded-2xl bg-[#004cca] px-9 py-4 text-sm font-bold text-white premium-shadow-lg transition-all hover:bg-[#003798] active:scale-95" onClick={() => openRegistrationModal('client')}>Зарегистрироваться <ArrowRight className="h-4 w-4" /></button>
+              <button className="landing-shimmer inline-flex items-center justify-center gap-3 rounded-2xl bg-[#004cca] px-9 py-4 text-sm font-bold text-white premium-shadow-lg transition-all hover:bg-[#003798] active:scale-95" onClick={openRegistrationModal}>Зарегистрироваться <ArrowRight className="h-4 w-4" /></button>
               <button className="rounded-2xl border border-[#c3c6d6] bg-white px-9 py-4 text-sm font-bold text-[#191c1e] transition-all hover:bg-[#edeef0] active:scale-95" onClick={openLoginModal}>Открыть каталог</button>
             </div>
             <p className="text-sm italic text-[#737686]">Цены и условия доступны после регистрации.</p>
@@ -969,7 +1039,7 @@ const LandingView = ({ setGlobalMode }) => {
               После регистрации вы получаете доступ к каталогу площадок с понятными параметрами: формат размещения, цена, срок публикации, тематика, регион, требования к материалу и срок хранения.
             </p>
           </div>
-            <button className="landing-shimmer rounded-2xl bg-[#004cca] px-9 py-4 text-sm font-bold text-white premium-shadow transition-all hover:bg-[#003798]" onClick={() => openRegistrationModal('client')}>Зарегистрироваться и посмотреть</button>
+            <button className="landing-shimmer rounded-2xl bg-[#004cca] px-9 py-4 text-sm font-bold text-white premium-shadow transition-all hover:bg-[#003798]" onClick={openRegistrationModal}>Зарегистрироваться и посмотреть</button>
           </div>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
             {[
@@ -1026,8 +1096,8 @@ const LandingView = ({ setGlobalMode }) => {
                 Подключите СМИ, сайт, Телеграм-канал, паблик ВК или канал в Дзене к закрытому каталогу «Аксиомы». Заказчики выбирают размещение на вашем ресурсе, а вы работаете с заявкой внутри кабинета: принимаете материал, запрашиваете правки, загружаете ссылку и получаете выплату после приемки.
               </p>
               <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-                <button className="landing-shimmer rounded-2xl bg-[#004cca] px-8 py-4 text-sm font-bold text-white premium-shadow hover:bg-[#003798]" onClick={() => openRegistrationModal('publisher')}>Стать паблишером</button>
-                <button className="rounded-2xl border border-[#c3c6d6] bg-white px-8 py-4 text-sm font-bold text-[#191c1e] hover:bg-[#e7e8ea]" onClick={openLoginModal}>Войти в кабинет</button>
+                <button className="landing-shimmer rounded-2xl bg-[#004cca] px-8 py-4 text-sm font-bold text-white premium-shadow hover:bg-[#003798]" onClick={openPublisherApplication}>Стать паблишером</button>
+                <button className="rounded-2xl border border-[#c3c6d6] bg-white px-8 py-4 text-sm font-bold text-[#191c1e] hover:bg-[#e7e8ea]" onClick={openPublisherLogin}>Войти в кабинет</button>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -1111,8 +1181,8 @@ const LandingView = ({ setGlobalMode }) => {
                   Загрузите текст, выберите одну или несколько площадок и контролируйте публикации, оплату и отчетность в одном кабинете.
                 </p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-                <button className="rounded-2xl bg-white px-10 py-5 text-base font-bold text-[#0642aa] shadow-xl transition-colors hover:bg-[#e7efff]" onClick={() => openRegistrationModal('client')}>Зарегистрироваться</button>
-                <button className="rounded-2xl border border-white/35 bg-transparent px-10 py-5 text-base font-bold text-white transition-colors hover:bg-white/10" onClick={() => openRegistrationModal('client')}>Перейти в каталог</button>
+                <button className="rounded-2xl bg-white px-10 py-5 text-base font-bold text-[#0642aa] shadow-xl transition-colors hover:bg-[#e7efff]" onClick={openRegistrationModal}>Зарегистрироваться</button>
+                <button className="rounded-2xl border border-white/35 bg-transparent px-10 py-5 text-base font-bold text-white transition-colors hover:bg-white/10" onClick={openRegistrationModal}>Перейти в каталог</button>
               </div>
             </div>
           </div>
@@ -1146,7 +1216,7 @@ const LandingView = ({ setGlobalMode }) => {
         </div>
       </footer>
 
-      <Modal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} title={authMode === 'registration' ? 'Регистрация' : authStep === 'recovery' ? 'Восстановление доступа' : 'Вход на платформу'} className="max-w-3xl">
+      <Modal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} title={authMode === 'registration' ? 'Регистрация заказчика' : authStep === 'recovery' ? 'Восстановление доступа' : 'Вход на платформу'} className="max-w-3xl">
         {authMode === 'login' ? (
           authStep === 'recovery' ? (
             <div className="space-y-6">
@@ -1215,7 +1285,7 @@ const LandingView = ({ setGlobalMode }) => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                   <button className="font-semibold text-[#006bff]" onClick={() => { setAuthStep('recovery'); setRecoverySent(false); }}>Забыли пароль?</button>
-                  <button className="font-semibold text-[#006bff]" onClick={() => openRegistrationModal(loginRole)}>Зарегистрироваться</button>
+                  <button className="font-semibold text-[#006bff]" onClick={openRegistrationModal}>Зарегистрироваться</button>
                 </div>
                 <Button variant="primary" onClick={() => setAuthStep('2fa')}>Продолжить</Button>
               </div>
@@ -1223,27 +1293,20 @@ const LandingView = ({ setGlobalMode }) => {
           )
         ) : (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#f8f9fb] border border-[#d4e0ed] p-1">
-              {[
-                ['client', 'Заказчик', Briefcase],
-                ['publisher', 'Паблишер', Store],
-              ].map(([role, label, Icon]) => (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => setRegistrationRole(role)}
-                  className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${registrationRole === role ? 'bg-white text-[#0b3558] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_4px_10px_0px,rgba(71,103,136,0.05)_0px_10px_20px_0px]' : 'text-[#476788] hover:text-[#0b3558]'}`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </button>
-              ))}
+            <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+              <div className="flex items-start gap-3">
+                <Briefcase className="mt-0.5 h-5 w-5 flex-none text-[#006bff]" />
+                <div>
+                  <p className="text-sm font-semibold text-[#0b3558]">Кабинет заказчика</p>
+                  <p className="mt-1 text-sm leading-6 text-[#476788]">Регистрация открывает доступ к материалам, каталогу площадок и заказам.</p>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <label className="block">
                 <span className="text-sm font-medium text-[#476788]">Email</span>
-                <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue={registrationRole === 'client' ? 'client@example.ru' : 'publisher@example.ru'} />
+                <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="client@example.ru" />
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-[#476788]">Телефон</span>
@@ -1258,60 +1321,170 @@ const LandingView = ({ setGlobalMode }) => {
                 <CustomSelect className="mt-2" options={['Юридическое лицо', 'ИП', 'Физическое лицо']} />
               </label>
 
-              {registrationRole === 'client' ? (
-                <>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">Компания / ФИО</span>
-                    <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="ООО Финтех Решения" />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">Ответственный</span>
-                    <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Анна Морозова" />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">ИНН</span>
-                    <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="7700000000" />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">Что планируете размещать</span>
-                    <CustomSelect className="mt-2" options={['PR-материалы', 'SEO-статьи', 'SERM-материалы', 'Посты в Telegram и ВК']} />
-                  </label>
-                </>
-              ) : (
-                <>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">Название площадки</span>
-                    <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="РБК Инвестиции" />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">Тип площадки</span>
-                    <CustomSelect className="mt-2" options={['СМИ', 'ТГ-канал', 'Паблик ВК', 'Дзен']} />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">Тематика</span>
-                    <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Финансы, инвестиции, бизнес" />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-[#476788]">Метрика / охват</span>
-                    <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="2,5 млн посещений в месяц" />
-                  </label>
-                </>
-              )}
+              <label className="block">
+                <span className="text-sm font-medium text-[#476788]">Компания / ФИО</span>
+                <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="ООО Финтех Решения" />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-[#476788]">Ответственный</span>
+                <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="Анна Морозова" />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-[#476788]">ИНН</span>
+                <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="7700000000" />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-[#476788]">Что планируете размещать</span>
+                <CustomSelect className="mt-2" options={['PR-материалы', 'SEO-статьи', 'SERM-материалы', 'Посты в Telegram и ВК']} />
+              </label>
             </div>
 
             <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
-              {registrationRole === 'client'
-                ? 'После регистрации вы попадете в кабинет заказчика: сможете создать рекламодателя, загрузить материал и выбрать площадки.'
-                : 'После регистрации вы попадете в кабинет паблишера: сможете заполнить карточку площадки, цены, сроки, требования и отправить площадку на модерацию.'}
+              После регистрации вы попадете в кабинет заказчика: сможете создать рекламодателя, загрузить материал и выбрать площадки.
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <button className="text-sm font-semibold text-[#006bff]" onClick={openLoginModal}>Уже есть аккаунт</button>
-              <Button variant="primary" onClick={() => handleLogin(registrationRole)}>
-                {registrationRole === 'client' ? 'Создать кабинет заказчика' : 'Создать кабинет паблишера'}
-              </Button>
+              <Button variant="primary" onClick={() => handleLogin('client')}>Создать кабинет заказчика</Button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={publisherApplicationOpen}
+        onClose={() => setPublisherApplicationOpen(false)}
+        title={publisherApplicationSubmitted ? 'Заявка отправлена' : 'Стать паблишером'}
+        className="max-w-4xl"
+      >
+        {publisherApplicationSubmitted ? (
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-[#b7ebca] bg-[#effcf4] p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[#1fbf75] text-white">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-semibold text-[#0b3558]">Анкета принята на ручную проверку</h4>
+                  <p className="mt-2 text-sm leading-6 text-[#476788]">
+                    Кабинет паблишера пока не создан. Мы проверим площадку, принадлежность ресурса и контактные данные, после чего сообщим о решении на рабочую почту.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                ['1', 'Проверим площадку', 'Убедимся, что ресурс существует и соответствует данным анкеты.'],
+                ['2', 'Подтвердим представителя', 'Свяжемся с редакцией или владельцем по официальным контактам.'],
+                ['3', 'Откроем доступ', 'После одобрения отправим отдельное приглашение для создания кабинета.'],
+              ].map(([step, title, text]) => (
+                <div key={step} className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-5">
+                  <div className="text-xs font-bold text-[#006bff]">Шаг {step}</div>
+                  <div className="mt-2 text-sm font-semibold text-[#0b3558]">{title}</div>
+                  <p className="mt-2 text-xs leading-5 text-[#476788]">{text}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => setPublisherApplicationOpen(false)}>Вернуться на главную</Button>
+            </div>
+          </div>
+        ) : (
+          <form className="space-y-6" onSubmit={submitPublisherApplication}>
+            <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-5">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-5 w-5 flex-none text-[#006bff]" />
+                <div>
+                  <p className="text-sm font-semibold text-[#0b3558]">Доступ только после проверки</p>
+                  <p className="mt-1 text-sm leading-6 text-[#476788]">
+                    Анкета не создает кабинет. Сначала команда «Аксиомы» вручную проверит площадку и подтвердит, что заявку отправил владелец, редакция или официальный представитель.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <fieldset className="space-y-4">
+              <legend className="text-base font-semibold text-[#0b3558]">Контактные данные</legend>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Имя и фамилия</span>
+                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Анна Смирнова" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Должность</span>
+                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Коммерческий директор" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Рабочая почта</span>
+                  <input required type="email" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="partner@publisher.ru" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Телефон</span>
+                  <input required type="tel" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="+7 999 000-00-00" />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-4 border-t border-[#d4e0ed] pt-6">
+              <legend className="text-base font-semibold text-[#0b3558]">Площадка и владелец</legend>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Название площадки</span>
+                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Investor.ru" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Тип площадки</span>
+                  <CustomSelect className="mt-2" placeholder="Выберите тип" options={['Онлайн-СМИ', 'Сайт', 'Telegram-канал', 'Паблик ВК', 'Канал в Дзене']} />
+                </label>
+                <label className="block md:col-span-2">
+                  <span className="text-sm font-medium text-[#476788]">Ссылка на площадку</span>
+                  <input required type="url" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="https://investor.ru" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Юридическое лицо / ИП</span>
+                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="ООО «Редакция»" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">ИНН</span>
+                  <input required inputMode="numeric" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="7701000000" />
+                </label>
+                <label className="block md:col-span-2">
+                  <span className="text-sm font-medium text-[#476788]">Ваша связь с площадкой</span>
+                  <CustomSelect className="mt-2" placeholder="Выберите роль" options={['Владелец', 'Сотрудник редакции', 'Официальный представитель по договору']} />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-4 border-t border-[#d4e0ed] pt-6">
+              <legend className="text-base font-semibold text-[#0b3558]">Данные для каталога</legend>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Тематика</span>
+                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Финансы, инвестиции, бизнес" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-[#476788]">Посещаемость / охват</span>
+                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="2,5 млн посещений в месяц" />
+                </label>
+                <label className="block md:col-span-2">
+                  <span className="text-sm font-medium text-[#476788]">Комментарий</span>
+                  <textarea className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="Укажите дополнительные данные или официальный контакт редакции для проверки." />
+                </label>
+              </div>
+            </fieldset>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+              <input required type="checkbox" className="mt-1 h-4 w-4 rounded border-[#476788] text-[#006bff]" />
+              <span className="text-sm leading-6 text-[#476788]">
+                Подтверждаю, что вправе представлять указанную площадку и предоставил достоверные данные. Понимаю, что анкета не создает кабинет до завершения проверки.
+              </span>
+            </label>
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <button type="button" className="text-sm font-semibold text-[#006bff]" onClick={openPublisherLogin}>Уже есть подтвержденный аккаунт</button>
+              <Button type="submit" variant="primary">Отправить анкету</Button>
+            </div>
+          </form>
         )}
       </Modal>
     </div>
@@ -1321,122 +1494,161 @@ const LandingView = ({ setGlobalMode }) => {
 
 // --- 2. CLIENT PORTAL ---
 
-const ClientDashboardView = ({ navigate }) => (
-  <div className="space-y-8">
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <h1 className="font-display text-2xl font-bold text-[#0b3558]">Панель заказчика</h1>
-      <div className="flex gap-3">
-        <Button variant="secondary" onClick={() => navigate('materials')}>Материалы</Button>
-        <Button variant="primary" onClick={() => navigate('create_material')}><Plus className="w-4 h-4 mr-2" /> Загрузить материал</Button>
+const ClientDashboardView = ({ navigate }) => {
+  const [selectedPromo, setSelectedPromo] = useState(0);
+  const clientPromos = [
+    {
+      label: 'Новинки',
+      eyebrow: 'Новые площадки',
+      title: 'В каталоге появились 12 новых медиа',
+      text: 'Онлайн-СМИ, Telegram-каналы и региональные площадки уже доступны для размещения.',
+      action: 'Смотреть площадки',
+      target: 'catalog',
+      Icon: Store,
+      accent: 'bg-[#e8f1ff] text-[#006bff]',
+    },
+    {
+      label: 'Пакеты',
+      eyebrow: 'Пакетное размещение',
+      title: 'Один материал сразу в пяти бизнес-медиа',
+      text: 'Готовая подборка площадок с единым бюджетом и согласованными сроками публикации.',
+      action: 'Выбрать пакет',
+      target: 'catalog',
+      Icon: Briefcase,
+      accent: 'bg-[#eef8f3] text-[#168a57]',
+    },
+    {
+      label: 'Скидки',
+      eyebrow: 'Специальные условия',
+      title: 'До 20% на размещения этой недели',
+      text: 'Площадки со свободными слотами снизили стоимость публикации на ближайшие даты.',
+      action: 'Смотреть предложения',
+      target: 'catalog',
+      Icon: CreditCard,
+      accent: 'bg-[#fff4df] text-[#b46b00]',
+    },
+    {
+      label: 'Полезное',
+      eyebrow: 'Новости и гайды',
+      title: 'Как подготовить материал к размещению',
+      text: 'Короткий гид по модерации, маркировке и требованиям площадок перед запуском заказа.',
+      action: null,
+      target: null,
+      Icon: FileText,
+      accent: 'bg-[#f1edff] text-[#6a4bc4]',
+    },
+  ];
+  const promo = clientPromos[selectedPromo];
+  const PromoIcon = promo.Icon;
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Панель заказчика</h1>
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => navigate('materials')}>Материалы</Button>
+          <Button variant="primary" onClick={() => navigate('create_material')}><Plus className="h-4 w-4" /> Загрузить материал</Button>
+        </div>
       </div>
-    </div>
 
-    {/* Требуется действие */}
-    <div className="bg-white border border-[#d4e0ed] rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-      <AlertCircle className="w-5 h-5 text-[#006bff] mt-0.5 sm:mt-0 flex-shrink-0" />
-      <div className="flex-1">
-        <h4 className="text-sm font-semibold text-[#0b3558]">Требуется действие</h4>
-        <p className="text-sm text-[#476788] mt-1">
-          Площадка "РБК Инвестиции" загрузила публикацию по заказу #1045. Вам нужно проверить ссылку и принять размещение.
-        </p>
-      </div>
-      <Button variant="secondary" className="w-full sm:w-auto" onClick={() => navigate('order_detail')}>
-        Проверить
-      </Button>
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-[#476788] mb-1">Доступный баланс</h3>
-        <div className="text-3xl font-semibold text-[#0b3558] tabular-nums">{formatMoney(1250000)}</div>
-        <div className="mt-4 flex items-center text-sm text-[#006bff] font-medium cursor-pointer hover:text-[#004eba]" onClick={() => navigate('balance')}>
-          <Plus className="w-4 h-4 mr-1" /> Пополнить баланс
-        </div>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-[#476788] mb-1">Заморожено в заказах</h3>
-        <div className="text-3xl font-semibold text-[#0b3558] tabular-nums">{formatMoney(345000)}</div>
-        <div className="mt-4 text-sm text-[#476788]">В 4 активных заказах</div>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-[#476788] mb-1">Ждут действия</h3>
-        <div className="text-3xl font-semibold text-[#0b3558] tabular-nums">3</div>
-        <div className="mt-4 flex items-center text-sm text-[#006bff] cursor-pointer hover:text-[#004eba]" onClick={() => navigate('orders')}>
-          Открыть задачи <ChevronRight className="w-4 h-4 ml-1" />
-        </div>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-[#476788] mb-1">Готовы к размещению</h3>
-        <div className="text-3xl font-semibold text-[#0b3558] tabular-nums">2</div>
-        <div className="mt-4 flex items-center text-sm text-[#476788] cursor-pointer hover:text-[#0b3558]" onClick={() => navigate('materials')}>
-          Перейти к материалам <ChevronRight className="w-4 h-4 ml-1" />
-        </div>
-      </Card>
-    </div>
-
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-      <Card className="overflow-hidden xl:col-span-2">
-        <div className="px-6 py-5 border-b border-[#d4e0ed] flex justify-between items-center bg-[#f8f9fb]">
-          <h3 className="text-base font-semibold text-[#0b3558]">Что требует внимания</h3>
-          <button className="text-sm text-[#006bff] font-medium hover:text-[#004eba]" onClick={() => navigate('orders')}>Все задачи</button>
-        </div>
-        <div className="divide-y divide-[#d4e0ed]">
-          {[
-            ['#1045', 'Проверить публикацию', 'РБК Инвестиции загрузила ссылку на публикацию', 'order_detail', 'Проверить'],
-            ['#1048', 'Площадка рассматривает заказ', 'Ожидается решение площадки до 18.10', 'order_pending_detail', 'Открыть'],
-            ['#M-1052', 'Материал на модерации', 'Ожидает проверки перед выбором площадок', 'materials', 'К материалам'],
-          ].map(([id, title, text, target, action]) => (
-            <button key={id} className="w-full px-6 py-4 text-left hover:bg-[#f8f9fb] flex flex-col md:flex-row md:items-center gap-3" onClick={() => navigate(target)}>
-              <div className="md:w-24 text-sm font-semibold text-[#0b3558]">{id}</div>
-              <div className="flex-1">
-                <div className="text-sm font-medium text-[#0b3558]">{title}</div>
-                <div className="text-xs text-[#476788] mt-1">{text}</div>
-              </div>
-              <div className="text-sm font-medium text-[#006bff]">{action}</div>
-            </button>
-          ))}
-        </div>
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-base font-semibold text-[#0b3558] mb-4">Материалы</h3>
-        <div className="space-y-4">
-          {[
-            ['Приняты в систему', '2', 'можно размещать'],
-            ['На модерации', '2', 'ожидают проверки'],
-            ['Требуют правок', '1', 'нужно обновить текст'],
-          ].map(([label, value, note]) => (
-            <div key={label} className="flex items-center justify-between gap-4 pb-3 border-b border-[#d4e0ed]">
-              <div>
-                <div className="text-sm font-medium text-[#0b3558]">{label}</div>
-                <div className="text-xs text-[#476788] mt-1">{note}</div>
-              </div>
-              <div className="text-xl font-semibold text-[#0b3558] tabular-nums">{value}</div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Card className="flex min-h-[400px] flex-col overflow-hidden xl:h-[400px]">
+          <div className="flex items-center justify-between border-b border-[#d4e0ed] px-6 py-5">
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#0b3558]">Сводка</h2>
+              <p className="mt-1 text-xs text-[#476788]">Баланс и результаты размещений</p>
             </div>
-          ))}
-        </div>
-        <Button variant="secondary" className="w-full mt-5" onClick={() => navigate('materials')}>Открыть материалы</Button>
-      </Card>
-    </div>
+            <button className="text-sm font-medium text-[#006bff] hover:text-[#004eba]" onClick={() => navigate('balance')}>Финансы</button>
+          </div>
+          <div className="grid flex-1 grid-cols-1 sm:grid-cols-2">
+            {[
+              ['Доступный баланс', formatMoney(1250000), 'Пополнить баланс', 'balance'],
+              ['Заморожено в заказах', formatMoney(345000), '4 активных заказа', 'orders'],
+              ['Активные заказы', '4', 'Открыть заказы', 'orders'],
+              ['Завершено в июле', '12', 'Открыть отчеты', 'reports'],
+            ].map(([label, value, note, target], index) => (
+              <button
+                key={label}
+                className={`p-6 text-left transition-colors hover:bg-[#f8f9fb] ${index < 2 ? 'border-b border-[#d4e0ed]' : ''} ${index % 2 === 0 ? 'sm:border-r sm:border-[#d4e0ed]' : ''}`}
+                onClick={() => navigate(target)}
+              >
+                <div className="text-sm font-medium text-[#476788]">{label}</div>
+                <div className="mt-2 text-3xl font-semibold tabular-nums text-[#0b3558]">{value}</div>
+                <div className="mt-4 inline-flex items-center text-sm font-medium text-[#006bff]">
+                  {note}<ChevronRight className="ml-1 h-4 w-4" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </Card>
 
-    <Card className="overflow-hidden">
-      <div className="px-6 py-5 border-b border-[#d4e0ed] flex justify-between items-center bg-[#f8f9fb]">
-        <h3 className="text-base font-semibold text-[#0b3558]">Активные заказы</h3>
-        <button className="text-sm text-[#006bff] font-medium hover:text-[#004eba]" onClick={() => navigate('orders')}>Все заказы</button>
+        <Card className="flex min-h-[400px] flex-col overflow-hidden bg-[#f8fbff] xl:h-[400px]">
+          <div className="border-b border-[#d4e0ed] px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#0b3558]">Актуальное</h2>
+                <p className="mt-1 h-4 truncate text-xs text-[#476788]">Предложения и новости платформы</p>
+              </div>
+              <span className="rounded-full bg-[#e8f1ff] px-3 py-1 text-xs font-semibold text-[#006bff]">{selectedPromo + 1} / {clientPromos.length}</span>
+            </div>
+            <div className="mt-4 grid grid-cols-4 gap-1 rounded-xl bg-[#edf2f8] p-1">
+              {clientPromos.map((item, index) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  className={`min-w-0 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${selectedPromo === index ? 'bg-white text-[#0b3558] shadow-sm' : 'text-[#476788] hover:text-[#0b3558]'}`}
+                  onClick={() => setSelectedPromo(index)}
+                >
+                  <span className="block truncate">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid flex-1 grid-rows-[48px_116px_1fr] gap-y-3 p-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${promo.accent}`}>
+                <PromoIcon className="h-6 w-6" />
+              </div>
+              <div className="truncate text-xs font-bold uppercase leading-4 text-[#006bff]">{promo.eyebrow}</div>
+            </div>
+            <div className="min-w-0 self-start">
+              <h3 className="line-clamp-2 font-display text-xl font-bold leading-7 text-[#0b3558]">{promo.title}</h3>
+              <p className="mt-3 line-clamp-2 text-sm leading-6 text-[#476788]">{promo.text}</p>
+            </div>
+            <div className="flex items-end">
+              {promo.action ? (
+                <Button variant="primary" className="w-full" onClick={() => navigate(promo.target)}>
+                  {promo.action}<ArrowRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button variant="secondary" className="w-full">
+                  Читать в базе знаний<ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-[#d4e0ed]">
-          <thead className="bg-[#f8f9fb]">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Заказ</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Площадка</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Сумма</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Статус</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-[#476788] uppercase tracking-wider">Действие</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-[#d4e0ed]">
-            {mockOrdersClient.slice(0, 2).map(order => (
-               <tr key={order.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('order_detail')}>
+
+      <Card className="overflow-hidden">
+        <div className="px-6 py-5 border-b border-[#d4e0ed] flex justify-between items-center bg-[#f8f9fb]">
+          <h3 className="text-base font-semibold text-[#0b3558]">Активные заказы</h3>
+          <button className="text-sm text-[#006bff] font-medium hover:text-[#004eba]" onClick={() => navigate('orders')}>Все заказы</button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-[#d4e0ed]">
+            <thead className="bg-[#f8f9fb]">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Заказ</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Площадка</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Сумма</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Статус</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-[#476788] uppercase tracking-wider">Действие</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-[#d4e0ed]">
+              {mockOrdersClient.slice(0, 2).map(order => (
+                <tr key={order.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('order_detail')}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#0b3558] font-medium">#{order.id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#476788]">{order.platform}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#0b3558] tabular-nums">{formatMoney(order.price)}</td>
@@ -1445,28 +1657,30 @@ const ClientDashboardView = ({ navigate }) => (
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     {order.status === 'Ожидает приемки' ? (
-                       <span className="text-[#006bff]">Принять</span>
+                      <span className="text-[#006bff]">Принять</span>
                     ) : (
                       <MoreHorizontal className="w-5 h-5 text-[#a6bbd1] ml-auto" />
                     )}
                   </td>
-               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  </div>
-);
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+};
 
-const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045 }) => {
+const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045, sourceOrder = null, projects = [], openProject, onChangeProject }) => {
   const [linksOpen, setLinksOpen] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [currentState, setCurrentState] = useState(state);
+  const [projectName, setProjectName] = useState(projects.find((project) => project.id === sourceOrder?.projectId)?.name || 'Без проекта');
   const isPendingState = currentState === 'pending';
   const isRejectedState = currentState === 'rejected';
   const isCompletedState = currentState === 'completed';
-  const order = isPendingState
+  const fallbackOrder = isPendingState
     ? {
         id: 1048,
         status: 'Площадка рассматривает',
@@ -1526,6 +1740,23 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045 
           publicationUrl: 'https://invest.rbc.ru/news/652a9f',
           publicationDate: '18.10.2023',
         };
+  const order = sourceOrder
+    ? {
+        ...fallbackOrder,
+        id: sourceOrder.id,
+        status: currentState === 'completed' ? 'Завершено' : sourceOrder.status,
+        color: currentState === 'completed' ? 'green' : sourceOrder.statusColor,
+        amount: sourceOrder.price,
+        platform: sourceOrder.platform,
+        title: sourceOrder.material,
+        projectId: sourceOrder.projectId,
+      }
+    : fallbackOrder;
+  const selectedProject = projects.find((project) => project.name === projectName);
+  const changeProject = (nextName) => {
+    setProjectName(nextName);
+    onChangeProject?.(order.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
+  };
 
   return (
   <div className="space-y-6 max-w-5xl mx-auto">
@@ -1540,6 +1771,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045 
           <Badge color={order.color}>{order.status}</Badge>
         </h1>
         <p className="text-sm text-[#476788] mt-1">Площадка: {order.platform} · {order.subtitle}</p>
+        <div className="mt-2"><ProjectLink project={selectedProject} onOpen={openProject} /></div>
       </div>
       <div className="text-left sm:text-right">
         <div className="text-sm text-[#476788]">{isCompletedState ? 'Оплачено' : 'К списанию'}</div>
@@ -1640,6 +1872,15 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045 
                   <div className="mt-1 font-medium text-[#0b3558] break-words">{value}</div>
                 </div>
               ))}
+            </div>
+          </div>
+          <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-white p-4">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_280px] sm:items-end">
+              <div>
+                <div className="text-xs text-[#476788]">Проект</div>
+                <div className="mt-1 text-sm font-medium text-[#0b3558]">{selectedProject?.name || 'Без проекта'}</div>
+              </div>
+              <CustomSelect value={projectName} onChange={changeProject} options={[...projects.map((project) => project.name), 'Без проекта']} />
             </div>
           </div>
         </Card>
@@ -1752,7 +1993,321 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045 
   );
 };
 
-const ClientOrdersView = ({ navigate }) => (
+const ProjectLink = ({ project, onOpen, muted = false }) => {
+  if (!project) {
+    return <span className="text-xs text-[#a6bbd1]">Без проекта</span>;
+  }
+  return (
+    <button
+      type="button"
+      className={`inline-flex max-w-full items-center gap-1.5 text-left text-xs font-medium hover:text-[#004eba] ${muted ? 'text-[#476788]' : 'text-[#006bff]'}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen?.(project.id);
+      }}
+    >
+      <FolderKanban className="h-3.5 w-3.5 flex-none" />
+      <span className="truncate">{project.name}</span>
+    </button>
+  );
+};
+
+const ClientProjectsView = ({ projects, materials, orders, navigate, openProject, onCreateProject }) => {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Все статусы');
+  const [advertiserFilter, setAdvertiserFilter] = useState('Все рекламодатели');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedAdvertisers, setSelectedAdvertisers] = useState([mockAdvertisers[0].name]);
+  const advertiserOptions = ['Все рекламодатели', ...Array.from(new Set(projects.flatMap((project) => project.advertisers)))];
+  const visibleProjects = projects.filter((project) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [project.name, project.code, project.description, ...project.advertisers].some((value) => value.toLowerCase().includes(query));
+    const matchesStatus = statusFilter === 'Все статусы' || project.status === statusFilter;
+    const matchesAdvertiser = advertiserFilter === 'Все рекламодатели' || project.advertisers.includes(advertiserFilter);
+    return matchesSearch && matchesStatus && matchesAdvertiser;
+  });
+
+  const submitProject = () => {
+    if (!name.trim()) return;
+    onCreateProject({
+      name: name.trim(),
+      description: description.trim() || 'Описание проекта пока не добавлено.',
+      advertisers: selectedAdvertisers,
+    });
+    setName('');
+    setDescription('');
+    setSelectedAdvertisers([mockAdvertisers[0].name]);
+    setCreateOpen(false);
+  };
+
+  const toggleAdvertiser = (advertiserName) => {
+    setSelectedAdvertisers((current) => (
+      current.includes(advertiserName)
+        ? current.filter((item) => item !== advertiserName)
+        : [...current, advertiserName]
+    ));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-[#0b3558]">Проекты</h1>
+          <p className="mt-1 text-sm text-[#476788]">Материалы и размещения, объединенные общей задачей</p>
+        </div>
+        <Button variant="primary" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> Создать проект</Button>
+      </div>
+
+      <Card className="p-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_220px_260px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a6bbd1]" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Поиск по проекту или рекламодателю"
+              className="min-h-[42px] w-full rounded-lg border border-[#476788] bg-white py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+            />
+          </div>
+          <CustomSelect value={statusFilter} onChange={setStatusFilter} placeholder="Статус проекта" options={['Все статусы', 'Активный', 'Завершен']} />
+          <CustomSelect value={advertiserFilter} onChange={setAdvertiserFilter} placeholder="Рекламодатель" options={advertiserOptions} />
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] table-fixed divide-y divide-[#d4e0ed]">
+            <thead className="bg-[#f8f9fb]">
+              <tr>
+                {[
+                  ['Проект', 'w-[31%]'],
+                  ['Рекламодатели', 'w-[20%]'],
+                  ['Материалы', 'w-[11%]'],
+                  ['Заказы', 'w-[11%]'],
+                  ['Фактически', 'w-[15%]'],
+                  ['Статус', 'w-[12%]'],
+                ].map(([label, width]) => (
+                  <th key={label} className={`${width} px-6 py-4 text-left text-xs font-medium uppercase text-[#476788]`}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#d4e0ed] bg-white">
+              {visibleProjects.map((project) => {
+                const projectMaterials = materials.filter((material) => material.projectId === project.id);
+                const projectOrders = orders.filter((order) => order.projectId === project.id);
+                const spent = projectOrders.reduce((sum, order) => sum + order.price, 0);
+                return (
+                  <tr key={project.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => openProject(project.id)}>
+                    <td className="px-6 py-4">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#e6f0ff] text-[#006bff]">
+                          <FolderKanban className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-[#0b3558]">{project.name}</div>
+                          <div className="mt-1 text-xs text-[#476788]">{project.code} · обновлен {project.updatedAt}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-[#476788]"><div className="line-clamp-2">{project.advertisers.join(', ')}</div></td>
+                    <td className="px-6 py-4 text-sm font-medium tabular-nums text-[#0b3558]">{projectMaterials.length}</td>
+                    <td className="px-6 py-4 text-sm font-medium tabular-nums text-[#0b3558]">{projectOrders.length}</td>
+                    <td className="px-6 py-4 text-sm font-semibold tabular-nums text-[#0b3558]">{formatMoney(spent)}</td>
+                    <td className="px-6 py-4"><Badge color={project.status === 'Активный' ? 'green' : 'gray'}>{project.status}</Badge></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {!visibleProjects.length && (
+          <div className="p-8 text-center text-sm text-[#476788]">Проекты по выбранным условиям не найдены.</div>
+        )}
+      </Card>
+
+      <Modal isOpen={createOpen} onClose={() => setCreateOpen(false)} title="Новый проект" className="max-w-2xl">
+        <div className="space-y-5">
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Название проекта</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, запуск нового продукта" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
+          </label>
+          <fieldset>
+            <legend className="text-sm font-medium text-[#476788]">Рекламодатели</legend>
+            <p className="mt-1 text-xs text-[#7d96af]">Выберите одного или нескольких рекламодателей проекта.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {mockAdvertisers.map((item) => {
+                const selected = selectedAdvertisers.includes(item.name);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleAdvertiser(item.name)}
+                    className={`flex min-h-[52px] items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                      selected
+                        ? 'border-[#006bff] bg-[#e6f0ff] text-[#004eba]'
+                        : 'border-[#d4e0ed] bg-white text-[#0b3558] hover:border-[#8badcf]'
+                    }`}
+                  >
+                    <span className={`flex h-5 w-5 flex-none items-center justify-center rounded border ${selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf]'}`}>
+                      {selected && <Check className="h-3.5 w-3.5" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{item.name}</span>
+                      <span className="mt-0.5 block text-xs text-[#476788]">{item.code} · {item.type}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Описание</span>
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Тема и назначение серии публикаций" className="mt-2 min-h-[120px] w-full rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
+          </label>
+          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
+            Проект сразу станет активным. Материалы и заказы можно добавить после создания.
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>Отмена</Button>
+            <Button variant="primary" disabled={!name.trim() || !selectedAdvertisers.length} onClick={submitProject}>Создать проект</Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+const ClientProjectDetailView = ({ project, materials, orders, navigate, openMaterial, openOrder, onAddMaterial, onToggleStatus, onDelete }) => {
+  const [tab, setTab] = useState('Обзор');
+  if (!project) return <EmptyState title="Проект не найден" text="Вернитесь к списку проектов и выберите другой проект." action="К проектам" onAction={() => navigate('projects')} />;
+  const projectMaterials = materials.filter((material) => material.projectId === project.id);
+  const projectOrders = orders.filter((order) => order.projectId === project.id);
+  const frozen = projectOrders.reduce((sum, order) => sum + order.frozen, 0);
+  const charged = projectOrders.filter((order) => order.status === 'Завершено').reduce((sum, order) => sum + order.price, 0);
+  const returned = projectOrders.filter((order) => order.status === 'Площадка отказала').reduce((sum, order) => sum + order.price, 0);
+  const isEmpty = !projectMaterials.length && !projectOrders.length;
+
+  return (
+    <div className="space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('projects')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К проектам
+      </button>
+      <div className="flex flex-col gap-4 border-b border-[#d4e0ed] pb-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">{project.name}</h1>
+            <Badge color={project.status === 'Активный' ? 'green' : 'gray'}>{project.status}</Badge>
+          </div>
+          <p className="mt-2 text-sm text-[#476788]">{project.code} · обновлен {project.updatedAt}</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {isEmpty && <Button variant="danger" onClick={() => { onDelete(project.id); navigate('projects'); }}>Удалить проект</Button>}
+          <Button variant="secondary" onClick={() => onToggleStatus(project.id)}>
+            {project.status === 'Активный' ? 'Завершить проект' : 'Вернуть в активные'}
+          </Button>
+          <Button variant="primary" onClick={() => onAddMaterial(project.id)}><Plus className="h-4 w-4" /> Добавить материал</Button>
+        </div>
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto border-b border-[#d4e0ed]">
+        {['Обзор', 'Материалы', 'Заказы'].map((item) => (
+          <button key={item} className={`border-b-2 px-4 py-3 text-sm font-semibold ${tab === item ? 'border-[#006bff] text-[#006bff]' : 'border-transparent text-[#476788] hover:text-[#0b3558]'}`} onClick={() => setTab(item)}>
+            {item}{item === 'Материалы' ? ` · ${projectMaterials.length}` : item === 'Заказы' ? ` · ${projectOrders.length}` : ''}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'Обзор' && (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ['Материалы', projectMaterials.length],
+              ['Заказы', projectOrders.length],
+              ['Заморожено', formatMoney(frozen)],
+              ['Списано', formatMoney(charged)],
+            ].map(([label, value]) => (
+              <Card key={label} className="p-5">
+                <div className="text-xs uppercase text-[#476788]">{label}</div>
+                <div className="mt-2 text-2xl font-semibold tabular-nums text-[#0b3558]">{value}</div>
+              </Card>
+            ))}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.5fr)]">
+            <Card className="p-6">
+              <h2 className="font-display text-base font-bold text-[#0b3558]">О проекте</h2>
+              <p className="mt-4 text-sm leading-6 text-[#476788]">{project.description}</p>
+            </Card>
+            <Card className="p-6">
+              <h2 className="font-display text-base font-bold text-[#0b3558]">Рекламодатели</h2>
+              <div className="mt-4 space-y-3">
+                {project.advertisers.map((item) => <div key={item} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3 text-sm font-medium text-[#0b3558]">{item}</div>)}
+              </div>
+              {returned > 0 && <div className="mt-4 text-xs text-[#476788]">Возвращено по отклоненным заказам: {formatMoney(returned)}</div>}
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {tab === 'Материалы' && (
+        <Card className="overflow-hidden">
+          {projectMaterials.length ? (
+            <div className="divide-y divide-[#d4e0ed]">
+              {projectMaterials.map((material) => (
+                <button key={material.id} className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left hover:bg-[#f8f9fb]" onClick={() => openMaterial(material.id)}>
+                  <div className="min-w-0"><div className="truncate text-sm font-semibold text-[#0b3558]">{material.name}</div><div className="mt-1 text-xs text-[#476788]">{material.advertiser} · {material.type}</div></div>
+                  <Badge color={material.statusColor}>{material.status}</Badge>
+                </button>
+              ))}
+            </div>
+          ) : <div className="p-8 text-center text-sm text-[#476788]">В проекте пока нет материалов.</div>}
+        </Card>
+      )}
+
+      {tab === 'Заказы' && (
+        <Card className="overflow-hidden">
+          {projectOrders.length ? (
+            <div className="divide-y divide-[#d4e0ed]">
+              {projectOrders.map((order) => (
+                <button key={order.id} className="grid w-full gap-3 px-6 py-4 text-left hover:bg-[#f8f9fb] sm:grid-cols-[90px_minmax(0,1fr)_180px_150px] sm:items-center" onClick={() => openOrder(order)}>
+                  <div className="text-sm font-semibold text-[#006bff]">#{order.id}</div>
+                  <div className="min-w-0"><div className="truncate text-sm font-medium text-[#0b3558]">{order.material}</div><div className="mt-1 text-xs text-[#476788]">{order.platform}</div></div>
+                  <div className="text-sm font-semibold tabular-nums text-[#0b3558]">{formatMoney(order.price)}</div>
+                  <Badge color={order.statusColor}>{order.status}</Badge>
+                </button>
+              ))}
+            </div>
+          ) : <div className="p-8 text-center text-sm text-[#476788]">В проекте пока нет заказов.</div>}
+        </Card>
+      )}
+    </div>
+  );
+};
+
+const ClientOrdersView = ({ navigate, projects, orders, openProject, openOrder, onMoveOrders }) => {
+  const [projectFilter, setProjectFilter] = useState('Все проекты');
+  const [statusFilter, setStatusFilter] = useState('Все статусы');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [targetProject, setTargetProject] = useState('Без проекта');
+  const projectNameById = (id) => projects.find((project) => project.id === id)?.name;
+  const visibleOrders = orders.filter((order) => {
+    const matchesProject = projectFilter === 'Все проекты'
+      || (projectFilter === 'Без проекта' ? !order.projectId : projectNameById(order.projectId) === projectFilter);
+    const matchesStatus = statusFilter === 'Все статусы' || order.status === statusFilter;
+    return matchesProject && matchesStatus;
+  });
+  const allVisibleSelected = visibleOrders.length > 0 && visibleOrders.every((order) => selectedIds.includes(order.id));
+  const moveSelected = () => {
+    const projectId = targetProject === 'Без проекта' ? null : projects.find((project) => project.name === targetProject)?.id ?? null;
+    onMoveOrders(selectedIds, projectId);
+    setSelectedIds([]);
+    setMoveOpen(false);
+  };
+
+  return (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
@@ -1761,11 +2316,25 @@ const ClientOrdersView = ({ navigate }) => (
       </div>
       <Button variant="secondary" onClick={() => navigate('catalog')}>Открыть каталог</Button>
     </div>
+    <Card className="p-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[260px_260px_minmax(0,1fr)]">
+        <CustomSelect value={projectFilter} onChange={setProjectFilter} placeholder="Проект" options={['Все проекты', ...projects.map((project) => project.name), 'Без проекта']} />
+        <CustomSelect value={statusFilter} onChange={setStatusFilter} placeholder="Статус заказа" options={['Все статусы', ...Array.from(new Set(orders.map((order) => order.status)))]} />
+        <div className="flex items-center justify-end">
+          <Button variant="secondary" disabled={!selectedIds.length} onClick={() => setMoveOpen(true)}>
+            Переместить в проект{selectedIds.length ? ` · ${selectedIds.length}` : ''}
+          </Button>
+        </div>
+      </div>
+    </Card>
     <Card className="overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-[#d4e0ed]">
+        <table className="min-w-[1040px] w-full divide-y divide-[#d4e0ed]">
           <thead className="bg-[#f8f9fb]">
             <tr>
+              <th className="w-14 px-5 py-4 text-left">
+                <input type="checkbox" checked={allVisibleSelected} onChange={() => setSelectedIds(allVisibleSelected ? selectedIds.filter((id) => !visibleOrders.some((order) => order.id === id)) : Array.from(new Set([...selectedIds, ...visibleOrders.map((order) => order.id)])))} aria-label="Выбрать все заказы" />
+              </th>
               <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Номер</th>
               <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Материал</th>
               <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Площадка</th>
@@ -1775,22 +2344,20 @@ const ClientOrdersView = ({ navigate }) => (
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-[#d4e0ed]">
-            {mockOrdersClient.map((order) => (
+            {visibleOrders.map((order) => (
               <tr
                 key={order.id}
                 className="hover:bg-[#f8f9fb] cursor-pointer"
-                onClick={() => navigate(
-                  order.status === 'Площадка рассматривает'
-                    ? 'order_pending_detail'
-                    : order.status === 'Площадка отказала'
-                      ? 'order_rejected_detail'
-                      : order.status === 'Завершено'
-                        ? 'order_completed_detail'
-                        : 'order_detail',
-                )}
+                onClick={() => openOrder(order)}
               >
+                <td className="px-5 py-4" onClick={(event) => event.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.includes(order.id)} onChange={() => setSelectedIds((ids) => ids.includes(order.id) ? ids.filter((id) => id !== order.id) : [...ids, order.id])} aria-label={`Выбрать заказ ${order.id}`} />
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0b3558]">#{order.id}</td>
-                <td className="px-6 py-4 text-sm text-[#476788]">{order.material}</td>
+                <td className="px-6 py-4">
+                  <div className="text-sm text-[#476788]">{order.material}</div>
+                  <div className="mt-1"><ProjectLink project={projects.find((project) => project.id === order.projectId)} onOpen={openProject} /></div>
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[#476788]">{order.platform}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#0b3558] tabular-nums">{formatMoney(order.price)}</td>
                 <td className="px-6 py-4 whitespace-nowrap"><Badge color={order.statusColor}>{order.status}</Badge></td>
@@ -1803,8 +2370,22 @@ const ClientOrdersView = ({ navigate }) => (
         </table>
       </div>
     </Card>
+    <Modal isOpen={moveOpen} onClose={() => setMoveOpen(false)} title="Переместить заказы" className="max-w-lg">
+      <div className="space-y-5">
+        <p className="text-sm leading-6 text-[#476788]">Выбрано заказов: <span className="font-semibold text-[#0b3558]">{selectedIds.length}</span>. Изменится только группировка, статусы и финансовые операции останутся без изменений.</p>
+        <label className="block">
+          <span className="text-sm font-medium text-[#476788]">Новый проект</span>
+          <CustomSelect className="mt-2" value={targetProject} onChange={setTargetProject} options={[...projects.map((project) => project.name), 'Без проекта']} />
+        </label>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setMoveOpen(false)}>Отмена</Button>
+          <Button variant="primary" onClick={moveSelected}>Переместить</Button>
+        </div>
+      </div>
+    </Modal>
   </div>
-);
+  );
+};
 
 const ClientComplaintView = ({ navigate }) => {
   const [submitted, setSubmitted] = useState(false);
@@ -2047,7 +2628,7 @@ const ClientReportDetailView = ({ navigate }) => (
         <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчет по размещению</h1>
         <p className="text-sm text-[#476788] mt-1">Заказ #1045 · РБК Инвестиции · публикация от 18.10.2023</p>
       </div>
-      <div className="flex flex-wrap gap-2"><Button variant="secondary"><Download className="w-4 h-4 mr-2" /> Скачать отчет</Button><Button variant="primary">Принять размещение</Button></div>
+      <div className="flex flex-wrap gap-2"><Button variant="secondary"><Download className="h-4 w-4" /> Скачать отчет</Button><Button variant="primary">Принять размещение</Button></div>
     </div>
 
     <Card className="p-5">
@@ -2146,7 +2727,7 @@ const ClientBalanceView = ({ navigate }) => (
              </div>
           </div>
 
-          <Button variant="primary" className="w-full text-base py-3" onClick={() => navigate('topup')}>
+          <Button variant="primary" size="lg" className="w-full" onClick={() => navigate('topup')}>
             Пополнить баланс
           </Button>
         </div>
@@ -2167,8 +2748,8 @@ const ClientBalanceView = ({ navigate }) => (
           <div className="px-6 py-5 border-b border-[#d4e0ed] flex justify-between items-center bg-[#f8f9fb]">
             <h3 className="text-base font-semibold text-[#0b3558]">История операций</h3>
             <div className="flex gap-2">
-              <Button variant="secondary" className="text-xs px-3 py-1.5 h-8" onClick={() => navigate('operations')}>Все операции</Button>
-              <Button variant="secondary" className="text-xs px-3 py-1.5 h-8"><Download className="w-3.5 h-3.5 mr-1.5" /> Экспорт таблицы</Button>
+              <Button variant="secondary" size="sm" onClick={() => navigate('operations')}>Все операции</Button>
+              <Button variant="secondary" size="sm"><Download className="h-3.5 w-3.5" /> Экспорт таблицы</Button>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -2211,7 +2792,7 @@ const ClientBalanceView = ({ navigate }) => (
           <h3 className="text-base font-semibold text-[#0b3558]">Закрывающие документы</h3>
           <p className="text-sm text-[#476788] mt-1">Акты, счета, отчеты и документы по завершенным размещениям.</p>
         </div>
-        <Button variant="secondary"><Download className="w-4 h-4 mr-2" /> Скачать архив</Button>
+        <Button variant="secondary"><Download className="h-4 w-4" /> Скачать архив</Button>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-[#d4e0ed]">
@@ -2235,7 +2816,7 @@ const ClientBalanceView = ({ navigate }) => (
                 <td className="px-6 py-4 text-sm text-[#476788]">{order}</td>
                 <td className="px-6 py-4 text-sm text-[#476788]">{date}</td>
                 <td className="px-6 py-4"><Badge color={status === 'готов' ? 'green' : 'blue'}>{status}</Badge></td>
-                <td className="px-6 py-4 text-right"><Button variant="ghost" className="text-xs"><Download className="w-3.5 h-3.5 mr-1.5" /> Скачать</Button></td>
+                <td className="px-6 py-4 text-right"><Button variant="ghost" size="sm"><Download className="h-3.5 w-3.5" /> Скачать</Button></td>
               </tr>
             ))}
           </tbody>
@@ -2281,7 +2862,7 @@ const ClientOperationsView = ({ navigate }) => (
         <h1 className="font-display text-2xl font-bold text-[#0b3558]">История операций</h1>
         <p className="text-sm text-[#476788] mt-1">Пополнения, комиссии, заморозки, списания, возвраты, выводы и удержания.</p>
       </div>
-      <Button variant="secondary"><Download className="w-4 h-4 mr-2" /> Экспорт</Button>
+      <Button variant="secondary"><Download className="h-4 w-4" /> Экспорт</Button>
     </div>
     <Card className="overflow-hidden">
       <table className="min-w-full divide-y divide-[#d4e0ed]">
@@ -2302,14 +2883,27 @@ const ClientOperationsView = ({ navigate }) => (
   </div>
 );
 
-const ClientMaterialsView = ({ navigate }) => (
+const ClientMaterialsView = ({ navigate, projects, materials, openProject, openMaterial, startCreateMaterial }) => {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Все статусы');
+  const [projectFilter, setProjectFilter] = useState('Все проекты');
+  const visibleMaterials = materials.filter((material) => {
+    const project = projects.find((item) => item.id === material.projectId);
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [material.name, material.advertiser, project?.name || 'без проекта'].some((value) => value.toLowerCase().includes(query));
+    const matchesStatus = statusFilter === 'Все статусы' || material.status === statusFilter;
+    const matchesProject = projectFilter === 'Все проекты'
+      || (projectFilter === 'Без проекта' ? !material.projectId : project?.name === projectFilter);
+    return matchesSearch && matchesStatus && matchesProject;
+  });
+  return (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 className="font-display text-2xl font-bold text-[#0b3558]">Материалы</h1>
         <p className="text-sm text-[#476788] mt-1">Материалы для размещения</p>
       </div>
-      <Button variant="primary" className="w-full sm:w-auto" onClick={() => navigate('create_material')}><Plus className="w-4 h-4 mr-2" /> Добавить материал</Button>
+      <Button variant="primary" className="w-full sm:w-auto" onClick={() => startCreateMaterial(null)}><Plus className="h-4 w-4" /> Добавить материал</Button>
     </div>
 
     <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -2317,12 +2911,17 @@ const ClientMaterialsView = ({ navigate }) => (
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a6bbd1]" />
         <input 
           type="text" 
-          placeholder="Поиск по названию или рекламодателю..." 
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Поиск по материалу, рекламодателю или проекту"
           className="w-full pl-10 pr-4 py-2 border border-[#476788] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006bff] text-sm"
         />
       </div>
       <div className="w-full sm:w-56">
-        <CustomSelect placeholder="Статус материала" options={['Все статусы', 'Черновик', 'На модерации', 'Принят в систему', 'Требуются правки', 'Используется в заказах', 'Отклонен']} />
+        <CustomSelect value={statusFilter} onChange={setStatusFilter} placeholder="Статус материала" options={['Все статусы', 'Черновик', 'На модерации', 'Принят в систему', 'Требуются правки', 'Используется в заказах', 'Отклонен']} />
+      </div>
+      <div className="w-full sm:w-64">
+        <CustomSelect value={projectFilter} onChange={setProjectFilter} placeholder="Проект" options={['Все проекты', ...projects.map((project) => project.name), 'Без проекта']} />
       </div>
     </div>
 
@@ -2340,11 +2939,14 @@ const ClientMaterialsView = ({ navigate }) => (
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-[#d4e0ed]">
-            {mockMaterials.map((mat) => (
-              <tr key={mat.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('material_detail')}>
+            {visibleMaterials.map((mat) => (
+              <tr key={mat.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => openMaterial(mat.id)}>
                 <td className="px-6 py-4">
                   <div className="text-sm font-medium text-[#0b3558] max-w-[200px] sm:max-w-xs truncate">{mat.name}</div>
                   <div className="text-xs text-[#476788] mt-0.5">{mat.type}</div>
+                  <div className="mt-1">
+                    <ProjectLink project={projects.find((project) => project.id === mat.projectId)} onOpen={openProject} />
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-[#476788]"><div className="truncate">{mat.advertiser}</div></td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -2368,9 +2970,20 @@ const ClientMaterialsView = ({ navigate }) => (
       </div>
     </Card>
   </div>
-);
+  );
+};
 
-const ClientMaterialDetailView = ({ navigate }) => (
+const ClientMaterialDetailView = ({ navigate, material, projects, openProject, onChangeProject }) => {
+  const [projectName, setProjectName] = useState(projects.find((project) => project.id === material?.projectId)?.name || 'Без проекта');
+  const [result, setResult] = useState('');
+  const currentMaterial = material || mockMaterials[0];
+  const selectedProject = projects.find((project) => project.name === projectName);
+  const changeProject = (nextName) => {
+    setProjectName(nextName);
+    onChangeProject(currentMaterial.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
+    setResult('Проект материала изменен. Связанные заказы остались в прежних проектах.');
+  };
+  return (
   <div className="space-y-6 max-w-5xl mx-auto">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('materials')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> К материалам
@@ -2378,11 +2991,12 @@ const ClientMaterialDetailView = ({ navigate }) => (
     <div className="grid gap-5 border-b border-[#d4e0ed] pb-6 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
       <div className="min-w-0">
         <h1 className="max-w-3xl font-display text-2xl font-bold leading-tight text-[#0b3558]">
-          Пресс-релиз: Запуск новой платформы
+          {currentMaterial.name}
         </h1>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Badge color="green">Принят в систему</Badge>
-          <p className="text-sm text-[#476788]">Материал #M-1048 · обновлен 12.10.2023</p>
+          <Badge color={currentMaterial.statusColor}>{currentMaterial.status}</Badge>
+          <p className="text-sm text-[#476788]">Материал #M-{1047 + currentMaterial.id} · обновлен {currentMaterial.date}</p>
+          <ProjectLink project={selectedProject} onOpen={openProject} />
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -2395,7 +3009,7 @@ const ClientMaterialDetailView = ({ navigate }) => (
         <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Содержание материала</h3>
         <FullMaterialPreview />
         <div className="mt-6 flex flex-wrap gap-3">
-          <Button variant="secondary"><Download className="w-4 h-4 mr-2" /> Скачать документ</Button>
+          <Button variant="secondary"><Download className="h-4 w-4" /> Скачать документ</Button>
           <Button variant="ghost">Архивировать</Button>
         </div>
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -2403,6 +3017,12 @@ const ClientMaterialDetailView = ({ navigate }) => (
         </div>
       </Card>
       <div className="space-y-6">
+        <Card className="p-6">
+          <h3 className="text-base font-semibold text-[#0b3558]">Проект</h3>
+          <p className="mt-2 text-sm leading-6 text-[#476788]">Проект задает группировку для новых заказов этого материала.</p>
+          <CustomSelect className="mt-4" value={projectName} onChange={changeProject} options={[...projects.map((project) => project.name), 'Без проекта']} />
+          {result && <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3 text-xs leading-5 text-[#476788]">{result}</div>}
+        </Card>
         <Card className="p-6">
           <h3 className="text-base font-semibold text-[#0b3558] mb-4">Рекламодатель</h3>
           <div className="space-y-3 text-sm">
@@ -2428,10 +3048,24 @@ const ClientMaterialDetailView = ({ navigate }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
-const ClientCreateMaterialView = ({ navigate }) => {
+const ClientCreateMaterialView = ({ navigate, projects, defaultProjectId = null, onCreateMaterial }) => {
   const [aiModal, setAiModal] = useState(null);
+  const defaultProjectName = projects.find((project) => project.id === defaultProjectId)?.name || 'Без проекта';
+  const [projectName, setProjectName] = useState(defaultProjectName);
+  const saveMaterial = (status) => {
+    onCreateMaterial({
+      name: 'Пресс-релиз: запуск аналитики',
+      advertiser: 'ООО "Финтех Решения"',
+      type: 'Статья',
+      status,
+      statusColor: status === 'Черновик' ? 'gray' : 'blue',
+      projectId: projectName === 'Без проекта' ? null : projects.find((project) => project.name === projectName)?.id ?? null,
+    });
+    navigate('materials');
+  };
   return (
   <div className="space-y-6 max-w-5xl mx-auto">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('materials')}>
@@ -2454,6 +3088,11 @@ const ClientCreateMaterialView = ({ navigate }) => {
         <label className="block">
           <span className="text-sm font-medium text-[#476788]">Тип материала</span>
           <CustomSelect className="mt-2" options={['Статья', 'Новость', 'Интервью', 'Пост в Телеграме']} />
+        </label>
+        <label className="block md:col-span-2">
+          <span className="text-sm font-medium text-[#476788]">Проект</span>
+          <CustomSelect className="mt-2" value={projectName} onChange={setProjectName} options={[...projects.map((project) => project.name), 'Без проекта']} />
+          <span className="mt-2 block text-xs text-[#476788]">Необязательно. Новые заказы этого материала унаследуют выбранный проект.</span>
         </label>
         <div className="block">
           <span className="text-sm font-medium text-[#476788]">Файлы</span>
@@ -2483,7 +3122,7 @@ const ClientCreateMaterialView = ({ navigate }) => {
             <span className="text-sm font-medium text-[#476788]">Текст материала</span>
             <div className="flex items-center gap-3">
               <span className="text-xs text-[#476788]">2 840 знаков</span>
-              <Button variant="secondary" className="text-xs py-1.5 px-3" onClick={() => setAiModal('rewrite')}>Рерайт с помощью ИИ · 30 ₽</Button>
+              <Button variant="secondary" size="sm" onClick={() => setAiModal('rewrite')}>Рерайт с помощью ИИ · 30 ₽</Button>
             </div>
           </div>
           <div className="mt-2 border border-[#0b3558] rounded-2xl overflow-hidden bg-white focus-within:ring-2 focus-within:ring-[#006bff] focus-within:border-[#006bff]">
@@ -2539,8 +3178,8 @@ const ClientCreateMaterialView = ({ navigate }) => {
         <p>Размещая материал, вы подтверждаете, что у вас есть все необходимые авторские права на текст, изображения и другие элементы контента.</p>
       </div>
       <div className="mt-6 flex justify-end gap-3">
-        <Button variant="secondary" onClick={() => navigate('materials')}>Сохранить черновик</Button>
-        <Button variant="primary" onClick={() => navigate('materials')}>Отправить на модерацию</Button>
+        <Button variant="secondary" onClick={() => saveMaterial('Черновик')}>Сохранить черновик</Button>
+        <Button variant="primary" onClick={() => saveMaterial('На модерации')}>Отправить на модерацию</Button>
       </div>
     </Card>
     <AiAssistModal isOpen={Boolean(aiModal)} onClose={() => setAiModal(null)} type={aiModal || 'rewrite'} />
@@ -2552,7 +3191,7 @@ const ClientAdvertisersView = ({ navigate }) => (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <h1 className="font-display text-2xl font-bold text-[#0b3558]">Рекламодатели</h1>
-      <Button variant="primary" onClick={() => navigate('advertiser_new')}><Plus className="w-4 h-4 mr-2" /> Добавить рекламодателя</Button>
+      <Button variant="primary" onClick={() => navigate('advertiser_new')}><Plus className="h-4 w-4" /> Добавить рекламодателя</Button>
     </div>
     <Card className="p-5 bg-[#f8f9fb]">
       <p className="text-sm text-[#476788]">
@@ -2859,7 +3498,7 @@ const PlatformListTable = ({ items, favoritePlatforms, toggleFavoritePlatform, n
   </Card>
 );
 
-const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate }) => {
+const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate, materials, projects, onCreateOrders }) => {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [selectedPlatformIds, setSelectedPlatformIds] = useState([]);
   const [isBulkModalOpen, setBulkModalOpen] = useState(false);
@@ -2897,7 +3536,7 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
             <Star className={`w-4 h-4 mr-2 ${showFavoritesOnly ? 'fill-white' : ''}`} />
             Избранные: {favoritePlatforms.length}
           </Button>
-          <Button variant="secondary" className="w-full sm:w-auto"><Filter className="w-4 h-4 mr-2" /> Фильтры</Button>
+          <Button variant="secondary" className="w-full sm:w-auto"><Filter className="h-4 w-4" /> Фильтры</Button>
         </div>
       </div>
 
@@ -2952,12 +3591,15 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
         isOpen={isBulkModalOpen}
         onClose={() => setBulkModalOpen(false)}
         platforms={selectedPlatforms}
+        materials={materials}
+        projects={projects}
+        onCreateOrders={onCreateOrders}
       />
     </div>
   );
 };
 
-const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, navigate }) => {
+const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, navigate, materials, projects, onCreateOrders }) => {
   const item = mockCatalog[0];
   const isFavorite = favoritePlatforms.includes(item.id);
   const [isMaterialModalOpen, setMaterialModalOpen] = useState(false);
@@ -3005,17 +3647,29 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
           <Button variant="secondary" className="w-full mt-3" onClick={() => navigate('catalog')}>К каталогу</Button>
         </Card>
       </div>
-      <MaterialSelectionModal isOpen={isMaterialModalOpen} onClose={() => setMaterialModalOpen(false)} platform={item} />
+      <MaterialSelectionModal isOpen={isMaterialModalOpen} onClose={() => setMaterialModalOpen(false)} platform={item} materials={materials} projects={projects} onCreateOrders={onCreateOrders} />
     </div>
   );
 };
 
-const ClientReportsView = ({ navigate }) => (
+const ClientReportsView = ({ navigate, projects, openProject }) => {
+  const [projectFilter, setProjectFilter] = useState('Все проекты');
+  const visibleReports = mockReports.filter((report) => {
+    if (projectFilter === 'Все проекты') return true;
+    if (projectFilter === 'Без проекта') return !report.projectId;
+    return projects.find((project) => project.id === report.projectId)?.name === projectFilter;
+  });
+  return (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчеты</h1>
-      <div className="flex gap-3"><Button variant="secondary"><Download className="w-4 h-4 mr-2" /> Скачать таблицу</Button><Button variant="primary">Сформировать отчет</Button></div>
+      <div className="flex gap-3"><Button variant="secondary"><Download className="h-4 w-4" /> Скачать таблицу</Button><Button variant="primary">Сформировать отчет</Button></div>
     </div>
+    <Card className="p-4">
+      <div className="max-w-sm">
+        <CustomSelect value={projectFilter} onChange={setProjectFilter} placeholder="Проект" options={['Все проекты', ...projects.map((project) => project.name), 'Без проекта']} />
+      </div>
+    </Card>
     <Card className="overflow-hidden">
       <table className="min-w-full divide-y divide-[#d4e0ed]">
         <thead className="bg-[#f8f9fb]">
@@ -3028,10 +3682,13 @@ const ClientReportsView = ({ navigate }) => (
           </tr>
         </thead>
         <tbody className="divide-y divide-[#d4e0ed]">
-          {mockReports.map(row => (
+          {visibleReports.map(row => (
             <tr key={row.order} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('report_detail')}>
               <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">{row.order}</td>
-              <td className="px-6 py-4 text-sm text-[#476788]">{row.material}</td>
+              <td className="px-6 py-4">
+                <div className="text-sm text-[#476788]">{row.material}</div>
+                <div className="mt-1"><ProjectLink project={projects.find((project) => project.id === row.projectId)} onOpen={openProject} /></div>
+              </td>
               <td className="px-6 py-4 text-sm text-[#476788]">{row.platform}</td>
               <td className="px-6 py-4 text-sm text-[#006bff]">{row.link}</td>
               <td className="px-6 py-4"><Badge color={row.color}>{row.status}</Badge></td>
@@ -3041,7 +3698,8 @@ const ClientReportsView = ({ navigate }) => (
       </table>
     </Card>
   </div>
-);
+  );
+};
 
 const ClientSupportView = ({ navigate, role = 'client' }) => {
   const isPublisher = role === 'publisher';
@@ -3819,7 +4477,7 @@ const PublisherPlatformsView = ({ navigate }) => (
         <h1 className="font-display text-2xl font-bold text-[#0b3558]">Мои площадки</h1>
         <p className="text-sm text-[#476788] mt-1">Список площадок, статусы модерации и переход к карточке редактирования.</p>
       </div>
-      <Button variant="primary" onClick={() => navigate('pub_platform_new')}><Plus className="w-4 h-4 mr-2" /> Добавить площадку</Button>
+      <Button variant="primary" onClick={() => navigate('pub_platform_new')}><Plus className="h-4 w-4" /> Добавить площадку</Button>
     </div>
     <Card className="overflow-hidden">
       <table className="min-w-full divide-y divide-[#d4e0ed]">
@@ -4213,7 +4871,7 @@ const TeamAccessSettingsBlock = ({ description, members }) => {
             <div className="mt-3 space-y-3">
               <input className="w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="name@company.ru" />
               <CustomSelect options={['Роль: администратор', 'Роль: заказы и чат', 'Роль: публикации', 'Роль: выплаты', 'Только просмотр']} />
-              <Button variant="primary" className="w-full"><Plus className="w-4 h-4 mr-2" /> Отправить приглашение</Button>
+              <Button variant="primary" className="w-full"><Plus className="h-4 w-4" /> Отправить приглашение</Button>
             </div>
             <p className="text-xs text-[#476788] mt-3">Сотрудник получит письмо со ссылкой для входа и создания пароля.</p>
           </div>
@@ -4336,7 +4994,7 @@ const ClientSettingsView = () => {
                 <div className="text-sm font-medium text-[#0b3558]">Активная сессия: Chrome, macOS</div>
                 <div className="text-xs text-[#476788] mt-1">Последняя активность сегодня, 12:44 · Москва</div>
               </div>
-              <Button variant="secondary" className="text-xs py-1.5 px-3">Завершить другие сессии</Button>
+              <Button variant="secondary" size="sm">Завершить другие сессии</Button>
             </div>
           </div>
           <div className="mt-6 flex justify-end"><Button variant="primary">Обновить безопасность</Button></div>
@@ -4515,7 +5173,7 @@ const PublisherSettingsView = () => {
               </div>
             ))}
           </div>
-          <Button variant="secondary" className="w-full mt-4"><Download className="w-4 h-4 mr-2" /> Скачать архив</Button>
+          <Button variant="secondary" className="mt-4 w-full"><Download className="h-4 w-4" /> Скачать архив</Button>
         </SettingsSection>
       </div>
     </div>
@@ -4596,7 +5254,7 @@ const AdminPlatformsCatalogView = ({ navigate, onSelect }) => {
           <h1 className="font-display text-2xl font-bold text-[#0b3558]">Площадки</h1>
           <p className="text-sm text-[#476788] mt-1">Каталог площадок с модерацией, статусами, фильтрами и административными действиями.</p>
         </div>
-        <Button variant="secondary" onClick={() => setExported(true)}><Download className="w-4 h-4 mr-2" /> {exported ? 'Экспорт готов' : 'Экспорт'}</Button>
+        <Button variant="secondary" onClick={() => setExported(true)}><Download className="h-4 w-4" /> {exported ? 'Экспорт готов' : 'Экспорт'}</Button>
       </div>
 
       <Card className="p-4">
@@ -4716,7 +5374,7 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
           <h1 className="font-display text-2xl font-bold text-[#0b3558]">{data.title}</h1>
           <p className="text-sm text-[#476788] mt-1">Операционный раздел админки с отдельными действиями и подтверждениями.</p>
         </div>
-        <Button variant="secondary" onClick={() => setExported(true)}><Download className="w-4 h-4 mr-2" /> {exported ? 'Экспорт готов' : 'Экспорт'}</Button>
+        <Button variant="secondary" onClick={() => setExported(true)}><Download className="h-4 w-4" /> {exported ? 'Экспорт готов' : 'Экспорт'}</Button>
       </div>
       <div className={`grid grid-cols-1 gap-3 ${section === 'admin_users' ? 'md:grid-cols-[1fr_190px_190px_190px]' : 'md:grid-cols-[1fr_220px_220px]'}`}>
         <div className="relative">
@@ -5036,7 +5694,7 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
           <div className="mt-4 space-y-2">
             <Button variant="primary" className="w-full" onClick={() => submitDecision('Принят')}>Принять</Button>
             {!isPlatform && <Button variant="secondary" className="w-full" onClick={() => submitDecision('Возвращен на доработку')}>Вернуть на доработку</Button>}
-            <Button variant="secondary" className="w-full text-red-600" onClick={() => submitDecision('Отклонен')}>Отклонить</Button>
+            <Button variant="danger" className="w-full" onClick={() => submitDecision('Отклонен')}>Отклонить</Button>
           </div>
           <div className="mt-4"><ActionResult text={result} tone={result.startsWith('Добавьте') ? 'error' : 'success'} /></div>
         </Card>
@@ -5662,7 +6320,7 @@ const AdminAdvertiserDetailView = ({ navigate, selection, onOpenOrder }) => {
             </div>
             <div className="mt-4 space-y-2">
               <Button variant="primary" className="w-full" onClick={requestCheck}>Запросить проверку</Button>
-              <Button variant="secondary" className="w-full text-red-600" onClick={blockAdvertiser}>Заблокировать</Button>
+              <Button variant="danger" className="w-full" onClick={blockAdvertiser}>Заблокировать</Button>
             </div>
             <div className="mt-4"><ActionResult text={result} tone={isBlocked ? 'error' : 'success'} /></div>
           </Card>
@@ -6088,6 +6746,13 @@ export default function App() {
 	  const [clientView, setClientView] = useState('dashboard');
 	  const [favoritePlatforms, setFavoritePlatforms] = useState([101, 102]);
 	  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [projects, setProjects] = useState(initialProjects);
+  const [clientMaterials, setClientMaterials] = useState(mockMaterials);
+  const [clientOrders, setClientOrders] = useState(mockOrdersClient);
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjects[0].id);
+  const [selectedMaterialId, setSelectedMaterialId] = useState(mockMaterials[0].id);
+  const [selectedOrderId, setSelectedOrderId] = useState(mockOrdersClient[0].id);
+  const [materialProjectPreset, setMaterialProjectPreset] = useState(null);
 
   // Состояние кабинета паблишера
   const [publisherView, setPublisherView] = useState('pub_dashboard');
@@ -6104,6 +6769,7 @@ export default function App() {
 
   const clientNav = [
     { id: 'dashboard', label: 'Панель', icon: LayoutDashboard },
+    { id: 'projects', label: 'Проекты', icon: FolderKanban },
     { id: 'materials', label: 'Материалы', icon: FileText },
     { id: 'catalog', label: 'Каталог площадок', icon: Store },
     { id: 'orders', label: 'Заказы', icon: Briefcase },
@@ -6172,6 +6838,17 @@ export default function App() {
     setView(target);
   };
   const parentViewByDetail = {
+    project_detail: 'projects',
+    material_detail: 'materials',
+    create_material: 'materials',
+    order_detail: 'orders',
+    order_pending_detail: 'orders',
+    order_rejected_detail: 'orders',
+    order_completed_detail: 'orders',
+    complaint: 'orders',
+    dispute_detail: 'orders',
+    order_chat: 'orders',
+    report_detail: 'reports',
     admin_moderation_detail: 'admin_moderation',
     admin_order_detail: 'admin_orders',
     admin_order_chat: 'admin_orders',
@@ -6199,30 +6876,120 @@ export default function App() {
     setAdminSelection({ section: 'admin_orders', row });
     setAdminView('admin_order_detail');
   };
+  const openProject = (projectId) => {
+    setSelectedProjectId(projectId);
+    setClientView('project_detail');
+  };
+  const openMaterial = (materialId) => {
+    setSelectedMaterialId(materialId);
+    setClientView('material_detail');
+  };
+  const openOrder = (order) => {
+    setSelectedOrderId(order.id);
+    setClientView(
+      order.status === 'Площадка рассматривает'
+        ? 'order_pending_detail'
+        : order.status === 'Площадка отказала'
+          ? 'order_rejected_detail'
+          : order.status === 'Завершено'
+            ? 'order_completed_detail'
+            : 'order_detail',
+    );
+  };
+  const startCreateMaterial = (projectId = null) => {
+    setMaterialProjectPreset(projectId);
+    setClientView('create_material');
+  };
+  const createProject = ({ name, description, advertisers }) => {
+    const nextId = Math.max(0, ...projects.map((project) => project.id)) + 1;
+    const nextProject = {
+      id: nextId,
+      code: `PR-${String(nextId).padStart(3, '0')}`,
+      name,
+      description,
+      advertisers,
+      status: 'Активный',
+      updatedAt: '23.07.2026',
+    };
+    setProjects((items) => [...items, nextProject]);
+    setSelectedProjectId(nextId);
+    setClientView('project_detail');
+  };
+  const toggleProjectStatus = (projectId) => {
+    setProjects((items) => items.map((project) => project.id === projectId
+      ? { ...project, status: project.status === 'Активный' ? 'Завершен' : 'Активный', updatedAt: '23.07.2026' }
+      : project));
+  };
+  const deleteProject = (projectId) => {
+    const hasMaterials = clientMaterials.some((material) => material.projectId === projectId);
+    const hasOrders = clientOrders.some((order) => order.projectId === projectId);
+    if (hasMaterials || hasOrders) return;
+    setProjects((items) => items.filter((project) => project.id !== projectId));
+  };
+  const createMaterial = (material) => {
+    const nextId = Math.max(0, ...clientMaterials.map((item) => item.id)) + 1;
+    setClientMaterials((items) => [...items, { ...material, id: nextId, placements: 0, date: '23.07.2026' }]);
+    if (material.projectId) {
+      setProjects((items) => items.map((project) => project.id === material.projectId ? { ...project, updatedAt: '23.07.2026' } : project));
+    }
+  };
+  const changeMaterialProject = (materialId, projectId) => {
+    setClientMaterials((items) => items.map((material) => material.id === materialId ? { ...material, projectId } : material));
+  };
+  const changeOrderProject = (orderId, projectId) => {
+    setClientOrders((items) => items.map((order) => order.id === orderId ? { ...order, projectId } : order));
+  };
+  const moveOrders = (orderIds, projectId) => {
+    setClientOrders((items) => items.map((order) => orderIds.includes(order.id) ? { ...order, projectId } : order));
+  };
+  const createOrdersFromMaterial = (material, platforms) => {
+    setClientOrders((items) => {
+      const startId = Math.max(0, ...items.map((order) => order.id)) + 1;
+      const createdOrders = platforms.map((platform, index) => ({
+        id: startId + index,
+        material: material.name,
+        platform: platform.name,
+        price: platform.price,
+        frozen: platform.price,
+        status: 'Площадка рассматривает',
+        statusColor: 'blue',
+        date: '23.07.2026',
+        action: 'Дождаться площадки',
+        projectId: material.projectId ?? null,
+      }));
+      return [...createdOrders, ...items];
+    });
+    setClientMaterials((items) => items.map((item) => item.id === material.id
+      ? { ...item, placements: item.placements + platforms.length, status: 'Используется в заказах', statusColor: 'indigo' }
+      : item));
+    setClientView('orders');
+  };
 
   const renderContent = () => {
     if (isClient) {
       switch (clientView) {
         case 'dashboard': return <ClientDashboardView navigate={setClientView} />;
-        case 'materials': return <ClientMaterialsView navigate={setClientView} />;
-        case 'material_detail': return <ClientMaterialDetailView navigate={setClientView} />;
-        case 'create_material': return <ClientCreateMaterialView navigate={setClientView} />;
+        case 'projects': return <ClientProjectsView projects={projects} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openProject={openProject} onCreateProject={createProject} />;
+        case 'project_detail': return <ClientProjectDetailView project={projects.find((project) => project.id === selectedProjectId)} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openMaterial={openMaterial} openOrder={openOrder} onAddMaterial={startCreateMaterial} onToggleStatus={toggleProjectStatus} onDelete={deleteProject} />;
+        case 'materials': return <ClientMaterialsView navigate={setClientView} projects={projects} materials={clientMaterials} openProject={openProject} openMaterial={openMaterial} startCreateMaterial={startCreateMaterial} />;
+        case 'material_detail': return <ClientMaterialDetailView navigate={setClientView} material={clientMaterials.find((material) => material.id === selectedMaterialId)} projects={projects} openProject={openProject} onChangeProject={changeMaterialProject} />;
+        case 'create_material': return <ClientCreateMaterialView navigate={setClientView} projects={projects} defaultProjectId={materialProjectPreset} onCreateMaterial={createMaterial} />;
         case 'advertisers': return <ClientAdvertisersView navigate={setClientView} />;
         case 'advertiser_new': return <ClientAdvertiserNewView navigate={setClientView} />;
         case 'advertiser_detail': return <ClientAdvertiserDetailView navigate={setClientView} />;
         case 'advertiser_edit': return <ClientAdvertiserEditView navigate={setClientView} />;
-        case 'catalog': return <ClientCatalogView favoritePlatforms={favoritePlatforms} toggleFavoritePlatform={toggleFavoritePlatform} navigate={setClientView} />;
-        case 'platform_detail': return <ClientPlatformDetailView favoritePlatforms={favoritePlatforms} toggleFavoritePlatform={toggleFavoritePlatform} navigate={setClientView} />;
-        case 'order_detail': return <ClientOrderDetailView navigate={setClientView} />;
-        case 'order_pending_detail': return <ClientOrderDetailView navigate={setClientView} state="pending" />;
-        case 'order_rejected_detail': return <ClientOrderDetailView navigate={setClientView} state="rejected" />;
-        case 'order_completed_detail': return <ClientOrderDetailView navigate={setClientView} state="completed" orderId={1052} />;
+        case 'catalog': return <ClientCatalogView favoritePlatforms={favoritePlatforms} toggleFavoritePlatform={toggleFavoritePlatform} navigate={setClientView} materials={clientMaterials} projects={projects} onCreateOrders={createOrdersFromMaterial} />;
+        case 'platform_detail': return <ClientPlatformDetailView favoritePlatforms={favoritePlatforms} toggleFavoritePlatform={toggleFavoritePlatform} navigate={setClientView} materials={clientMaterials} projects={projects} onCreateOrders={createOrdersFromMaterial} />;
+        case 'order_detail': return <ClientOrderDetailView navigate={setClientView} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
+        case 'order_pending_detail': return <ClientOrderDetailView navigate={setClientView} state="pending" sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
+        case 'order_rejected_detail': return <ClientOrderDetailView navigate={setClientView} state="rejected" sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
+        case 'order_completed_detail': return <ClientOrderDetailView navigate={setClientView} state="completed" orderId={selectedOrderId} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
         case 'complaint': return <ClientComplaintView navigate={setClientView} />;
         case 'dispute_detail': return <DisputeDetailView navigate={setClientView} />;
         case 'order_chat': return <OrderChatView navigate={setClientView} />;
         case 'report_detail': return <ClientReportDetailView navigate={setClientView} />;
-        case 'orders': return <ClientOrdersView navigate={setClientView} />;
-        case 'reports': return <ClientReportsView navigate={setClientView} />;
+        case 'orders': return <ClientOrdersView navigate={setClientView} projects={projects} orders={clientOrders} openProject={openProject} openOrder={openOrder} onMoveOrders={moveOrders} />;
+        case 'reports': return <ClientReportsView navigate={setClientView} projects={projects} openProject={openProject} />;
         case 'support': return <ClientSupportView navigate={setClientView} />;
         case 'balance': return <ClientBalanceView navigate={setClientView} />;
         case 'topup': return <ClientTopUpView navigate={setClientView} />;
