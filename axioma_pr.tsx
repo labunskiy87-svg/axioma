@@ -1156,6 +1156,96 @@ const CopyButton = ({ value, label = 'Скопировать' }) => {
   );
 };
 
+const orderMaterialAttachments = [
+  ['preview-interface.jpg', 'Изображение · 2,4 МБ', 'image'],
+  ['analytics-screen.png', 'Изображение · 1,8 МБ', 'image'],
+  ['brand-cover.webp', 'Изображение · 920 КБ', 'image'],
+  ['press-release.docx', 'Документ · 146 КБ', 'document'],
+];
+
+const orderMaterialSettings = [
+  ['Тэги', 'финтех, аналитика, PR, запуск продукта'],
+  ['Title', 'Финтех Решения запускает платформу аналитики'],
+  ['Description', 'Новая платформа помогает PR-командам контролировать публикации, ссылки и отчеты.'],
+  ['Желаемый URL', '/news/fintech-analytics-platform'],
+];
+
+const OrderMaterialContent = ({ context = 'client', showCopyActions = false }) => (
+  <div className="space-y-6">
+    <Card className="p-6">
+      <FullMaterialPreview
+        context={context}
+        showLinks={false}
+        showAttachments={false}
+      />
+    </Card>
+
+    <Card className="p-6">
+      <div className="mb-5">
+        <h3 className="font-display text-lg font-bold text-[#0b3558]">Прикрепленные файлы</h3>
+        <p className="mt-1 text-sm text-[#476788]">Изображения и документы, переданные вместе с материалом</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {orderMaterialAttachments.map(([name, meta, type]) => (
+          <button
+            key={name}
+            type="button"
+            className="group flex min-w-0 items-center gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3 text-left transition-colors hover:border-[#a6bbd1] hover:bg-white"
+          >
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white text-[#006bff]">
+              {type === 'image' ? <ImageIcon className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-[#0b3558]">{name}</span>
+              <span className="mt-0.5 block text-xs text-[#476788]">{meta}</span>
+            </span>
+            <Download className="h-4 w-4 flex-shrink-0 text-[#476788] transition-colors group-hover:text-[#006bff]" />
+          </button>
+        ))}
+      </div>
+    </Card>
+
+    <Card className="p-6">
+      <div className="mb-5">
+        <h3 className="font-display text-lg font-bold text-[#0b3558]">Параметры размещения</h3>
+        <p className="mt-1 text-sm text-[#476788]">Ссылки и дополнительные требования к публикации</p>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]">
+        <div className="border-b border-[#d4e0ed] px-4 py-3">
+          <div className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</div>
+        </div>
+        <div className="divide-y divide-[#d4e0ed]">
+          {materialLinks.map((link) => (
+            <div key={link} className="flex items-center justify-between gap-3 bg-white px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2 break-all text-sm text-[#006bff]">
+                <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                <span>{link}</span>
+              </div>
+              {showCopyActions && <CopyButton value={link} label="Скопировать ссылку" />}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]">
+        <div className="border-b border-[#d4e0ed] px-4 py-3">
+          <div className="text-sm font-semibold text-[#0b3558]">Дополнительные настройки материала</div>
+        </div>
+        <div className="divide-y divide-[#d4e0ed]">
+          {orderMaterialSettings.map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between gap-3 bg-white px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-xs text-[#476788]">{label}</div>
+                <div className="mt-0.5 break-words text-sm font-medium text-[#0b3558]">{value}</div>
+              </div>
+              {showCopyActions && <CopyButton value={value} label={`Скопировать ${label}`} />}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  </div>
+);
+
 const MaterialRightsDisclaimer = () => (
   <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
     Размещая материал, вы подтверждаете, что у вас есть все необходимые авторские права на текст, изображения и другие элементы контента.
@@ -2545,7 +2635,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
       </div>
     </div>
 
-    <MaterialContentCard subtitle="Версия материала, связанная с заказом" />
+    <OrderMaterialContent context="client" />
     <ProjectChangeModal
       isOpen={projectModalOpen}
       onClose={() => setProjectModalOpen(false)}
@@ -7875,14 +7965,23 @@ const AdminOrderDetailView = ({ navigate, selection }) => {
         <div className="mt-4"><ActionResult text={result} /></div>
       </Card>
     </div>
+    <OrderMaterialContent context="admin" showCopyActions />
     <Card className="p-6">
-      <h2 className="font-display text-base font-bold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Материал на проверке</h2>
-      <FullMaterialPreview context="admin" />
+      <h2 className="font-display text-base font-bold mb-4">Финансы заказа</h2>
+      <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ['Стоимость', formatMoney(150000)],
+          ['Заморожено', formatMoney(150000)],
+          ['Комиссия', formatMoney(22500)],
+          ['К выплате паблишеру', formatMoney(127500)],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+            <div className="text-xs text-[#476788]">{label}</div>
+            <div className="mt-1 font-semibold text-[#0b3558]">{value}</div>
+          </div>
+        ))}
+      </div>
     </Card>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <Card className="p-6"><h2 className="font-display text-base font-bold mb-4">Финансы заказа</h2><div className="space-y-3 text-sm">{[['Стоимость', formatMoney(150000)], ['Заморожено', formatMoney(150000)], ['Комиссия', formatMoney(22500)], ['К выплате паблишеру', formatMoney(127500)]].map(([label, value]) => <div key={label} className="flex justify-between gap-4"><span className="text-[#476788]">{label}</span><span className="font-medium">{value}</span></div>)}</div></Card>
-      <Card className="p-6"><h2 className="font-display text-base font-bold mb-4">Таймлайн</h2><div className="space-y-4">{[['Заказ создан', '15.10, 10:15', 'done'], ['Средства заморожены', '15.10, 10:16', 'done'], ['Площадка отправила ссылку', '18.10, 12:30', 'done'], ['Приемка заказчиком', 'ожидается', 'current']].map(([label, time, status]) => <div key={label} className="flex gap-3">{status === 'done' ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-500" /> : <Clock className="mt-0.5 h-4 w-4 text-amber-500" />}<div><div className="text-sm font-medium">{label}</div><div className="text-xs text-[#476788]">{time}</div></div></div>)}</div></Card>
-    </div>
   </div>
   );
 };
