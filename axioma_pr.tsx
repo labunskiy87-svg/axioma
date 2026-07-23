@@ -1045,7 +1045,7 @@ const ActionResult = ({ text, tone = 'success' }) => text ? (
   </div>
 ) : null;
 
-const FullMaterialPreview = ({ context = 'client', showLinks = true }) => (
+const FullMaterialPreview = ({ context = 'client', showLinks = true, showAttachments = true }) => (
   <div className="space-y-5">
     <div className="prose prose-sm max-w-none text-[#476788]">
       <h2 className="font-display text-2xl font-bold text-[#0b3558] mb-3">Финтех Решения запускает платформу аналитики для пиар-команд</h2>
@@ -1082,7 +1082,7 @@ const FullMaterialPreview = ({ context = 'client', showLinks = true }) => (
         {' '}<a className="text-[#006bff] underline" href="https://axioma.example/research/2026">axioma.example/research/2026</a>.
       </p>
     </div>
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    {showAttachments && <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {['превью интерфейса', 'экран аналитики', 'обложка бренда'].map((image, index) => (
         <div key={image} className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] overflow-hidden">
           <div className="aspect-[4/3] bg-white flex items-center justify-center border-b border-[#d4e0ed]">
@@ -1091,7 +1091,7 @@ const FullMaterialPreview = ({ context = 'client', showLinks = true }) => (
           <div className="px-3 py-2 text-xs text-[#476788]">{image}</div>
         </div>
       ))}
-    </div>
+    </div>}
     {showLinks && <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
       <div className="flex items-center justify-between gap-3 mb-3">
         <h4 className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте для контроля</h4>
@@ -5041,7 +5041,6 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
         subtitle: 'ответ до 18:00 сегодня',
         amount: 85000,
         title: 'Анонс вебинара по инвестициям',
-        description: 'Новость для РБК Инвестиции. Требуется принять или отклонить заявку до конца рабочего дня.',
         format: 'Новость',
       }
     : {
@@ -5051,7 +5050,6 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
         subtitle: isAcceptanceState ? 'ссылка отправлена 18.10.2023' : 'публикация до 20.10.2023',
         amount: 127500,
         title: 'Пресс-релиз: Запуск новой платформы',
-        description: 'Статья для РБК Инвестиции, публикация от редакции. Ответ 8 часов, дедлайн публикации до 20.10.',
         format: 'Статья',
       };
 
@@ -5061,15 +5059,22 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
       <ChevronRight className="w-4 h-4 rotate-180" /> Назад к списку
     </div>
 
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558] flex items-center gap-3">
-          Заказ #{order.id}
+    <div className="flex flex-col gap-5 border-b border-[#d4e0ed] pb-6 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge color={order.statusColor}>{order.status}</Badge>
+          <span className="text-sm text-[#476788]">Заказ #{order.id}</span>
+        </div>
+        <h1 className="mt-3 max-w-4xl break-words font-display text-3xl font-bold leading-tight text-[#0b3558]">
+          {order.title}
         </h1>
-        <p className="text-sm text-[#476788] mt-1">Площадка: РБК Инвестиции · {order.subtitle}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[#476788]">
+          <span>{order.format}</span>
+          <span aria-hidden="true">·</span>
+          <span>{order.subtitle}</span>
+        </div>
       </div>
-      <div className="text-left sm:text-right">
+      <div className="shrink-0 text-left sm:text-right">
         <div className="text-sm text-[#476788]">К начислению</div>
         <div className="text-2xl font-semibold text-[#0b3558] tabular-nums">{formatMoney(order.amount)}</div>
       </div>
@@ -5186,43 +5191,16 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
     </div>
 
     <div className="space-y-6">
-        <Card className="p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge color={order.statusColor}>{order.status}</Badge>
-            <span className="text-sm text-[#476788]">Заказ #{order.id}</span>
-          </div>
-          <h2 className="mt-4 max-w-5xl break-words font-display text-2xl font-bold leading-tight text-[#0b3558] sm:text-3xl">
-            {order.title}
-          </h2>
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-[#476788]">{order.description}</p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.34fr)]">
-            <div className="min-w-0 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-              <div className="text-xs text-[#476788]">Площадка размещения</div>
-              <div className="mt-1 break-words text-sm font-semibold leading-5 text-[#0b3558]">РБК Инвестиции</div>
-            </div>
-            <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-              <div className="text-xs text-[#476788]">Срок</div>
-              <div className="mt-1 text-sm font-semibold text-[#0b3558]">{order.subtitle}</div>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-px overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#d4e0ed] sm:grid-cols-2">
-            {[
-              ['Формат', order.format],
-              ['Начисление', formatMoney(order.amount)],
-            ].map(([label, value]) => (
-              <div key={label} className="min-w-0 bg-white px-4 py-3">
-                <div className="text-xs text-[#476788]">{label}</div>
-                <div className="mt-1 break-words text-sm font-semibold text-[#0b3558]">{value}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]">
+        <Card className="overflow-hidden">
+          <div className="overflow-hidden bg-[#f8f9fb]">
             <button
-              className={`w-full px-4 py-3 flex items-center justify-between gap-3 text-left ${markingDataOpen ? 'border-b border-[#d4e0ed]' : ''}`}
+              className={`flex w-full items-center justify-between gap-3 px-6 py-5 text-left ${markingDataOpen ? 'border-b border-[#d4e0ed]' : ''}`}
               onClick={() => setMarkingDataOpen((value) => !value)}
             >
-              <div className="text-sm font-semibold text-[#0b3558]">Данные для маркировки</div>
+              <div>
+                <div className="font-display text-lg font-bold text-[#0b3558]">Данные для маркировки</div>
+                <div className="mt-1 text-sm text-[#476788]">Реквизиты рекламодателя и объекта рекламы</div>
+              </div>
               <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${markingDataOpen ? 'rotate-90' : ''}`} />
             </button>
             <CollapsiblePanel open={markingDataOpen}>
@@ -5239,20 +5217,52 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
               </div>
             </CollapsiblePanel>
           </div>
-
         </Card>
 
-        <Card className="overflow-hidden">
-          <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="font-display text-lg font-bold text-[#0b3558]">Текст и изображения материала</h3>
-              <p className="mt-1 text-sm text-[#476788]">Версия, переданная заказчиком для размещения</p>
-            </div>
-            <Badge color="blue"><ImageIcon className="mr-1.5 h-3.5 w-3.5" /> 3 изображения</Badge>
+        <Card className="p-6">
+          <FullMaterialPreview
+            context="publisher"
+            showLinks={false}
+            showAttachments={false}
+          />
+        </Card>
+
+        <Card className="p-6">
+          <div className="mb-5">
+            <h3 className="font-display text-lg font-bold text-[#0b3558]">Прикрепленные файлы</h3>
+            <p className="mt-1 text-sm text-[#476788]">Изображения и документы, переданные вместе с материалом</p>
           </div>
-          <div className="p-6">
-            <FullMaterialPreview context="publisher" showLinks={false} />
-          <div className="mt-6 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
+          <div className="grid gap-3 md:grid-cols-2">
+            {[
+              ['preview-interface.jpg', 'Изображение · 2,4 МБ', 'image'],
+              ['analytics-screen.png', 'Изображение · 1,8 МБ', 'image'],
+              ['brand-cover.webp', 'Изображение · 920 КБ', 'image'],
+              ['press-release.docx', 'Документ · 146 КБ', 'document'],
+            ].map(([name, meta, type]) => (
+              <button
+                key={name}
+                type="button"
+                className="group flex min-w-0 items-center gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3 text-left transition-colors hover:border-[#a6bbd1] hover:bg-white"
+              >
+                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white text-[#006bff]">
+                  {type === 'image' ? <ImageIcon className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-[#0b3558]">{name}</span>
+                  <span className="mt-0.5 block text-xs text-[#476788]">{meta}</span>
+                </span>
+                <Download className="h-4 w-4 flex-shrink-0 text-[#476788] transition-colors group-hover:text-[#006bff]" />
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="mb-5">
+            <h3 className="font-display text-lg font-bold text-[#0b3558]">Параметры размещения</h3>
+            <p className="mt-1 text-sm text-[#476788]">Ссылки и дополнительные требования к публикации</p>
+          </div>
+          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#d4e0ed]">
               <div className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</div>
             </div>
@@ -5268,7 +5278,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
               ))}
             </div>
           </div>
-          <div className="mt-5 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] overflow-hidden">
+          <div className="mt-5 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#d4e0ed]">
               <div className="text-sm font-semibold text-[#0b3558]">Дополнительные настройки материала</div>
             </div>
@@ -5288,43 +5298,6 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
                 </div>
               ))}
             </div>
-          </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Таймлайн</h3>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            {[
-              ['Заказ поступил', '18.10, 10:15', 'done'],
-              ...(isNewState
-                ? [
-                    ['Решение площадки', 'до 18:00', 'current'],
-                    ['Площадка принимает заказ', 'после решения', 'next'],
-                    ['Ожидается публикация', 'после принятия', 'next'],
-                  ]
-                : [
-                    ['Площадка приняла заказ', '18.10, 11:40', 'done'],
-                  ]),
-              ...(isAcceptanceState
-                ? [
-                    ['Площадка отправила ссылку', '18.10, 12:30', 'done'],
-                    ['Приемка заказчиком', 'ожидается', 'current'],
-                    ['Начисление доступно', 'после приемки', 'next'],
-                  ]
-                : isNewState ? [] : [
-                    ['Ожидается публикация', 'до 20.10', 'current'],
-                    ['Приемка заказчиком', 'после отправки ссылки', 'next'],
-                  ]),
-            ].map(([state, time, status]) => (
-              <div key={`${state}-${time}`} className="flex items-start gap-3">
-                {status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5" /> : status === 'current' ? <Clock className="w-4 h-4 text-amber-500 mt-0.5" /> : <div className="w-4 h-4 rounded-full border-2 border-[#d4e0ed] mt-0.5" />}
-                <div>
-                  <div className="text-sm font-medium text-[#0b3558]">{state}</div>
-                  <div className="text-xs text-[#476788] mt-1">{time}</div>
-                </div>
-              </div>
-            ))}
           </div>
         </Card>
     </div>
