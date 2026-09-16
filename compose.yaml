@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: axioma
+      POSTGRES_USER: axioma
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U axioma -d axioma"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build: .
+    profiles: [api]
+    environment:
+      DATABASE_URL: postgresql://axioma:${POSTGRES_PASSWORD}@db:5432/axioma
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:5173}
+      NODE_ENV: ${NODE_ENV:-development}
+      HOST: 0.0.0.0
+      COMMISSION_BPS: ${COMMISSION_BPS:-1500}
+      STORAGE_ROOT: /app/storage
+    volumes:
+      - attachment_data:/app/storage
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  attachment_data:

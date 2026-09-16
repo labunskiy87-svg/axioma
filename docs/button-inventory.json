@@ -1,0 +1,1868 @@
+[
+  {
+    "component": "Button",
+    "line": 645,
+    "label": "{children}",
+    "handler": null
+  },
+  {
+    "component": "FileUploadField",
+    "line": 721,
+    "label": "<X className=\"h-4 w-4\" />",
+    "handler": "{() => removeFile(file)}"
+  },
+  {
+    "component": "FileUploadField",
+    "line": 750,
+    "label": "<Paperclip className=\"mr-2 h-4 w-4\" /> Прикрепить файл",
+    "handler": "{openFilePicker}"
+  },
+  {
+    "component": "FileUploadField",
+    "line": 755,
+    "label": "<UploadCloud className=\"h-6 w-6 text-[#006bff]\" /> <span className=\"mt-3 text-sm font-semibold text-[#0b3558]\">{prompt}</span> <span className=\"mt-1 text-xs text-[#476788]\">{hint}</span>",
+    "handler": "{openFilePicker}"
+  },
+  {
+    "component": "CustomSelect",
+    "line": 899,
+    "label": "<span className={`truncate ${selectedValue ? '' : 'text-[#476788]'}`}>{displayValue}</span> <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${isOpen ? '-rotate-90' : 'rotate-90'}`} />",
+    "handler": "{() => {\n          if (isOpen) {\n            setIsOpen(false);\n          } else {\n            openSelect();\n          }\n        }}"
+  },
+  {
+    "component": "CustomSelect",
+    "line": 925,
+    "label": "<span className=\"truncate\">{optionLabel(option)}</span> {selectedValue === optionValue(option) && <CheckCircle2 className=\"w-4 h-4 flex-shrink-0\" />}",
+    "handler": "{() => selectOption(option)}"
+  },
+  {
+    "component": "CheckboxMultiSelect",
+    "line": 1006,
+    "label": "<span className={`min-w-0 truncate ${selectedOptions.length ? 'font-medium' : 'text-[#7d96af]'}`}> {selectedOptions.length ? selectedOptions.length === 1 ? selectedOptions[0].label : `Выбрано ${selectedNoun}: ${selectedOptions.length}` : options.length ? placeholder : emptyPlaceholder} </span> {!!options.length && <ChevronRight className={`h-4 w-4 flex-none text-[#476788] transition-transform ${isOpen ? '-rotate-90' : 'rotate-90'}`} />}",
+    "handler": "{toggleOpen}"
+  },
+  {
+    "component": "CheckboxMultiSelect",
+    "line": 1036,
+    "label": "<span className={`flex h-5 w-5 flex-none items-center justify-center rounded border ${selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf] bg-white'}`}> {selected && <Check className=\"h-3.5 w-3.5\" />} </span> <span className=\"min-w-0\"> <span className={`block truncate text-sm font-medium ${selected ? 'text-[#004eba]' : 'text-[#0b3558]'}`}>{option.label}</span> <span className=\"mt-0.5 block text-xs text-[#476788]\">{option.description}</span> </span>",
+    "handler": "{() => toggleOption(option.value)}"
+  },
+  {
+    "component": "CheckboxMultiSelect",
+    "line": 1056,
+    "label": "Готово",
+    "handler": "{() => setIsOpen(false)}"
+  },
+  {
+    "component": "CopyButton",
+    "line": 1180,
+    "label": "{copied ? <CheckCircle2 className=\"ui-pop h-4 w-4 text-emerald-600\" /> : <Copy className=\"h-4 w-4\" />}",
+    "handler": "{handleCopy}"
+  },
+  {
+    "component": "OrderMaterialContent",
+    "line": 1245,
+    "label": "<span className=\"flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white text-[#006bff]\"> {type === 'image' ? <ImageIcon className=\"h-5 w-5\" /> : <FileText className=\"h-5 w-5\" />} </span> <span className=\"min-w-0 flex-1\"> <span className=\"block truncate text-sm font-semibold text-[#0b3558]\">{name}</span> <span className=\"mt-0.5 block text-xs text-[#476788]\">{meta}</span> </span> <Download className=\"h-4 w-4 flex-shrink-0 text-[#476788] transition-colors group-hover:text-[#006bff]\" />",
+    "handler": null
+  },
+  {
+    "component": "AiAssistModal",
+    "line": 1325,
+    "label": "Отмена",
+    "handler": "{onClose}"
+  },
+  {
+    "component": "AiAssistModal",
+    "line": 1326,
+    "label": "{type === 'image' ? 'Сгенерировать за 50 ₽' : 'Запустить рерайт за 30 ₽'}",
+    "handler": "{onClose}"
+  },
+  {
+    "component": "MaterialSelectionModal",
+    "line": 1372,
+    "label": "<Trash2 className=\"w-4 h-4\" />",
+    "handler": "{() => setRemovedPlatformIds((ids) => [...ids, item.id])}"
+  },
+  {
+    "component": "MaterialSelectionModal",
+    "line": 1399,
+    "label": "Отмена",
+    "handler": "{onClose}"
+  },
+  {
+    "component": "MaterialSelectionModal",
+    "line": 1400,
+    "label": "Создать заказ",
+    "handler": "{async () => {\n              const fingerprint = JSON.stringify([selectedMaterial.id,pricedPlatforms.map(p=>p.id)]);\n              if(!requestKeys.current.has(fingerprint)) requestKeys.current.set(fingerprint,crypto.randomUUID());\n              const ok = await onCreateOrders?.(selectedMaterial, pricedPlatforms,requestKeys.current.get(fingerprint));\n              if(ok) onClose();\n            }}"
+  },
+  {
+    "component": "Modal",
+    "line": 1426,
+    "label": "<X className=\"w-5 h-5\" />",
+    "handler": "{onClose}"
+  },
+  {
+    "component": "ConfirmAction",
+    "line": 1445,
+    "label": "{action}",
+    "handler": null
+  },
+  {
+    "component": "EmptyState",
+    "line": 1455,
+    "label": "{action}",
+    "handler": "{onAction}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1568,
+    "label": "{backend.user?'В кабинет':'Вход'}",
+    "handler": "{()=>backend.user?location.assign(`/${backend.user.role}`):openLoginModal()}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1569,
+    "label": "Зарегистрироваться",
+    "handler": "{openRegistrationModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1572,
+    "label": "{mobileMenuOpen ? <X className=\"w-6 h-6\" /> : <Menu className=\"w-6 h-6\" />}",
+    "handler": "{() => setMobileMenuOpen(!mobileMenuOpen)}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1604,
+    "label": "Зарегистрироваться <ArrowRight className=\"h-4 w-4\" />",
+    "handler": "{openRegistrationModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1605,
+    "label": "Открыть каталог",
+    "handler": "{openLoginModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1633,
+    "label": "Создать заказ",
+    "handler": null
+  },
+  {
+    "component": "LandingView",
+    "line": 1705,
+    "label": "Зарегистрироваться и посмотреть",
+    "handler": "{openRegistrationModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1762,
+    "label": "Стать паблишером",
+    "handler": "{openPublisherApplication}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1763,
+    "label": "Войти в кабинет",
+    "handler": "{openPublisherLogin}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1847,
+    "label": "Зарегистрироваться",
+    "handler": "{openRegistrationModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1848,
+    "label": "Перейти в каталог",
+    "handler": "{openRegistrationModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1896,
+    "label": "Вернуться ко входу",
+    "handler": "{() => { setAuthStep('credentials'); setRecoverySent(false); }}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1897,
+    "label": "Отправить ссылку",
+    "handler": "{() => setRecoverySent(true)}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1910,
+    "label": "Изменить email или пароль",
+    "handler": "{() => setAuthStep('credentials')}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1911,
+    "label": "Подтвердить и войти",
+    "handler": "{() => handleLogin(loginRole)}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1922,
+    "label": "<Icon className=\"w-4 h-4\" /> {label}",
+    "handler": "{() => setLoginRole(role)}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1950,
+    "label": "Забыли пароль?",
+    "handler": "{() => { setAuthStep('recovery'); setRecoverySent(false); }}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1951,
+    "label": "Зарегистрироваться",
+    "handler": "{openRegistrationModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 1953,
+    "label": "Войти",
+    "handler": "{() => handleLogin(loginRole)}"
+  },
+  {
+    "component": "LandingView",
+    "line": 2010,
+    "label": "Уже есть аккаунт",
+    "handler": "{openLoginModal}"
+  },
+  {
+    "component": "LandingView",
+    "line": 2011,
+    "label": "Создать кабинет заказчика",
+    "handler": "{() => handleLogin('client')}"
+  },
+  {
+    "component": "LandingView",
+    "line": 2052,
+    "label": "Вернуться на главную",
+    "handler": "{() => setPublisherApplicationOpen(false)}"
+  },
+  {
+    "component": "LandingView",
+    "line": 2147,
+    "label": "Уже есть подтвержденный аккаунт",
+    "handler": "{openPublisherLogin}"
+  },
+  {
+    "component": "LandingView",
+    "line": 2148,
+    "label": "Отправить анкету",
+    "handler": null
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2191,
+    "label": "Материалы",
+    "handler": "{() => navigate('materials')}"
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2192,
+    "label": "<Plus className=\"h-4 w-4\" /> Загрузить материал",
+    "handler": "{() => navigate('create_material')}"
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2203,
+    "label": "Финансы",
+    "handler": "{() => navigate('balance')}"
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2212,
+    "label": "<div className=\"text-sm font-medium text-[#476788]\">{label}</div> <div className=\"mt-2 text-3xl font-semibold tabular-nums text-[#0b3558]\">{value}</div> <div className=\"mt-4 inline-flex items-center text-sm font-medium text-[#006bff]\"> {note}<ChevronRight className=\"ml-1 h-4 w-4\" /> </div>",
+    "handler": "{() => navigate(target)}"
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2235,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" />",
+    "handler": "{() => setSelectedPromo((current) => (current - 1 + clientPromos.length) % clientPromos.length)}"
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2245,
+    "label": "<ChevronRight className=\"h-4 w-4\" />",
+    "handler": "{() => setSelectedPromo((current) => (current + 1) % clientPromos.length)}"
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2270,
+    "label": "{promo.action} <ArrowRight className=\"h-4 w-4\" />",
+    "handler": "{() => {\n                    if(promo.targetUrl)window.open(promo.targetUrl, '_blank', 'noopener,noreferrer');\n                    else location.assign(`/customer/catalog?informer=${encodeURIComponent(promo.id)}`);\n                  }}"
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2281,
+    "label": "{promo.action || 'Подробнее'} <ArrowRight className=\"h-4 w-4\" />",
+    "handler": null
+  },
+  {
+    "component": "ClientDashboardView",
+    "line": 2293,
+    "label": "Все заказы",
+    "handler": "{() => navigate('orders')}"
+  },
+  {
+    "component": "MaterialContentCard",
+    "line": 2349,
+    "label": "<Paperclip className=\"h-4 w-4\" /> Прикрепленный документ",
+    "handler": null
+  },
+  {
+    "component": "MaterialContentCard",
+    "line": 2354,
+    "label": "<span className=\"text-sm font-semibold text-[#0b3558]\">Ссылки в тексте материала</span> <ChevronRight className={`h-4 w-4 text-[#476788] transition-transform ${linksOpen ? 'rotate-90' : ''}`} />",
+    "handler": "{() => setLinksOpen((value) => !value)}"
+  },
+  {
+    "component": "MaterialContentCard",
+    "line": 2378,
+    "label": "<span className=\"text-sm font-semibold text-[#0b3558]\">Дополнительные настройки материала</span> <ChevronRight className={`h-4 w-4 text-[#476788] transition-transform ${advancedSettingsOpen ? 'rotate-90' : ''}`} />",
+    "handler": "{() => setAdvancedSettingsOpen((value) => !value)}"
+  },
+  {
+    "component": "ProjectChangeModal",
+    "line": 2447,
+    "label": "Отмена",
+    "handler": "{onClose}"
+  },
+  {
+    "component": "ProjectChangeModal",
+    "line": 2448,
+    "label": "Изменить проект",
+    "handler": "{async () => {\n              if(await onConfirm(selectedProject)) onClose();\n            }}"
+  },
+  {
+    "component": "ClientOrderDetailView",
+    "line": 2610,
+    "label": "<span className=\"truncate\">{projectName}</span> <Pencil className=\"h-3.5 w-3.5 shrink-0\" />",
+    "handler": "{() => setProjectModalOpen(true)}"
+  },
+  {
+    "component": "ClientOrderDetailView",
+    "line": 2690,
+    "label": "Открыть отчет",
+    "handler": "{() => navigate('report_detail')}"
+  },
+  {
+    "component": "ClientOrderDetailView",
+    "line": 2691,
+    "label": "Чат заказа",
+    "handler": "{() => navigate('order_chat')}"
+  },
+  {
+    "component": "ClientOrderDetailView",
+    "line": 2697,
+    "label": "Принять и оплатить",
+    "handler": "{async () => { const ok = await backend.perform(async () => { await api(`/orders/${sourceOrder.id}/action`,'POST',{action:'complete'},crypto.randomUUID()); await backend.refresh(); }); if(ok) setCurrentState('completed'); }}"
+  },
+  {
+    "component": "ClientOrderDetailView",
+    "line": 2698,
+    "label": "Открыть жалобу",
+    "handler": "{() => navigate('complaint')}"
+  },
+  {
+    "component": "ClientOrderDetailView",
+    "line": 2701,
+    "label": "Выбрать другую площадку",
+    "handler": "{() => navigate('catalog')}"
+  },
+  {
+    "component": "ClientOrderDetailView",
+    "line": 2702,
+    "label": "Чат заказа",
+    "handler": "{() => navigate('order_chat')}"
+  },
+  {
+    "component": "ProjectLink",
+    "line": 2728,
+    "label": "<FolderKanban className=\"h-3.5 w-3.5 flex-none\" /> <span className=\"truncate\">{project.name}</span>",
+    "handler": "{(event) => {\n        event.stopPropagation();\n        onOpen?.(project.id);\n      }}"
+  },
+  {
+    "component": "ClientProjectsView",
+    "line": 2782,
+    "label": "<Plus className=\"h-4 w-4\" /> Создать проект",
+    "handler": "{() => setCreateOpen(true)}"
+  },
+  {
+    "component": "ClientProjectsView",
+    "line": 2881,
+    "label": "Отмена",
+    "handler": "{() => setCreateOpen(false)}"
+  },
+  {
+    "component": "ClientProjectsView",
+    "line": 2882,
+    "label": "Создать проект",
+    "handler": "{submitProject}"
+  },
+  {
+    "component": "ClientProjectDetailView",
+    "line": 2902,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К проектам",
+    "handler": "{() => navigate('projects')}"
+  },
+  {
+    "component": "ClientProjectDetailView",
+    "line": 2914,
+    "label": "Удалить проект",
+    "handler": "{() => { onDelete(project.id); navigate('projects'); }}"
+  },
+  {
+    "component": "ClientProjectDetailView",
+    "line": 2915,
+    "label": "{project.status === 'Активный' ? 'Завершить проект' : 'Вернуть в активные'}",
+    "handler": "{() => onToggleStatus(project.id)}"
+  },
+  {
+    "component": "ClientProjectDetailView",
+    "line": 2918,
+    "label": "<Plus className=\"h-4 w-4\" /> Добавить материал",
+    "handler": "{() => onAddMaterial(project.id)}"
+  },
+  {
+    "component": "ClientProjectDetailView",
+    "line": 2924,
+    "label": "{item} {item === 'Материалы' ? ` · ${projectMaterials.length}` : item === 'Заказы' ? ` · ${projectOrders.length}` : ''}",
+    "handler": "{() => setTab(item)}"
+  },
+  {
+    "component": "ClientProjectDetailView",
+    "line": 2966,
+    "label": "<div className=\"min-w-0\"><div className=\"truncate text-sm font-semibold text-[#0b3558]\">{material.name}</div><div className=\"mt-1 text-xs text-[#476788]\">{material.advertiser} · {material.type}</div></div> <Badge color={material.statusColor}>{material.status}</Badge>",
+    "handler": "{() => openMaterial(material.id)}"
+  },
+  {
+    "component": "ClientProjectDetailView",
+    "line": 2981,
+    "label": "<div className=\"text-sm font-semibold text-[#006bff]\">№{orderNumber(order)}</div> <div className=\"min-w-0\"><div className=\"truncate text-sm font-medium text-[#0b3558]\">{order.material}</div><div className=\"mt-1 text-xs text-[#476788]\">{order.platform}</div></div> <div className=\"text-sm font-semibold tabular-nums text-[#0b3558]\">{formatMoney(order.price)}</div> <Badge color={order.statusColor} className=\"w-full max-w-[220px] justify-center justify-self-start\">{order.status}</Badge>",
+    "handler": "{() => openOrder(order)}"
+  },
+  {
+    "component": "ClientOrdersView",
+    "line": 3025,
+    "label": "Открыть каталог",
+    "handler": "{() => navigate('catalog')}"
+  },
+  {
+    "component": "ClientOrdersView",
+    "line": 3033,
+    "label": "Переместить в проект {selectedIds.length ? ` · ${selectedIds.length}` : ''}",
+    "handler": "{() => setMoveOpen(true)}"
+  },
+  {
+    "component": "ClientOrdersView",
+    "line": 3096,
+    "label": "<span className={`text-sm font-medium ${selected ? 'text-[#004eba]' : 'text-[#0b3558]'}`}>{projectName}</span> <span className={`flex h-5 w-5 flex-none items-center justify-center rounded-full border ${ selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf] bg-white' }`}> {selected && <Check className=\"h-3.5 w-3.5\" />} </span>",
+    "handler": "{() => setTargetProject(projectName)}"
+  },
+  {
+    "component": "ClientOrdersView",
+    "line": 3120,
+    "label": "Отмена",
+    "handler": "{() => setMoveOpen(false)}"
+  },
+  {
+    "component": "ClientOrdersView",
+    "line": 3121,
+    "label": "Переместить",
+    "handler": "{moveSelected}"
+  },
+  {
+    "component": "ClientComplaintView",
+    "line": 3134,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К заказу #1045",
+    "handler": "{() => navigate('order_detail')}"
+  },
+  {
+    "component": "ClientComplaintView",
+    "line": 3162,
+    "label": "Открыть жалобу",
+    "handler": "{() => setSubmitted(true)}"
+  },
+  {
+    "component": "ClientComplaintView",
+    "line": 3199,
+    "label": "Открыть спор",
+    "handler": "{() => navigate('dispute_detail')}"
+  },
+  {
+    "component": "ClientComplaintView",
+    "line": 3200,
+    "label": "Вернуться к заказу",
+    "handler": "{() => navigate('order_detail')}"
+  },
+  {
+    "component": "DisputeDetailView",
+    "line": 3213,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К карточке заказа",
+    "handler": "{() => navigate(role === 'publisher' ? 'pub_order_detail' : 'order_detail')}"
+  },
+  {
+    "component": "DisputeDetailView",
+    "line": 3238,
+    "label": "Предоставить доказательства",
+    "handler": "{() => navigate('pub_complaint')}"
+  },
+  {
+    "component": "DisputeDetailView",
+    "line": 3241,
+    "label": "Дополнить жалобу",
+    "handler": "{() => navigate('complaint')}"
+  },
+  {
+    "component": "DisputeDetailView",
+    "line": 3242,
+    "label": "Отозвать жалобу",
+    "handler": null
+  },
+  {
+    "component": "OrderChatView",
+    "line": 3314,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К карточке заказа",
+    "handler": "{() => navigate(role === 'publisher' ? 'pub_order_detail' : role === 'admin' ? 'admin_order_detail' : 'order_detail')}"
+  },
+  {
+    "component": "OrderChatView",
+    "line": 3343,
+    "label": "Отправить",
+    "handler": null
+  },
+  {
+    "component": "ClientReportDetailView",
+    "line": 3365,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К отчетам",
+    "handler": "{() => navigate('reports')}"
+  },
+  {
+    "component": "ClientReportDetailView",
+    "line": 3373,
+    "label": "<Download className=\"h-4 w-4\" /> Скачать отчет",
+    "handler": null
+  },
+  {
+    "component": "ClientProjectReportView",
+    "line": 3427,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К отчетам",
+    "handler": "{() => navigate('reports')}"
+  },
+  {
+    "component": "ClientProjectReportView",
+    "line": 3439,
+    "label": "<CalendarDays className=\"h-4 w-4\" /> Изменить период",
+    "handler": "{() => navigate('reports')}"
+  },
+  {
+    "component": "ClientProjectReportView",
+    "line": 3440,
+    "label": "<Download className=\"h-4 w-4\" /> Скачать таблицу",
+    "handler": null
+  },
+  {
+    "component": "ClientProjectReportView",
+    "line": 3441,
+    "label": "<Download className=\"h-4 w-4\" /> Скачать отчет",
+    "handler": null
+  },
+  {
+    "component": "ClientBalanceView",
+    "line": 3522,
+    "label": "Пополнить баланс",
+    "handler": "{() => navigate('topup')}"
+  },
+  {
+    "component": "ClientBalanceView",
+    "line": 3534,
+    "label": "Скачать отчет по операциям <Download className=\"w-3 h-3\" />",
+    "handler": null
+  },
+  {
+    "component": "ClientBalanceView",
+    "line": 3543,
+    "label": "Все операции",
+    "handler": "{() => navigate('operations')}"
+  },
+  {
+    "component": "ClientBalanceView",
+    "line": 3544,
+    "label": "<Download className=\"h-3.5 w-3.5\" /> Экспорт таблицы",
+    "handler": null
+  },
+  {
+    "component": "ClientBalanceView",
+    "line": 3587,
+    "label": "<Download className=\"h-4 w-4\" /> Скачать архив",
+    "handler": null
+  },
+  {
+    "component": "ClientBalanceView",
+    "line": 3611,
+    "label": "<Download className=\"h-3.5 w-3.5\" /> Скачать",
+    "handler": null
+  },
+  {
+    "component": "ClientTopUpView",
+    "line": 3627,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К балансу",
+    "handler": "{() => navigate('balance')}"
+  },
+  {
+    "component": "ClientTopUpView",
+    "line": 3641,
+    "label": "Пополнить",
+    "handler": null
+  },
+  {
+    "component": "ClientOperationsView",
+    "line": 3649,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К балансу",
+    "handler": "{() => navigate('balance')}"
+  },
+  {
+    "component": "ClientOperationsView",
+    "line": 3657,
+    "label": "<Download className=\"h-4 w-4\" /> Экспорт",
+    "handler": null
+  },
+  {
+    "component": "ClientMaterialsView",
+    "line": 3698,
+    "label": "<Plus className=\"h-4 w-4\" /> Добавить материал",
+    "handler": "{() => startCreateMaterial(null)}"
+  },
+  {
+    "component": "ClientMaterialsView",
+    "line": 3751,
+    "label": "В каталог",
+    "handler": "{(event) => { event.stopPropagation(); navigate('catalog'); }}"
+  },
+  {
+    "component": "ClientMaterialsView",
+    "line": 3753,
+    "label": "К заказам",
+    "handler": "{(event) => { event.stopPropagation(); navigate('orders'); }}"
+  },
+  {
+    "component": "ClientMaterialsView",
+    "line": 3755,
+    "label": "Недоступно",
+    "handler": null
+  },
+  {
+    "component": "ClientMaterialDetailView",
+    "line": 3789,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К материалам",
+    "handler": "{() => navigate('materials')}"
+  },
+  {
+    "component": "ClientMaterialDetailView",
+    "line": 3800,
+    "label": "Редактировать материал",
+    "handler": "{() => navigate('material_edit')}"
+  },
+  {
+    "component": "ClientMaterialDetailView",
+    "line": 3801,
+    "label": "Выбрать площадки",
+    "handler": "{() => navigate('catalog')}"
+  },
+  {
+    "component": "ClientMaterialDetailView",
+    "line": 3812,
+    "label": "<span className=\"truncate\">{projectName}</span> <Pencil className=\"h-3.5 w-3.5 shrink-0\" />",
+    "handler": "{() => setProjectModalOpen(true)}"
+  },
+  {
+    "component": "ClientMaterialDetailView",
+    "line": 3840,
+    "label": "Отправить на модерацию",
+    "handler": "{submit}"
+  },
+  {
+    "component": "MaterialDraftForm",
+    "line": 3887,
+    "label": "<Trash2 className=\"h-4 w-4\" />",
+    "handler": "{onRemove}"
+  },
+  {
+    "component": "MaterialDraftForm",
+    "line": 3920,
+    "label": "сгенерируйте изображение с помощью ИИ за 50 ₽",
+    "handler": "{() => onOpenAi('image')}"
+  },
+  {
+    "component": "MaterialDraftForm",
+    "line": 3931,
+    "label": "Рерайт с помощью ИИ · 30 ₽",
+    "handler": "{() => onOpenAi('rewrite')}"
+  },
+  {
+    "component": "MaterialDraftForm",
+    "line": 3948,
+    "label": "<Icon className=\"h-4 w-4\" /> {tool.label === 'Обычный текст' && <span className=\"ml-2 text-xs font-medium\">Текст</span>}",
+    "handler": null
+  },
+  {
+    "component": "ClientEditMaterialView",
+    "line": 4000,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К материалу",
+    "handler": "{() => navigate('material_detail')}"
+  },
+  {
+    "component": "ClientEditMaterialView",
+    "line": 4018,
+    "label": "Отмена",
+    "handler": "{() => navigate('material_detail')}"
+  },
+  {
+    "component": "ClientEditMaterialView",
+    "line": 4019,
+    "label": "Сохранить изменения",
+    "handler": "{saveMaterial}"
+  },
+  {
+    "component": "ClientCreateMaterialView",
+    "line": 4069,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К материалам",
+    "handler": "{() => navigate('materials')}"
+  },
+  {
+    "component": "ClientCreateMaterialView",
+    "line": 4090,
+    "label": "<Plus className=\"h-4 w-4\" /> Сохранить и добавить еще материал",
+    "handler": "{addDraft}"
+  },
+  {
+    "component": "ClientCreateMaterialView",
+    "line": 4110,
+    "label": "<div className=\"min-w-0\"> <div className=\"text-xs font-medium uppercase text-[#6f88a3]\">Материал {index + 1}</div> <div className=\"mt-1 truncate font-semibold text-[#0b3558]\">{draft.title}</div> <div className=\"mt-1 text-sm text-[#476788]\">{draft.advertiser} · {draft.materialType}</div> </div> <span className=\"shrink-0 text-xs font-semibold text-[#006bff]\">К форме</span>",
+    "handler": "{() => document.getElementById(`material-form-${draft.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}"
+  },
+  {
+    "component": "ClientCreateMaterialView",
+    "line": 4136,
+    "label": "{materialsCount > 1 ? 'Сохранить черновики' : 'Сохранить черновик'}",
+    "handler": "{() => saveMaterials('Черновик')}"
+  },
+  {
+    "component": "ClientCreateMaterialView",
+    "line": 4137,
+    "label": "Отправить на модерацию {materialsCount > 1 ? ` · ${materialsCount}` : ''}",
+    "handler": "{() => saveMaterials('На модерации')}"
+  },
+  {
+    "component": "ClientAdvertisersView",
+    "line": 4150,
+    "label": "<Plus className=\"h-4 w-4\" /> Добавить рекламодателя",
+    "handler": "{() => navigate('advertiser_new')}"
+  },
+  {
+    "component": "ClientAdvertiserDetailView",
+    "line": 4209,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К рекламодателям",
+    "handler": "{() => navigate('advertisers')}"
+  },
+  {
+    "component": "ClientAdvertiserDetailView",
+    "line": 4220,
+    "label": "Изменить данные",
+    "handler": "{() => navigate('advertiser_edit')}"
+  },
+  {
+    "component": "ClientAdvertiserDetailView",
+    "line": 4248,
+    "label": "<div className=\"flex flex-col gap-3 md:flex-row md:items-center md:justify-between\"> <div className=\"min-w-0\"> <div className=\"flex flex-wrap items-center gap-2\"> <span className=\"text-sm font-semibold text-[#0b3558]\">{id}</span> <Badge color={requestStatus === 'Завершено' ? 'green' : requestStatus.includes('отказ') ? 'red' : 'blue'}>{requestStatus}</Badge> </div> <div className=\"mt-2 text-sm font-medium text-[#0b3558]\">{material}</div> <div className=\"mt-1 text-xs text-[#476788]\">Площадка: {platform}</div> </div> <span className=\"shrink-0 text-sm font-semibold text-[#006bff]\">Открыть</span> </div>",
+    "handler": "{() => navigate('order_detail')}"
+  },
+  {
+    "component": "ClientAdvertiserEditView",
+    "line": 4285,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К карточке рекламодателя",
+    "handler": "{() => navigate('advertiser_detail')}"
+  },
+  {
+    "component": "ClientAdvertiserEditView",
+    "line": 4323,
+    "label": "Отмена",
+    "handler": "{() => navigate('advertiser_detail')}"
+  },
+  {
+    "component": "ClientAdvertiserEditView",
+    "line": 4324,
+    "label": "Сохранить изменения",
+    "handler": "{() => navigate('advertiser_detail')}"
+  },
+  {
+    "component": "ClientAdvertiserNewView",
+    "line": 4339,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К рекламодателям",
+    "handler": "{() => navigate('advertisers')}"
+  },
+  {
+    "component": "ClientAdvertiserNewView",
+    "line": 4377,
+    "label": "Отмена",
+    "handler": "{() => navigate('advertisers')}"
+  },
+  {
+    "component": "ClientAdvertiserNewView",
+    "line": 4378,
+    "label": "Сохранить рекламодателя",
+    "handler": "{save}"
+  },
+  {
+    "component": "PlatformListTable",
+    "line": 4411,
+    "label": "{isSelected && <CheckCircle2 className=\"w-4 h-4 text-white\" />}",
+    "handler": "{() => toggleSelectedPlatform(item.id)}"
+  },
+  {
+    "component": "PlatformListTable",
+    "line": 4444,
+    "label": "<Star className={`w-4 h-4 ${isFavorite ? 'fill-white' : ''}`} /> <span className=\"sr-only\">{isFavorite ? 'В избранном' : 'В избранное'}</span>",
+    "handler": "{(event) => { event.stopPropagation(); toggleFavoritePlatform(item.id); }}"
+  },
+  {
+    "component": "ClientCatalogView",
+    "line": 4513,
+    "label": "<Star className={`w-4 h-4 mr-2 ${showFavoritesOnly ? 'fill-white' : ''}`} /> Избранные: {favoritePlatforms.length}",
+    "handler": "{() => setShowFavoritesOnly((value) => !value)}"
+  },
+  {
+    "component": "ClientCatalogView",
+    "line": 4517,
+    "label": "<Filter className=\"h-4 w-4\" /> Фильтры <ChevronRight className={`h-4 w-4 transition-transform ${filtersOpen ? '-rotate-90' : 'rotate-90'}`} />",
+    "handler": "{() => setFiltersOpen((value) => !value)}"
+  },
+  {
+    "component": "ClientCatalogView",
+    "line": 4561,
+    "label": "Сбросить",
+    "handler": "{() => setSelectedPlatformIds([])}"
+  },
+  {
+    "component": "ClientCatalogView",
+    "line": 4564,
+    "label": "Разместить на выбранных",
+    "handler": "{() => setBulkModalOpen(true)}"
+  },
+  {
+    "component": "ClientPlatformDetailView",
+    "line": 4609,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> {ownerControls ? 'К площадкам' : 'К каталогу'}",
+    "handler": "{() => navigate('catalog')}"
+  },
+  {
+    "component": "ClientPlatformDetailView",
+    "line": 4633,
+    "label": "<Star className={`w-4 h-4 mr-2 ${isFavorite ? 'fill-white' : ''}`} /> {isFavorite ? 'В избранном' : 'В избранное'}",
+    "handler": "{() => toggleFavoritePlatform(item.id)}"
+  },
+  {
+    "component": "ClientPlatformDetailView",
+    "line": 4657,
+    "label": "<span className=\"min-w-0\"> <span className=\"flex items-center gap-2 text-sm font-semibold text-[#0b3558]\"> <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3] bg-white'}`}> {selected && <Check className=\"h-3.5 w-3.5\" />} </span> {format.name} </span> <span className=\"mt-1 block pl-7 text-xs text-[#476788]\">Публикация {format.deadline}</span> </span> <span className=\"text-right\"> <span className=\"block text-xs text-[#7890aa] line-through\">{formatMoney(format.basePrice)}</span> <span className=\"mt-0.5 block text-base font-semibold text-[#0b3558]\">{formatMoney(format.price)}</span> </span>",
+    "handler": "{() => setSelectedFormatName(format.name)}"
+  },
+  {
+    "component": "ClientPlatformDetailView",
+    "line": 4735,
+    "label": "Разместить материал",
+    "handler": "{() => setMaterialModalOpen(true)}"
+  },
+  {
+    "component": "ClientPlatformDetailView",
+    "line": 4736,
+    "label": "К каталогу",
+    "handler": "{() => navigate('catalog')}"
+  },
+  {
+    "component": "ClientReportsView",
+    "line": 4792,
+    "label": "<Download className=\"h-4 w-4\" /> Скачать таблицу",
+    "handler": null
+  },
+  {
+    "component": "ClientReportsView",
+    "line": 4793,
+    "label": "<CalendarDays className=\"h-4 w-4\" /> Отчет по проекту",
+    "handler": "{() => setReportOpen(true)}"
+  },
+  {
+    "component": "ClientReportsView",
+    "line": 4844,
+    "label": "{preset}",
+    "handler": "{() => applyPeriodPreset(preset)}"
+  },
+  {
+    "component": "ClientReportsView",
+    "line": 4876,
+    "label": "Отмена",
+    "handler": "{() => setReportOpen(false)}"
+  },
+  {
+    "component": "ClientReportsView",
+    "line": 4877,
+    "label": "Сформировать отчет",
+    "handler": "{createProjectReport}"
+  },
+  {
+    "component": "ClientSupportView",
+    "line": 4917,
+    "label": "{label}",
+    "handler": "{() => setTab(id)}"
+  },
+  {
+    "component": "ClientSupportView",
+    "line": 4927,
+    "label": "<div className=\"flex items-center justify-between gap-3\"><span className=\"text-sm font-semibold text-[#0b3558]\">{id}</span><Badge color={color}>{status}</Badge></div> <div className=\"text-sm text-[#476788] mt-1\">{title}</div>",
+    "handler": null
+  },
+  {
+    "component": "ClientSupportView",
+    "line": 4932,
+    "label": "Создать тикет",
+    "handler": null
+  },
+  {
+    "component": "ClientSupportView",
+    "line": 4955,
+    "label": "Отправить",
+    "handler": null
+  },
+  {
+    "component": "ClientSupportView",
+    "line": 4970,
+    "label": "Открыть",
+    "handler": "{() => navigate(isPublisher ? 'pub_dispute_detail' : 'dispute_detail')}"
+  },
+  {
+    "component": "ClientSupportView",
+    "line": 4977,
+    "label": "Перейти к заказам",
+    "handler": "{() => navigate(isPublisher ? 'pub_orders' : 'orders')}"
+  },
+  {
+    "component": "PublisherDashboardView",
+    "line": 5049,
+    "label": "Все заказы",
+    "handler": "{() => navigate('pub_orders')}"
+  },
+  {
+    "component": "PublisherDashboardView",
+    "line": 5055,
+    "label": "<div className=\"text-sm font-medium text-[#476788]\">{label}</div> <div className=\"mt-2 font-display text-3xl font-bold text-[#0b3558] tabular-nums\">{value}</div> <div className=\"mt-2 text-xs text-[#476788]\">{note}</div>",
+    "handler": "{() => navigate('pub_orders')}"
+  },
+  {
+    "component": "PublisherDashboardView",
+    "line": 5074,
+    "label": "Все заказы <ChevronRight className=\"ml-1 h-4 w-4\" />",
+    "handler": "{() => navigate('pub_orders')}"
+  },
+  {
+    "component": "PublisherDashboardView",
+    "line": 5139,
+    "label": "Открыть выплаты",
+    "handler": "{() => navigate('pub_finance')}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5299,
+    "label": "Принять заказ",
+    "handler": "{() => act('accept')}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5300,
+    "label": "{rejectionPanelOpen ? 'Скрыть форму отказа' : 'Отказать'}",
+    "handler": "{() => setRejectionPanelOpen((value) => !value)}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5307,
+    "label": "{publicationPanelOpen ? 'Скрыть форму' : 'Отправить ссылку'}",
+    "handler": "{() => {\n                  setPublicationPanelOpen((value) => !value);\n                }}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5314,
+    "label": "Чат заказа",
+    "handler": "{() => navigate('pub_order_chat')}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5357,
+    "label": "Отмена",
+    "handler": "{() => setPublicationPanelOpen(false)}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5358,
+    "label": "Отправить на приемку",
+    "handler": "{() => act('publish')}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5377,
+    "label": "Отмена",
+    "handler": "{() => setRejectionPanelOpen(false)}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5378,
+    "label": "Отправить отказ",
+    "handler": "{() => act('reject')}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5390,
+    "label": "<div> <div className=\"font-display text-lg font-bold text-[#0b3558]\">Данные для маркировки</div> <div className=\"mt-1 text-sm text-[#476788]\">Реквизиты рекламодателя и объекта рекламы</div> </div> <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${markingDataOpen ? 'rotate-90' : ''}`} />",
+    "handler": "{() => setMarkingDataOpen((value) => !value)}"
+  },
+  {
+    "component": "PublisherOrderDetailView",
+    "line": 5437,
+    "label": "<span className=\"flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white text-[#006bff]\"> {type === 'image' ? <ImageIcon className=\"h-5 w-5\" /> : <FileText className=\"h-5 w-5\" />} </span> <span className=\"min-w-0 flex-1\"> <span className=\"block truncate text-sm font-semibold text-[#0b3558]\">{name}</span> <span className=\"mt-0.5 block text-xs text-[#476788]\">{meta}</span> </span> <Download className=\"h-4 w-4 flex-shrink-0 text-[#476788] transition-colors group-hover:text-[#006bff]\" />",
+    "handler": null
+  },
+  {
+    "component": "PublisherOrderNewDetailView",
+    "line": 5538,
+    "label": "Принять заказ",
+    "handler": null
+  },
+  {
+    "component": "PublisherOrderNewDetailView",
+    "line": 5539,
+    "label": "Отклонить",
+    "handler": null
+  },
+  {
+    "component": "PublisherOrderNewDetailView",
+    "line": 5540,
+    "label": "Запросить правки",
+    "handler": null
+  },
+  {
+    "component": "PublisherOrderNewDetailView",
+    "line": 5541,
+    "label": "{chatPanelOpen ? 'Скрыть чат' : 'Чат заказа'}",
+    "handler": "{() => setChatPanelOpen((value) => !value)}"
+  },
+  {
+    "component": "PublisherOrderNewDetailView",
+    "line": 5560,
+    "label": "Отправить",
+    "handler": null
+  },
+  {
+    "component": "PublisherOrderNewDetailView",
+    "line": 5628,
+    "label": "Принять заказ",
+    "handler": null
+  },
+  {
+    "component": "PublisherOrderNewDetailView",
+    "line": 5629,
+    "label": "Отклонить",
+    "handler": null
+  },
+  {
+    "component": "PublisherPlatformsView",
+    "line": 5676,
+    "label": "<Plus className=\"h-4 w-4\" /> Добавить площадку",
+    "handler": "{() => navigate('pub_platform_new')}"
+  },
+  {
+    "component": "LivePublisherPlatformDetail",
+    "line": 5705,
+    "label": "{outlet.active?'Деактивировать площадку':'Активировать площадку'}",
+    "handler": "{()=>backend.perform(async()=>{await api(`/outlets/${outlet.id}/active`,'POST',{active:!outlet.active});await backend.refresh();})}"
+  },
+  {
+    "component": "LivePublisherPlatformDetail",
+    "line": 5705,
+    "label": "{label}",
+    "handler": "{()=>backend.perform(async()=>{await api(`/admin/outlets/${outlet.id}`,'POST',{approved});await backend.refresh();})}"
+  },
+  {
+    "component": "LivePublisherPlatformDetail",
+    "line": 5707,
+    "label": "<Pencil className=\"h-4 w-4\" /> Редактировать",
+    "handler": "{()=>setEditing(true)}"
+  },
+  {
+    "component": "LivePublisherPlatformDetail",
+    "line": 5707,
+    "label": "<span>Принимать заказы</span> <span className={`relative h-6 w-11 rounded-full ${outlet.active?'bg-emerald-500':'bg-gray-300'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white ${outlet.active?'left-6':'left-1'}`} /></span>",
+    "handler": "{()=>backend.perform(async()=>{await api(`/outlets/${outlet.id}/active`,'POST',{active:!outlet.active});await backend.refresh();})}"
+  },
+  {
+    "component": "PublisherPlatformDetailView",
+    "line": 5717,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К площадкам",
+    "handler": "{() => navigate('pub_platforms')}"
+  },
+  {
+    "component": "PublisherPlatformDetailView",
+    "line": 5748,
+    "label": "{isEditing ? <Eye className=\"h-4 w-4\" /> : <Pencil className=\"h-4 w-4\" />} {isEditing ? 'Вернуться к превью' : 'Редактировать'}",
+    "handler": "{() => setIsEditing((current) => !current)}"
+  },
+  {
+    "component": "PublisherPlatformDetailView",
+    "line": 5859,
+    "label": "<span> <span className=\"block text-sm font-semibold text-[#0b3558]\">{isActive ? 'Площадка активна' : 'Площадка на паузе'}</span> <span className=\"mt-1 block text-xs text-[#476788]\">{isActive ? 'Принимает новые заказы' : 'Новые заказы недоступны'}</span> </span> <span className={`relative h-6 w-11 flex-none rounded-full transition-colors ${isActive ? 'bg-[#18b875]' : 'bg-[#a6bbd1]'}`}> <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}`} /> </span>",
+    "handler": "{() => setIsActive((current) => !current)}"
+  },
+  {
+    "component": "PublisherPlatformNewView",
+    "line": 5977,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К площадкам",
+    "handler": "{() => navigate('pub_platforms')}"
+  },
+  {
+    "component": "PublisherPlatformNewView",
+    "line": 6067,
+    "label": "<span className={`flex h-4 w-4 items-center justify-center rounded border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3]'}`}> {selected && <Check className=\"h-3 w-3\" />} </span> {goal}",
+    "handler": "{() => toggleValue(goal, selectedGoals, setSelectedGoals)}"
+  },
+  {
+    "component": "PublisherPlatformNewView",
+    "line": 6090,
+    "label": "<span className={`flex h-4 w-4 items-center justify-center rounded border ${selected ? 'border-[#16834d] bg-[#16834d] text-white' : 'border-[#9bb6d3]'}`}> {selected && <Check className=\"h-3 w-3\" />} </span> {aggregator}",
+    "handler": "{() => toggleValue(aggregator, selectedAggregators, setSelectedAggregators)}"
+  },
+  {
+    "component": "PublisherPlatformNewView",
+    "line": 6124,
+    "label": "<span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3] bg-white'}`}> {selected && <Check className=\"h-3.5 w-3.5\" />} </span> {format}",
+    "handler": "{() => toggleValue(format, selectedFormats, setSelectedFormats)}"
+  },
+  {
+    "component": "PublisherPlatformNewView",
+    "line": 6175,
+    "label": "<span> <span className=\"block text-sm font-semibold text-[#0b3558]\">Сезонные условия</span> <span className=\"mt-1 block text-xs text-[#476788]\">Необязательная скидка или коэффициент на ограниченный период.</span> </span> <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${seasonalOfferEnabled ? 'bg-[#006cff]' : 'bg-[#c8d6e5]'}`}> <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${seasonalOfferEnabled ? 'translate-x-6' : 'translate-x-1'}`} /> </span>",
+    "handler": "{() => setSeasonalOfferEnabled((current) => !current)}"
+  },
+  {
+    "component": "PublisherPlatformNewView",
+    "line": 6224,
+    "label": "Отмена",
+    "handler": "{() => (embedded ? onDone?.() : navigate('pub_platforms'))}"
+  },
+  {
+    "component": "PublisherPlatformNewView",
+    "line": 6225,
+    "label": "{embedded ? 'Сохранить изменения' : 'Отправить на модерацию'}",
+    "handler": "{save}"
+  },
+  {
+    "component": "PublisherFinanceView",
+    "line": 6244,
+    "label": "Реквизиты на проверке",
+    "handler": null
+  },
+  {
+    "component": "PublisherFinanceView",
+    "line": 6284,
+    "label": "Изменить реквизиты",
+    "handler": null
+  },
+  {
+    "component": "PublisherSanctionsView",
+    "line": 6315,
+    "label": "Открыть спор",
+    "handler": "{() => navigate('pub_dispute_detail')}"
+  },
+  {
+    "component": "PublisherComplaintView",
+    "line": 6327,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К заказу",
+    "handler": "{() => navigate('pub_order_detail')}"
+  },
+  {
+    "component": "PublisherComplaintView",
+    "line": 6350,
+    "label": "Отправить доказательства",
+    "handler": null
+  },
+  {
+    "component": "PublisherComplaintView",
+    "line": 6359,
+    "label": "Открыть спор",
+    "handler": "{() => navigate('pub_dispute_detail')}"
+  },
+  {
+    "component": "PublisherPayoutRequestView",
+    "line": 6367,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К выплатам",
+    "handler": "{() => navigate('pub_finance')}"
+  },
+  {
+    "component": "PublisherPayoutRequestView",
+    "line": 6385,
+    "label": "Дождаться проверки реквизитов",
+    "handler": null
+  },
+  {
+    "component": "NotificationChannelToggle",
+    "line": 6417,
+    "label": "{label}",
+    "handler": "{() => setEnabled((value) => !value)}"
+  },
+  {
+    "component": "NotificationsSettingsBlock",
+    "line": 6459,
+    "label": "Подключить Telegram",
+    "handler": null
+  },
+  {
+    "component": "NotificationsSettingsBlock",
+    "line": 6462,
+    "label": "Сохранить",
+    "handler": "{() => setEditing(false)}"
+  },
+  {
+    "component": "NotificationsSettingsBlock",
+    "line": 6480,
+    "label": "Редактировать",
+    "handler": "{() => setEditing(true)}"
+  },
+  {
+    "component": "TeamAccessSettingsBlock",
+    "line": 6504,
+    "label": "<Plus className=\"h-4 w-4\" /> Отправить приглашение",
+    "handler": null
+  },
+  {
+    "component": "TeamAccessSettingsBlock",
+    "line": 6524,
+    "label": "Сохранить",
+    "handler": "{() => setEditing(false)}"
+  },
+  {
+    "component": "TeamAccessSettingsBlock",
+    "line": 6539,
+    "label": "Редактировать",
+    "handler": "{() => setEditing(true)}"
+  },
+  {
+    "component": "ClientSettingsView",
+    "line": 6589,
+    "label": "Сохранить документы",
+    "handler": null
+  },
+  {
+    "component": "ClientSettingsView",
+    "line": 6611,
+    "label": "Сохранить профиль",
+    "handler": null
+  },
+  {
+    "component": "ClientSettingsView",
+    "line": 6627,
+    "label": "Завершить другие сессии",
+    "handler": null
+  },
+  {
+    "component": "ClientSettingsView",
+    "line": 6630,
+    "label": "Обновить безопасность",
+    "handler": null
+  },
+  {
+    "component": "ClientSettingsView",
+    "line": 6661,
+    "label": "Сохранить лимиты",
+    "handler": null
+  },
+  {
+    "component": "PublisherSettingsView",
+    "line": 6691,
+    "label": "Сохранить профиль",
+    "handler": null
+  },
+  {
+    "component": "PublisherSettingsView",
+    "line": 6701,
+    "label": "Обновить безопасность",
+    "handler": null
+  },
+  {
+    "component": "PublisherSettingsView",
+    "line": 6760,
+    "label": "Отправить реквизиты на проверку",
+    "handler": null
+  },
+  {
+    "component": "PublisherSettingsView",
+    "line": 6781,
+    "label": "Сохранить правила",
+    "handler": null
+  },
+  {
+    "component": "PublisherSettingsView",
+    "line": 6806,
+    "label": "<Download className=\"h-4 w-4\" /> Скачать архив",
+    "handler": null
+  },
+  {
+    "component": "AdminPublisherApplicationsView",
+    "line": 6883,
+    "label": "<Plus className=\"h-4 w-4\" /> Создать паблишера",
+    "handler": "{() => setManualOpen(true)}"
+  },
+  {
+    "component": "AdminPublisherApplicationsView",
+    "line": 6990,
+    "label": "Отмена",
+    "handler": "{() => setManualOpen(false)}"
+  },
+  {
+    "component": "AdminPublisherApplicationsView",
+    "line": 6991,
+    "label": "Создать и отправить приглашение",
+    "handler": "{createManualApplication}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7044,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К заявкам",
+    "handler": "{() => navigate('admin_publisher_applications')}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7137,
+    "label": "<span className={`mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-md border transition-colors ${application.checks[key] ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#a6bbd1] bg-white text-transparent'}`}><Check className=\"h-4 w-4\" /></span> <span className=\"min-w-0\"> <span className=\"block text-sm font-semibold text-[#0b3558]\">{title}</span> <span className=\"mt-1 block text-xs leading-5 text-[#476788]\">{description}</span> </span>",
+    "handler": "{() => toggleCheck(key)}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7172,
+    "label": "Одобрить заявку",
+    "handler": "{() => makeDecision('Одобрена')}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7174,
+    "label": "Запросить данные",
+    "handler": "{() => makeDecision('Нужны данные')}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7175,
+    "label": "Отклонить",
+    "handler": "{() => makeDecision('Отклонена')}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7186,
+    "label": "Создать кабинет",
+    "handler": "{() => setInviteOpen(true)}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7195,
+    "label": "Активировать кабинет",
+    "handler": "{() => update({ accountStatus: 'Активен' })}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7196,
+    "label": "Отправить повторно",
+    "handler": null
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7225,
+    "label": "Отмена",
+    "handler": "{() => setInviteOpen(false)}"
+  },
+  {
+    "component": "AdminPublisherApplicationDetailView",
+    "line": 7226,
+    "label": "Создать и отправить приглашение",
+    "handler": "{sendInvite}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7311,
+    "label": "<ChevronRight className=\"h-4 w-4 rotate-180\" /> К информеру",
+    "handler": "{onBack}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7324,
+    "label": "Приостановить",
+    "handler": "{onPause}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7325,
+    "label": "Сохранить",
+    "handler": "{onSave}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7326,
+    "label": "Опубликовать",
+    "handler": "{onPublish}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7390,
+    "label": "<Filter className=\"h-4 w-4\" /> Выбрать площадки",
+    "handler": "{openPicker}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7397,
+    "label": "<X className=\"h-4 w-4\" />",
+    "handler": "{() => setDraft({ ...draft, selectionIds: draft.selectionIds.filter((id) => id !== option.value) })}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7483,
+    "label": "{draft.action || 'Подробнее'} <ArrowRight className=\"h-4 w-4\" />",
+    "handler": null
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7510,
+    "label": "<span className=\"flex min-w-0 items-center gap-3\"><span className={`flex h-5 w-5 flex-none items-center justify-center rounded border ${selected ? 'border-[#006bff] bg-[#006bff] text-white' : 'border-[#8badcf] bg-white'}`}>{selected && <Check className=\"h-3.5 w-3.5\" />}</span><span className=\"min-w-0\"><span className=\"block truncate text-sm font-semibold text-[#0b3558]\">{platform.name}</span></span></span> <span className=\"text-sm text-[#476788]\">{platform.type}</span> <span className=\"text-sm text-[#476788]\">{platform.theme}</span> <span className=\"text-sm text-[#476788]\">{platform.region}</span> <span className=\"text-sm font-semibold tabular-nums text-[#0b3558]\">{formatMoney(platform.price)}</span>",
+    "handler": "{() => togglePendingPlatform(platform.id)}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7531,
+    "label": "Сбросить",
+    "handler": "{() => setPendingSelectionIds([])}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7532,
+    "label": "Отмена",
+    "handler": "{() => setPickerOpen(false)}"
+  },
+  {
+    "component": "AdminInformerEditorPage",
+    "line": 7533,
+    "label": "Применить выбор",
+    "handler": "{applyPlatformSelection}"
+  },
+  {
+    "component": "AdminInformerView",
+    "line": 7645,
+    "label": "<Plus className=\"h-4 w-4\" /> Создать карточку",
+    "handler": "{() => openEditor()}"
+  },
+  {
+    "component": "AdminInformerView",
+    "line": 7750,
+    "label": "<X className=\"h-4 w-4\" />",
+    "handler": "{() => setDraft({ ...draft, selectionIds: draft.selectionIds.filter((id) => id !== option.value) })}"
+  },
+  {
+    "component": "AdminInformerView",
+    "line": 7800,
+    "label": "{draft.action || 'Подробнее'} <ArrowRight className=\"h-4 w-4\" />",
+    "handler": null
+  },
+  {
+    "component": "AdminInformerView",
+    "line": 7807,
+    "label": "Приостановить",
+    "handler": "{pauseItem}"
+  },
+  {
+    "component": "AdminInformerView",
+    "line": 7809,
+    "label": "Сохранить",
+    "handler": "{() => saveItem(draft.status)}"
+  },
+  {
+    "component": "AdminInformerView",
+    "line": 7810,
+    "label": "Опубликовать",
+    "handler": "{() => saveItem('Опубликован')}"
+  },
+  {
+    "component": "AdminExpeditedModerationQueue",
+    "line": 7831,
+    "label": "<span className=\"text-sm font-semibold text-[#006bff]\">{material.id}</span> <span className=\"min-w-0\"> <span className=\"block truncate text-sm font-semibold text-[#0b3558]\">{material.title}</span> <span className=\"mt-1 block text-xs text-[#476788]\">{material.customer} · поступил {material.submittedAt}</span> </span> <span className=\"text-sm font-medium tabular-nums text-[#8a5700]\">{material.deadline}</span> <ChevronRight className=\"h-4 w-4 text-[#6b86a4]\" />",
+    "handler": "{() => onSelect\n            ? onSelect('admin_moderation', material.row, 'admin_moderation_detail')\n            : navigate('admin_moderation_detail')}"
+  },
+  {
+    "component": "AdminPlatformsCatalogView",
+    "line": 7928,
+    "label": "<Download className=\"h-4 w-4\" /> {exported ? 'Экспорт готов' : 'Экспорт'}",
+    "handler": "{() => setExported(true)}"
+  },
+  {
+    "component": "AdminWorklistView",
+    "line": 8051,
+    "label": "<Download className=\"h-4 w-4\" /> {exported ? 'Экспорт готов' : 'Экспорт'}",
+    "handler": "{() => setExported(true)}"
+  },
+  {
+    "component": "AdminOrderDetailView",
+    "line": 8099,
+    "label": "Выбрать заказ",
+    "handler": "{()=>navigate('admin_orders')}"
+  },
+  {
+    "component": "AdminOrderDetailView",
+    "line": 8102,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К заказам",
+    "handler": "{() => navigate('admin_orders')}"
+  },
+  {
+    "component": "AdminOrderDetailView",
+    "line": 8115,
+    "label": "Открыть чат заказа",
+    "handler": "{() => navigate('admin_order_chat')}"
+  },
+  {
+    "component": "AdminOrderDetailView",
+    "line": 8115,
+    "label": "Спор № {order.dispute_number}",
+    "handler": "{() => navigate('admin_dispute_detail')}"
+  },
+  {
+    "component": "AdminModerationDetailView",
+    "line": 8179,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К очереди модерации",
+    "handler": "{() => navigate('admin_moderation')}"
+  },
+  {
+    "component": "AdminModerationDetailView",
+    "line": 8204,
+    "label": "Принять",
+    "handler": "{() => submitDecision('Принят')}"
+  },
+  {
+    "component": "AdminModerationDetailView",
+    "line": 8205,
+    "label": "Вернуть на доработку",
+    "handler": "{() => submitDecision('Возвращен на доработку')}"
+  },
+  {
+    "component": "AdminModerationDetailView",
+    "line": 8206,
+    "label": "Отклонить",
+    "handler": "{() => submitDecision('Отклонен')}"
+  },
+  {
+    "component": "AdminModerationDetailView",
+    "line": 8348,
+    "label": "ООО «Новая редакция»",
+    "handler": "{() => onOpenPublisher?.(publisherProfileRow)}"
+  },
+  {
+    "component": "AdminModerationDetailView",
+    "line": 8367,
+    "label": "<span className=\"text-sm font-semibold text-[#0b3558]\">Ссылки в тексте материала</span> <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${linksOpen ? 'rotate-90' : ''}`} />",
+    "handler": "{() => setLinksOpen((value) => !value)}"
+  },
+  {
+    "component": "AdminModerationDetailView",
+    "line": 8390,
+    "label": "<span className=\"text-sm font-semibold text-[#0b3558]\">Дополнительные настройки материала</span> <ChevronRight className={`w-4 h-4 text-[#476788] transition-transform ${advancedSettingsOpen ? 'rotate-90' : ''}`} />",
+    "handler": "{() => setAdvancedSettingsOpen((value) => !value)}"
+  },
+  {
+    "component": "AdminDisputeDetailView",
+    "line": 8448,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К жалобам",
+    "handler": "{() => navigate('admin_complaints')}"
+  },
+  {
+    "component": "AdminDisputeDetailView",
+    "line": 8473,
+    "label": "Открыть",
+    "handler": "{() => navigate('admin_order_detail')}"
+  },
+  {
+    "component": "AdminDisputeDetailView",
+    "line": 8498,
+    "label": "{evidenceRequested ? 'Запрос отправлен' : 'Запросить доказательства'}",
+    "handler": "{() => setEvidenceRequested(true)}"
+  },
+  {
+    "component": "AdminDisputeDetailView",
+    "line": 8505,
+    "label": "Полный возврат",
+    "handler": "{() => resolve('Полный возврат заказчику')}"
+  },
+  {
+    "component": "AdminDisputeDetailView",
+    "line": 8506,
+    "label": "Полная выплата",
+    "handler": "{() => resolve('Полная выплата паблишеру')}"
+  },
+  {
+    "component": "AdminDisputeDetailView",
+    "line": 8507,
+    "label": "Частичное удержание",
+    "handler": "{() => resolve('Частичное удержание')}"
+  },
+  {
+    "component": "AdminDisputeDetailView",
+    "line": 8508,
+    "label": "Закрыть без санкций",
+    "handler": "{() => resolve('Без санкций')}"
+  },
+  {
+    "component": "AdminPayoutDetailView",
+    "line": 8529,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К выплатам",
+    "handler": "{() => navigate('admin_payouts')}"
+  },
+  {
+    "component": "AdminPayoutDetailView",
+    "line": 8544,
+    "label": "Вернуть на проверку",
+    "handler": "{() => decide('Возвращена на проверку')}"
+  },
+  {
+    "component": "AdminPayoutDetailView",
+    "line": 8544,
+    "label": "Отклонить",
+    "handler": "{() => decide('Отклонена')}"
+  },
+  {
+    "component": "AdminPayoutDetailView",
+    "line": 8544,
+    "label": "Подтвердить выплату",
+    "handler": "{() => decide('Подтверждена')}"
+  },
+  {
+    "component": "AdminFinanceDetailView",
+    "line": 8623,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> Назад к списку",
+    "handler": "{() => navigate('admin_balances')}"
+  },
+  {
+    "component": "AdminFinanceDetailView",
+    "line": 8635,
+    "label": "{adjustmentOpen ? 'Скрыть корректировку' : 'Создать корректировку'}",
+    "handler": "{() => setAdjustmentOpen((value) => !value)}"
+  },
+  {
+    "component": "AdminFinanceDetailView",
+    "line": 8682,
+    "label": "Отмена",
+    "handler": "{() => setAdjustmentOpen(false)}"
+  },
+  {
+    "component": "AdminFinanceDetailView",
+    "line": 8683,
+    "label": "Создать и отправить на подтверждение",
+    "handler": "{createAdjustment}"
+  },
+  {
+    "component": "AdminFinanceDetailView",
+    "line": 8709,
+    "label": "{orderId}",
+    "handler": "{() => navigate('admin_order_detail')}"
+  },
+  {
+    "component": "AdminPlatformDetailView",
+    "line": 8777,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> Назад к списку",
+    "handler": "{() => navigate('admin_platforms')}"
+  },
+  {
+    "component": "AdminPlatformDetailView",
+    "line": 8815,
+    "label": "{isSuspended ? 'Вернуть в каталог' : 'Приостановить'}",
+    "handler": "{togglePlatformStatus}"
+  },
+  {
+    "component": "AdminPlatformDetailView",
+    "line": 8906,
+    "label": "Открыть паблишера",
+    "handler": "{() => navigate('admin_users')}"
+  },
+  {
+    "component": "AdminPlatformDetailView",
+    "line": 8907,
+    "label": "Заказы площадки",
+    "handler": "{() => navigate('admin_orders')}"
+  },
+  {
+    "component": "AdminEntityDetailView",
+    "line": 8983,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> Назад к списку",
+    "handler": "{() => navigate(config.back)}"
+  },
+  {
+    "component": "AdminEntityDetailView",
+    "line": 8985,
+    "label": "{config.action}",
+    "handler": "{runAction}"
+  },
+  {
+    "component": "AdminEntityDetailView",
+    "line": 8986,
+    "label": "Отправить ответ",
+    "handler": "{runAction}"
+  },
+  {
+    "component": "AdminAdvertiserDetailView",
+    "line": 9076,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К рекламодателям",
+    "handler": "{() => navigate('admin_advertisers')}"
+  },
+  {
+    "component": "AdminAdvertiserDetailView",
+    "line": 9118,
+    "label": "<div className=\"flex flex-col gap-3 md:flex-row md:items-center md:justify-between\"> <div className=\"min-w-0\"> <div className=\"flex flex-wrap items-center gap-2\"> <span className=\"text-sm font-semibold text-[#0b3558]\">{id}</span> <Badge color={requestStatus === 'Завершено' ? 'green' : requestStatus.includes('отказ') ? 'red' : 'blue'}>{requestStatus}</Badge> </div> <div className=\"mt-2 text-sm font-medium text-[#0b3558]\">{material}</div> <div className=\"mt-1 text-xs text-[#476788]\">Площадка: {platform}</div> </div> <span className=\"shrink-0 text-sm font-semibold text-[#006bff]\">Открыть</span> </div>",
+    "handler": "{() => onOpenOrder(id)}"
+  },
+  {
+    "component": "AdminAdvertiserDetailView",
+    "line": 9154,
+    "label": "Запросить проверку",
+    "handler": "{requestCheck}"
+  },
+  {
+    "component": "AdminAdvertiserDetailView",
+    "line": 9155,
+    "label": "Заблокировать",
+    "handler": "{blockAdvertiser}"
+  },
+  {
+    "component": "AdminTicketDetailView",
+    "line": 9231,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К поддержке",
+    "handler": "{() => navigate('admin_support')}"
+  },
+  {
+    "component": "AdminTicketDetailView",
+    "line": 9268,
+    "label": "Открыть связанный объект",
+    "handler": "{() => navigate(ticket.relatedRoute)}"
+  },
+  {
+    "component": "AdminTicketDetailView",
+    "line": 9331,
+    "label": "Отправить ответ",
+    "handler": "{sendReply}"
+  },
+  {
+    "component": "AdminTicketDetailView",
+    "line": 9332,
+    "label": "Ответить и закрыть",
+    "handler": "{closeTicket}"
+  },
+  {
+    "component": "AdminTicketDetailView",
+    "line": 9357,
+    "label": "Переоткрыть тикет",
+    "handler": "{reopenTicket}"
+  },
+  {
+    "component": "AdminTicketDetailView",
+    "line": 9359,
+    "label": "Закрыть без ответа",
+    "handler": "{closeTicket}"
+  },
+  {
+    "component": "AdminTicketDetailView",
+    "line": 9361,
+    "label": "Вернуться в очередь",
+    "handler": "{() => navigate('admin_support')}"
+  },
+  {
+    "component": "AdminUserDetailView",
+    "line": 9450,
+    "label": "<div className=\"flex flex-col lg:flex-row lg:items-center gap-4\"> <div className=\"flex items-start gap-4 min-w-0 lg:flex-1\"> <div className=\"mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white border border-[#d4e0ed] text-[#0b3558]\"> <Store className=\"h-5 w-5\" /> </div> <div className=\"min-w-0\"> <div className=\"text-base font-semibold text-[#0b3558]\">{name}</div> <div className=\"mt-1 text-sm text-[#476788]\">{type}</div> </div> </div> <div className=\"grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm lg:w-[560px]\"> <div><div className=\"text-xs text-[#476788]\">Метрики</div><div className=\"mt-0.5 font-medium text-[#0b3558]\">{metric}</div></div> <div><div className=\"text-xs text-[#476788]\">Форматы</div><div className=\"mt-0.5 font-medium text-[#0b3558]\">{formats}</div></div> <div><div className=\"text-xs text-[#476788]\">Базовая цена</div><div className=\"mt-0.5 font-medium text-[#0b3558]\">{price}</div></div> </div> <div className=\"flex items-center justify-between gap-3 lg:w-[210px]\"> <Badge color={status === 'Активна' ? 'green' : status === 'На проверке' ? 'blue' : 'amber'}>{status}</Badge> <ChevronRight className=\"h-4 w-4 text-[#476788]\" /> </div> </div>",
+    "handler": "{() => navigate('admin_platform_detail')}"
+  },
+  {
+    "component": "AdminUserDetailView",
+    "line": 9533,
+    "label": "<ChevronRight className=\"w-4 h-4 rotate-180\" /> К пользователям",
+    "handler": "{() => navigate('admin_users')}"
+  },
+  {
+    "component": "AdminUserDetailView",
+    "line": 9536,
+    "label": "{accountStatus === 'Заблокирован' ? 'Разблокировать' : 'Заблокировать'}",
+    "handler": "{() => setAccountStatus(accountStatus === 'Заблокирован' ? 'Активен' : 'Заблокирован')}"
+  },
+  {
+    "component": "AdminUserDetailView",
+    "line": 9536,
+    "label": "Завершить все сессии",
+    "handler": null
+  },
+  {
+    "component": "AdminUserDetailView",
+    "line": 9539,
+    "label": "{tab}",
+    "handler": "{() => setActiveTab(tab)}"
+  },
+  {
+    "component": "AdminSettingsView",
+    "line": 9564,
+    "label": "{saved ? 'Параметры сохранены' : 'Сохранить параметры'}",
+    "handler": "{() => setSaved(true)}"
+  },
+  {
+    "component": "module",
+    "line": 9989,
+    "label": "<Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? 'text-[#006bff]' : 'text-[#476788]'}`} /> {item.label}",
+    "handler": "{() => setView(item.id)}"
+  },
+  {
+    "component": "module",
+    "line": 10007,
+    "label": "<GroupIcon className={`mr-3 h-5 w-5 flex-shrink-0 ${hasActiveItem ? 'text-[#006bff]' : 'text-[#476788]'}`} /> <span className=\"flex-1 text-left\">{group.label}</span> <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-90' : ''}`} />",
+    "handler": "{() => setAdminNavOpenGroup((current) => current === group.id ? null : group.id)}"
+  },
+  {
+    "component": "module",
+    "line": 10023,
+    "label": "<Icon className={`mr-2.5 h-4 w-4 flex-shrink-0 ${isActive ? 'text-[#006bff]' : 'text-[#6b86a4]'}`} /> <span className=\"truncate\">{item.label}</span>",
+    "handler": "{() => {\n                                  setAdminNavOpenGroup(group.id);\n                                  setView(item.id);\n                                }}"
+  },
+  {
+    "component": "module",
+    "line": 10098,
+    "label": "Выйти",
+    "handler": "{backend.logout}"
+  },
+  {
+    "component": "module",
+    "line": 10100,
+    "label": "<Bell className=\"w-5 h-5\" /> <span className=\"absolute top-2 right-2 w-2 h-2 bg-[#006bff] rounded-full border-2 border-white\"></span>",
+    "handler": "{() => setNotificationsOpen((value) => !value)}"
+  },
+  {
+    "component": "module",
+    "line": 10111,
+    "label": "<div className=\"flex items-start justify-between gap-3\"> <div> <div className=\"text-sm font-semibold text-[#0b3558]\">{title}</div> <div className=\"text-xs text-[#476788] mt-1\">{text}</div> </div> <Badge color={color}>новое</Badge> </div>",
+    "handler": "{() => openNotificationTarget(target)}"
+  },
+  {
+    "component": "module",
+    "line": 10121,
+    "label": "Показать все",
+    "handler": "{() => openNotificationTarget(isAdmin ? 'admin_audit' : isClient ? 'support' : 'pub_support')}"
+  }
+]

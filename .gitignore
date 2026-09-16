@@ -4,3 +4,12 @@ dist/
 tmp/
 output/
 .DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+backups/
+.local-db/
+.local-files/
+.local-accounts.json
+.local-demo-accounts.json
