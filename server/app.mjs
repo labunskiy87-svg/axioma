@@ -8,6 +8,7 @@ import { credentials, materialInput, outletInput, uuid, url } from './validation
 import { audit, once, quote, transfer } from './finance.mjs';
 import { registerFiles } from './files.mjs';
 import { registerOperations } from './operations.mjs';
+import { registerSettings } from './settings.mjs';
 
 export async function createUser(tx, email, password, userRole = 'customer') {
   const id = randomUUID();
@@ -251,13 +252,14 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
     return (await db.query('SELECT * FROM ledger WHERE debit_account=ANY($1::text[]) OR credit_account=ANY($1::text[]) ORDER BY created_at DESC LIMIT 200',[[`${req.user.id}:available`,`${req.user.id}:reserved`]])).rows;
   });
   app.post('/api/orders',async req => {
-    role(req.user,'customer'); const d=z.object({materialId:uuid,outletIds:z.array(uuid).min(1).max(50).refine(v=>new Set(v).size===v.length),expectedAmount:z.number().int().nonnegative().optional()}).strict().parse(req.body);
+    role(req.user,'customer'); const d=z.object({materialId:uuid,outletIds:z.array(uuid).min(1).max(50).refine(v=>new Set(v).size===v.length),expectedAmount:z.number().int().nonnegative().optional(),limitConfirmed:z.boolean().default(false)}).strict().parse(req.body);
     return once(db,req,'orders.create',async tx => {
       const material=await owned(tx,'materials',d.materialId,req.user.id);
       if (material.status!=='approved') fail(409,'Material not approved');
       const advertiser=await owned(tx,'advertisers',material.advertiser_id,req.user.id);
       if (advertiser.verification!=='verified') fail(409,'Advertiser verification required');
       const result=[];
+      const {order_limit:orderLimit}=(await tx.query('SELECT order_limit FROM users WHERE id=$1 FOR UPDATE',[req.user.id])).rows[0];
       for (const outletId of [...d.outletIds].sort()) {
         const outlet=(await tx.query('SELECT * FROM outlets WHERE id=$1 FOR UPDATE',[outletId])).rows[0];
         if (!outlet?.active || outlet.status!=='approved') fail(409,'Outlet unavailable');
@@ -268,6 +270,7 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
         await audit(tx,req.user.id,'order.create',id,{amount,payout});
       }
       if (d.expectedAmount !== undefined && result.reduce((sum,o)=>sum+o.amount,0)!==d.expectedAmount) fail(409,'Price changed; review the order total');
+      if(orderLimit!==null && result.reduce((sum,o)=>sum+o.amount,0)>Number(orderLimit) && !d.limitConfirmed)fail(409,'Сумма превышает ваш лимит. Подтвердите превышение при оформлении заказа.');
       return result;
     });
   });
@@ -306,5 +309,6 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   });
   await registerFiles(app,db,storageRoot);
   await registerOperations(app,db);
+  registerSettings(app,db);
   return app;
 }

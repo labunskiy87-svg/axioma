@@ -1205,7 +1205,7 @@ const orderMaterialSettings = [
   ['Желаемый URL', '/news/fintech-analytics-platform'],
 ];
 
-const MaterialAttachments = ({ ids }) => {
+const MaterialAttachments = ({ ids, showEmpty = false }) => {
   const [files,setFiles]=useState([]);
   const [error,setError]=useState('');
   useEffect(()=>{
@@ -1213,17 +1213,23 @@ const MaterialAttachments = ({ ids }) => {
     Promise.all(ids.map(id=>api(`/files/${id}/meta`))).then(items=>{if(active)setFiles(items);}).catch(e=>{if(active)setError(e.message);});
     return ()=>{active=false;};
   },[JSON.stringify(ids)]);
-  if(!ids.length) return null;
-  return <Card className="p-6"><h3 className="mb-5 font-display text-lg font-bold text-[#0b3558]">Прикрепленные файлы</h3>{error && <p role="alert" className="text-red-600">{error}</p>}<div className="grid gap-3 md:grid-cols-2">{files.map(file=><a key={file.id} href={`/api/files/${file.id}`} className="flex min-w-0 items-center gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3" download><FileText className="h-5 w-5 shrink-0 text-[#006bff]" /><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{file.name}</span><span className="text-xs text-[#476788]">{formatFileSize(file.size)}</span></span><Download className="h-4 w-4 shrink-0" /></a>)}</div></Card>;
+  if(!ids.length&&!showEmpty) return null;
+  return <Card className="p-6"><div className="mb-5"><h3 className="font-display text-lg font-bold text-[#0b3558]">Прикрепленные файлы</h3><p className="mt-1 text-sm text-[#476788]">Изображения и документы, переданные вместе с материалом</p></div>{error && <p role="alert" className="text-red-600">{error}</p>}{ids.length?<div className="grid gap-3 md:grid-cols-2">{files.map(file=><a key={file.id} href={`/api/files/${file.id}`} className="flex min-w-0 items-center gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3" download><FileText className="h-5 w-5 shrink-0 text-[#006bff]" /><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{file.name}</span><span className="text-xs text-[#476788]">{formatFileSize(file.size)}</span></span><Download className="h-4 w-4 shrink-0" /></a>)}</div>:<div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3 text-sm text-[#476788]">Файлы к материалу не прикреплены</div>}</Card>;
 };
 
-const LiveMaterialContent = ({ material, copy = false, showAttachments = true }) => (
-  <div className="space-y-6">
+const LiveMaterialContent = ({ material, copy = false, showAttachments = true, preserveOrderLayout = false }) => {
+  const links=Array.from(new Set(String(material?.body||'').match(/https?:\/\/[^\s)\]}>,]+/g)||[]));
+  const settings=Object.entries({tags:'Тэги',title:'Title',description:'Description',desiredUrl:'Желаемый URL',notes:'Примечание и ТЗ'}).filter(([key])=>material?.metadata?.[key]);
+  return <div className="space-y-6">
     <Card className="p-6"><div className="whitespace-pre-wrap break-words text-base leading-7 text-[#0b3558]">{material?.body || 'Текст отсутствует'}</div></Card>
-    {showAttachments && <MaterialAttachments ids={material?.metadata?.attachments || []} />}
-    {['tags','title','description','desiredUrl','notes'].some(key=>material?.metadata?.[key]) && <Card className="p-6"><h3 className="mb-5 font-display text-lg font-bold text-[#0b3558]">Параметры размещения</h3><div className="divide-y divide-[#d4e0ed] rounded-lg border border-[#d4e0ed]">{Object.entries({tags:'Тэги',title:'Title',description:'Description',desiredUrl:'Желаемый URL',notes:'Примечание и ТЗ'}).filter(([key]) => material.metadata[key]).map(([key,label]) => <div key={key} className="flex items-center justify-between gap-3 px-4 py-3"><div><div className="text-sm text-[#476788]">{label}</div><p className="whitespace-pre-wrap break-words">{material.metadata[key]}</p></div>{copy && <CopyButton value={material.metadata[key]} label="Скопировать" />}</div>)}</div></Card>}
-  </div>
-);
+    {showAttachments && <MaterialAttachments ids={material?.metadata?.attachments || []} showEmpty={preserveOrderLayout} />}
+    {(preserveOrderLayout||links.length||settings.length) && <Card className="p-6">
+      <div className="mb-5"><h3 className="font-display text-lg font-bold text-[#0b3558]">Параметры размещения</h3><p className="mt-1 text-sm text-[#476788]">Ссылки и дополнительные требования к публикации</p></div>
+      <div className="overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]"><div className="border-b border-[#d4e0ed] px-4 py-3"><div className="text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</div></div>{links.length?<div className="divide-y divide-[#d4e0ed]">{links.map(link=><div key={link} className="flex items-center justify-between gap-3 bg-white px-4 py-3"><div className="flex min-w-0 items-center gap-2 break-all text-sm text-[#006bff]"><ExternalLink className="h-4 w-4 flex-shrink-0" /><span>{link}</span></div>{copy&&<CopyButton value={link} label="Скопировать ссылку" />}</div>)}</div>:<div className="bg-white px-4 py-3 text-sm text-[#476788]">Ссылки в тексте не указаны</div>}</div>
+      <div className="mt-5 overflow-hidden rounded-lg border border-[#d4e0ed] bg-[#f8f9fb]"><div className="border-b border-[#d4e0ed] px-4 py-3"><div className="text-sm font-semibold text-[#0b3558]">Дополнительные настройки материала</div></div>{settings.length?<div className="divide-y divide-[#d4e0ed]">{settings.map(([key,label])=><div key={key} className="flex items-center justify-between gap-3 bg-white px-4 py-3"><div className="min-w-0"><div className="text-xs text-[#476788]">{label}</div><div className="mt-0.5 whitespace-pre-wrap break-words text-sm font-medium text-[#0b3558]">{material.metadata[key]}</div></div>{copy&&<CopyButton value={material.metadata[key]} label={`Скопировать ${label}`} />}</div>)}</div>:<div className="bg-white px-4 py-3 text-sm text-[#476788]">Дополнительные настройки не заданы</div>}</div>
+    </Card>}
+  </div>;
+};
 
 const OrderMaterialContent = ({ context = 'client', showCopyActions = false, showAttachments = true }) => (
   <div className="space-y-6">
@@ -1334,6 +1340,7 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
   const requestKeys = useRef(new Map());
   const initialPlatforms = platforms.length ? platforms : platform ? [platform] : [];
   const [removedPlatformIds, setRemovedPlatformIds] = useState([]);
+  const [confirmedLimit, setConfirmedLimit] = useState('');
   const availableMaterials = materials.filter((material) => ['Принят в систему', 'Используется в заказах'].includes(material.status));
   const [selectedMaterialName, setSelectedMaterialName] = useState(availableMaterials[0]?.name);
   const selectedPlatforms = initialPlatforms.filter((item) => !removedPlatformIds.includes(item.id));
@@ -1345,26 +1352,45 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
     price: getPlatformPriceForMaterial(item, selectedMaterial),
   }));
   const totalPrice = pricedPlatforms.reduce((sum, item) => sum + item.price, 0);
+  const limit = backend.data.limits.orderLimit;
+  const exceedsLimit = limit !== null && Math.round(totalPrice * 100) > limit;
+  const limitKey = JSON.stringify([selectedMaterial?.id,pricedPlatforms.map(p=>p.id),totalPrice,limit]);
+  const limitConfirmed = confirmedLimit === limitKey;
   const isBulk = pricedPlatforms.length > 1;
+  const count = pricedPlatforms.length;
+  const platformLabel = count % 10 === 1 && count % 100 !== 11 ? 'площадка' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'площадки' : 'площадок';
   return (
-  <Modal isOpen={isOpen} onClose={onClose} title={isBulk ? 'Массовое размещение материала' : 'Выбор материала для размещения'} className="max-w-5xl">
-    <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
-      <div className="rounded-2xl bg-[#f8f9fb] border border-[#d4e0ed] p-4">
+  <Modal isOpen={isOpen} onClose={onClose} title="Подтверждение заказа" className="max-w-3xl" footer={
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-xs text-[#476788]">К резервированию</div><div className="text-lg font-semibold tabular-nums text-[#0b3558]">{formatMoney(totalPrice)}</div></div>
+      <div className="flex gap-3">
+        <Button variant="secondary" onClick={onClose}>Отмена</Button>
+        <Button variant="primary" disabled={backend.busy || !selectedMaterial || !count || (exceedsLimit && !limitConfirmed)} onClick={async () => {
+          const fingerprint = JSON.stringify([selectedMaterial.id,pricedPlatforms.map(p=>p.id)]);
+          if(!requestKeys.current.has(fingerprint)) requestKeys.current.set(fingerprint,crypto.randomUUID());
+          const ok = await onCreateOrders?.(selectedMaterial, pricedPlatforms,requestKeys.current.get(fingerprint),exceedsLimit && limitConfirmed);
+          if(ok) onClose();
+        }}>{backend.busy ? 'Создание…' : isBulk ? 'Создать заказы' : 'Создать заказ'}</Button>
+      </div>
+    </div>
+  }>
+    <div className="space-y-5">
+      <div>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xs text-[#476788] uppercase">{isBulk ? 'Выбрано площадок' : 'Площадка'}</div>
-            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{pricedPlatforms.length ? `${pricedPlatforms.length} площадки` : 'Нет выбранных площадок'}</div>
+            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{count ? `${count} ${platformLabel}` : 'Нет выбранных площадок'}</div>
           </div>
           <div className="text-right">
             <div className="text-xs text-[#476788] uppercase">Бюджет</div>
             <div className="mt-1 text-sm font-semibold text-[#0b3558] tabular-nums">{formatMoney(totalPrice)}</div>
           </div>
         </div>
-        <div className="mt-4 space-y-2 max-h-[360px] overflow-y-auto">
+        <div className="mt-3 divide-y divide-[#d4e0ed] border-y border-[#d4e0ed]">
           {pricedPlatforms.map((item) => (
-            <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2">
+            <div key={item.id} className="flex items-center justify-between gap-3 py-3">
               <div className="min-w-0">
-                <div className="text-sm font-medium text-[#0b3558] truncate">{item.name}</div>
+                <div className="text-sm font-medium text-[#0b3558] break-words">{item.name}</div>
                 <div className="text-xs text-[#476788]">{item.type} · {item.format}</div>
               </div>
               <div className="flex items-center gap-2">
@@ -1382,56 +1408,39 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
           <span className="text-sm font-medium text-[#476788]">Материал</span>
           <CustomSelect className="mt-2" value={selectedMaterialName} onChange={setSelectedMaterialName} options={availableMaterials.map((material) => material.name)} />
         </label>
-        <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-          <div className="text-xs text-[#476788]">Проект новых заказов</div>
-          <div className="mt-2"><ProjectLink project={selectedProject} muted /></div>
-          <p className="mt-2 text-xs leading-5 text-[#476788]">Каждый созданный заказ унаследует проект материала. Позже заказ можно перенести отдельно.</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="text-sm text-[#476788]">Проект</div>
+          <ProjectLink project={selectedProject} muted />
         </div>
-        <label className="flex items-start gap-3 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 cursor-pointer">
-          <input type="checkbox" className="mt-1" />
-          <span className="text-sm text-[#476788]"><span className="font-semibold text-[#0b3558]">Автоприемка</span><br />Автоматически принять размещение, если жалоба не открыта в течение 72 часов после загрузки ссылки.</span>
+        {exceedsLimit && <label className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-[#0b3558]"><input type="checkbox" className="mt-1 shrink-0" checked={limitConfirmed} onChange={e=>setConfirmedLimit(e.target.checked?limitKey:'')} /><span>Подтверждаю заказ сверх лимита {formatMoney(limit/100)}</span></label>}
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" className="mt-1 shrink-0" />
+          <span className="text-sm text-[#476788]"><span className="font-semibold text-[#0b3558]">Автоприёмка</span><br />Автоматически принять размещение, если жалоба не открыта в течение 72 часов после загрузки ссылки.</span>
         </label>
-        <MaterialRightsDisclaimer />
-        <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
-          После подтверждения система создаст отдельный заказ на каждую выбранную площадку. Общая сумма размещений заморозится на балансе рекламодателя.
-        </div>
-        <div className="flex flex-col sm:flex-row justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button
-            variant="primary"
-            disabled={backend.busy || !selectedMaterial || !pricedPlatforms.length}
-            onClick={async () => {
-              const fingerprint = JSON.stringify([selectedMaterial.id,pricedPlatforms.map(p=>p.id)]);
-              if(!requestKeys.current.has(fingerprint)) requestKeys.current.set(fingerprint,crypto.randomUUID());
-              const ok = await onCreateOrders?.(selectedMaterial, pricedPlatforms,requestKeys.current.get(fingerprint));
-              if(ok) onClose();
-            }}
-          >
-            Создать заказ
-          </Button>
-        </div>
+        <p className="text-xs leading-5 text-[#476788]">{isBulk ? 'Для каждой площадки будет создан отдельный заказ. ' : ''}Сумма заказа будет зарезервирована на вашем балансе. Подтверждая заказ, вы подтверждаете наличие прав на текст, изображения и другие материалы.</p>
       </div>
     </div>
   </Modal>
   );
 };
 
-const Modal = ({ isOpen, onClose, title, children, className = 'max-w-md' }) => {
+const Modal = ({ isOpen, onClose, title, children, className = 'max-w-md', footer = null }) => {
   if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0b3558]/10 backdrop-blur-sm" onClick={onClose}>
-      <div className={`bg-white rounded-2xl border border-[#d4e0ed] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.08)_0px_30px_50px_0px] w-full ${className} overflow-hidden flex flex-col max-h-[90vh]`} onClick={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-[#0b3558]/20 backdrop-blur-sm" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={title} className={`bg-white rounded-2xl border border-[#d4e0ed] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.08)_0px_30px_50px_0px] w-full ${className} overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)]`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-[#d4e0ed] flex-shrink-0">
           <h3 className="text-lg font-semibold text-[#0b3558]">{title}</h3>
-          <button onClick={onClose} className="text-[#476788] hover:text-[#0b3558] transition-colors p-1.5 rounded-lg hover:bg-[#f0f3f8]">
+          <button onClick={onClose} aria-label="Закрыть окно" className="shrink-0 text-[#476788] hover:text-[#0b3558] transition-colors p-1.5 rounded-lg hover:bg-[#f0f3f8]">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 overflow-y-auto">
+        <div className="min-h-0 p-4 sm:p-6 overflow-y-auto overscroll-contain">
           {children}
         </div>
+        {footer && <div className="shrink-0 border-t border-[#d4e0ed] bg-white p-4 sm:px-6">{footer}</div>}
       </div>
-    </div>
+    </div>, document.body
   );
 };
 
@@ -2157,7 +2166,7 @@ const LandingView = ({ setGlobalMode }) => {
 
 // --- 2. CLIENT PORTAL ---
 
-const ClientDashboardView = ({ navigate, informerItems = initialInformerItems }) => {
+const ClientDashboardView = ({ navigate, onOpenOrder, informerItems = initialInformerItems }) => {
   const backend = useBackend();
   const activeOrders = backend.data.orders.filter(o => !['completed','refunded','rejected'].includes(o.apiStatus));
   const mockOrdersClient = activeOrders;
@@ -2305,7 +2314,7 @@ const ClientDashboardView = ({ navigate, informerItems = initialInformerItems })
             </thead>
             <tbody className="bg-white divide-y divide-[#d4e0ed]">
               {mockOrdersClient.slice(0, 2).map(order => (
-                <tr key={order.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('order_detail')}>
+                <tr key={order.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => onOpenOrder(order)}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#0b3558] font-medium">№{orderNumber(order)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#476788]">{order.platform}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#0b3558] tabular-nums">{formatMoney(order.price)}</td>
@@ -2460,124 +2469,31 @@ const ProjectChangeModal = ({ isOpen, onClose, currentProject, projects, entityL
   );
 };
 
-const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045, sourceOrder = null, projects = [], openProject, onChangeProject }) => {
+const ClientOrderDetailView = ({ navigate, sourceOrder = null, projects = [], openProject, onChangeProject, ...props }) => {
   const backend = useBackend();
-  const [currentState, setCurrentState] = useState(state);
-  const [projectName, setProjectName] = useState(projects.find((project) => project.id === sourceOrder?.projectId)?.name || 'Без проекта');
   const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const isPendingState = currentState === 'pending';
-  const isRejectedState = currentState === 'rejected';
-  const isCompletedState = currentState === 'completed';
-  const fallbackOrder = isPendingState
-    ? {
-        id: 1048,
-        status: 'Площадка рассматривает',
-        color: 'blue',
-        subtitle: 'отправлен 16.10.2023 · ответ до 18.10.2023',
-        amount: 45000,
-        platform: 'Технологии сегодня',
-        title: 'Пресс-релиз: Запуск новой платформы',
-        format: 'Новость',
-      }
-    : isRejectedState
-      ? {
-          id: 1055,
-          status: 'Площадка отказала',
-          color: 'red',
-          subtitle: 'отказ получен 19.10.2023',
-          amount: 146000,
-          platform: 'Бизнес Среда',
-          title: 'Обзор рынка недвижимости за третий квартал',
-          format: 'Новость',
-        }
-      : isCompletedState
-        ? orderId === 1052
-          ? {
-              id: 1052,
-              status: 'Завершено',
-              color: 'green',
-              subtitle: 'принят и оплачен 18.10.2023',
-              amount: 80000,
-              platform: 'VC.ru',
-              title: 'Кейс внедрения системы управления клиентами',
-              format: 'Лонгрид',
-              publicationUrl: 'https://vc.ru/services/1052',
-              publicationDate: '18.10.2023',
-            }
-          : {
-              id: 1045,
-              status: 'Завершено',
-              color: 'green',
-              subtitle: 'принят и оплачен 20.10.2023',
-              amount: 150000,
-              platform: 'РБК Инвестиции',
-              title: 'Пресс-релиз: Запуск новой платформы',
-              format: 'Статья',
-              publicationUrl: 'https://invest.rbc.ru/news/652a9f',
-              publicationDate: '18.10.2023',
-            }
-      : {
-          id: 1045,
-          status: 'Ожидает приемки',
-          color: 'indigo',
-          subtitle: 'ссылка отправлена 18.10.2023',
-          amount: 150000,
-          platform: 'РБК Инвестиции',
-          title: 'Пресс-релиз: Запуск новой платформы',
-          format: 'Статья',
-          publicationUrl: 'https://invest.rbc.ru/news/652a9f',
-          publicationDate: '18.10.2023',
-        };
-  const order = sourceOrder
-    ? {
-        ...fallbackOrder,
-        id: sourceOrder.id,
-        number: sourceOrder.number,
-        status: currentState === 'completed' ? 'Завершено' : sourceOrder.status,
-        color: currentState === 'completed' ? 'green' : sourceOrder.statusColor,
-        amount: sourceOrder.price,
-        platform: sourceOrder.platform,
-        title: sourceOrder.material,
-        projectId: sourceOrder.projectId,
-        subtitle: sourceOrder.date,
-        publicationUrl: sourceOrder.publication_url,
-        publicationDate: sourceOrder.publication_url ? new Date(sourceOrder.updated_at).toLocaleDateString('ru-RU') : '',
-      }
-    : fallbackOrder;
-  const changeProject = async (nextName) => {
-    const saved=await onChangeProject?.(order.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
-    if(saved)setProjectName(nextName);
-    return saved;
+  if (!sourceOrder) return <Card className="p-6"><p className="mb-4 text-sm text-[#476788]">Заказ не найден или недоступен.</p><Button variant="secondary" onClick={() => navigate('orders')}>К списку заказов</Button></Card>;
+  const projectName = projects.find(project => project.id === sourceOrder.projectId)?.name || 'Без проекта';
+  const isPendingState = sourceOrder.apiStatus === 'pending';
+  const isRejectedState = sourceOrder.apiStatus === 'rejected';
+  const isCompletedState = sourceOrder.apiStatus === 'completed';
+  const isSubmittedState = sourceOrder.apiStatus === 'submitted';
+  const statusCopy = {
+    pending: ['Площадка рассматривает заказ', 'Заказ отправлен площадке и ожидает решения. Средства зарезервированы.'],
+    accepted: ['Ожидает публикации', 'Площадка приняла заказ. После публикации здесь появится ссылка для проверки.'],
+    submitted: ['Публикация загружена', 'Проверьте размещение. После приемки средства будут перечислены площадке.'],
+    completed: ['Заказ завершен', 'Публикация принята, расчеты по заказу выполнены.'],
+    rejected: ['Площадка отказалась от заказа', 'Резерв освобожден, средства доступны на вашем балансе.'],
+    disputed: ['Открыт спор', 'Средства остаются в резерве до решения администратора.'],
+    refunded: ['Средства возвращены', 'Резерв освобожден, средства возвращены на ваш баланс.'],
+  }[sourceOrder.apiStatus] || [sourceOrder.status, ''];
+  const order = {
+    id: sourceOrder.id, number: sourceOrder.number, status: sourceOrder.status,
+    color: sourceOrder.statusColor, amount: sourceOrder.price,
+    platform: sourceOrder.platform, title: sourceOrder.material,
+    publicationUrl: sourceOrder.publication_url,
   };
-  const timelineItems = [
-    ['Заказ создан', '15.10, 10:15', 'done'],
-    ...(isCompletedState
-      ? [
-          ['Площадка приняла заказ', '16.10, 11:40', 'done'],
-          ['Ссылка отправлена', '18.10, 12:30', 'done'],
-          ['Публикация принята', '20.10, 12:03', 'done'],
-          ['Заказ оплачен', '20.10, 12:03', 'done'],
-        ]
-      : isRejectedState
-        ? [
-            ['Заказ отправлен', '16.10, 11:40', 'done'],
-            ['Площадка отказала', '19.10, 14:20', 'current'],
-            ['Средства доступны', 'списания не было', 'next'],
-          ]
-        : isPendingState
-          ? [
-              ['Заказ отправлен', '16.10, 11:40', 'done'],
-              ['Решение площадки', 'до 18.10', 'current'],
-              ['Публикация', 'после принятия', 'next'],
-            ]
-          : [
-              ['Площадка приняла заказ', '16.10, 11:40', 'done'],
-              ['Ссылка отправлена', '18.10, 12:30', 'done'],
-              ['Приемка публикации', 'ожидает решения', 'current'],
-              ['Оплата заказа', 'после приемки', 'next'],
-            ]),
-  ];
-
+  const changeProject = async (nextName) => onChangeProject?.(sourceOrder.id, nextName === 'Без проекта' ? null : projects.find(project => project.name === nextName)?.id ?? null);
   return (
   <div className="space-y-6 max-w-6xl mx-auto">
     <div className="flex items-center gap-2 text-sm text-[#476788] cursor-pointer hover:text-[#0b3558]" onClick={() => navigate('orders')}>
@@ -2602,9 +2518,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
       </h1>
       <div className="mt-2 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-2 text-sm text-[#476788]">
         <span>
-          {order.publicationDate
-            ? `Размещено на ${order.platform} · ${order.publicationDate}, 12:30`
-            : `Площадка: ${order.platform}`}
+          {`Площадка: ${order.platform}`}
         </span>
         <span aria-hidden="true">·</span>
         <button
@@ -2616,21 +2530,6 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
           <span className="truncate">{projectName}</span>
           <Pencil className="h-3.5 w-3.5 shrink-0" />
         </button>
-      </div>
-      <div className="mt-5 grid gap-3 border-t border-[#d4e0ed] pt-4 sm:grid-cols-2 lg:grid-cols-5">
-        {timelineItems.map(([label, time, status]) => (
-          <div key={`${label}-${time}`} className="flex min-w-0 items-start gap-2.5">
-            {status === 'done'
-              ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-500" />
-              : status === 'current'
-                ? <Clock className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
-                : <div className="mt-0.5 h-4 w-4 flex-none rounded-full border-2 border-[#d4e0ed]" />}
-            <div className="min-w-0">
-              <div className="text-xs font-semibold leading-5 text-[#0b3558]">{label}</div>
-              <div className="text-xs leading-5 text-[#476788]">{time}</div>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
 
@@ -2646,41 +2545,14 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
                : <CheckCircle2 className="h-5 w-5 text-[#006bff]" />}
           </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-[#0b3558]">
-            {isCompletedState
-              ? 'Заказ завершен'
-              : isRejectedState
-                ? 'Площадка отказалась от заказа'
-                : isPendingState
-                  ? 'Площадка рассматривает заказ'
-                  : 'Публикация загружена'}
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-[#476788]">
-            {isCompletedState
-              ? 'Публикация принята заказчиком, средства списаны с замороженного баланса, заказ закрыт. Ссылка и итоговый отчет остаются доступны в карточке.'
-              : isRejectedState
-              ? 'Площадка рассмотрела заказ и отказалась от размещения. Средства по заказу не будут списаны и останутся доступны на балансе.'
-              : isPendingState
-                ? 'Площадка получила заказ и должна принять или отклонить его до указанного срока. До решения площадки редактирование условий заказа недоступно.'
-                : 'Площадка загрузила ссылку на опубликованный материал. Проверьте корректность размещения. Нажимая «Принять и оплатить», вы подтверждаете отсутствие претензий, средства будут списаны с замороженного баланса.'}
-          </p>
-          {!isPendingState && !isRejectedState && (
+          <h2 className="text-base font-semibold text-[#0b3558]">{statusCopy[0]}</h2>
+          <p className="mt-1 text-sm leading-6 text-[#476788]">{statusCopy[1]}</p>
+          {order.publicationUrl && (
             <div className="mt-4 flex flex-col justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2 truncate">
                 <ExternalLink className="w-4 h-4 text-[#a6bbd1] flex-shrink-0" />
                 <a href={order.publicationUrl} target="_blank" rel="noreferrer" className="text-sm text-[#006bff] hover:underline truncate">{order.publicationUrl}</a>
               </div>
-              <span className="text-xs text-[#476788] whitespace-nowrap bg-[#f8f9fb] px-2 py-1 rounded">Опубликовано {order.publicationDate}</span>
-            </div>
-          )}
-          {isRejectedState && (
-            <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-              <div className="text-xs font-medium text-[#476788]">Причина отказа</div>
-              <div className="mt-1 text-sm font-semibold text-[#0b3558]">Нет свободного редакционного слота в срок заказа</div>
-              <p className="mt-3 text-sm leading-6 text-[#476788]">
-                Редакция не сможет подготовить и выпустить материал до указанного дедлайна. Предлагаем создать новый заказ с датой публикации после 25.10.
-              </p>
-              <div className="mt-3 text-xs text-[#476788]">РБК Инвестиции · редакция · 19.10.2023, 14:20</div>
             </div>
           )}
           
@@ -2692,9 +2564,9 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
               </>
             ) : (
               <>
-                {!isPendingState && !isRejectedState && (
+                {isSubmittedState && (
                   <>
-                    <Button variant="primary" disabled={backend.busy || sourceOrder?.apiStatus !== 'submitted'} onClick={async () => { const ok = await backend.perform(async () => { await api(`/orders/${sourceOrder.id}/action`,'POST',{action:'complete'},crypto.randomUUID()); await backend.refresh(); }); if(ok) setCurrentState('completed'); }}>Принять и оплатить</Button>
+                    <Button variant="primary" disabled={backend.busy} onClick={() => backend.perform(async () => { await api(`/orders/${sourceOrder.id}/action`,'POST',{action:'complete'},crypto.randomUUID()); await backend.refresh(); })}>Принять и оплатить</Button>
                     <Button variant="secondary" onClick={() => navigate('complaint')}>Открыть жалобу</Button>
                   </>
                 )}
@@ -5413,7 +5285,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication', sourceOrder
           </div>
         </Card>
 
-        {sourceOrder ? <LiveMaterialContent material={sourceOrder.snapshot} copy /> : <>
+        {sourceOrder ? <LiveMaterialContent material={sourceOrder.snapshot} copy preserveOrderLayout /> : <>
         <Card className="p-6">
           <FullMaterialPreview
             context="publisher"
@@ -6425,6 +6297,70 @@ const NotificationChannelToggle = ({ label, defaultEnabled = false }) => {
   );
 };
 
+const AccountSecuritySettings = () => {
+  const backend = useBackend();
+  const [passwords,setPasswords] = useState({current:'',next:'',confirm:''});
+  const [sessions,setSessions] = useState(null);
+  const [message,setMessage] = useState('');
+  const [error,setError] = useState('');
+  useEffect(()=>{let active=true;api('/auth/sessions').then(rows=>{if(active)setSessions(rows);}).catch(()=>{if(active)setError('Не удалось загрузить сеансы.');});return()=>{active=false;};},[]);
+  const changePassword = async e => {
+    e.preventDefault();setMessage('');setError('');
+    if(passwords.next!==passwords.confirm){setError('Новый пароль и подтверждение не совпадают.');return;}
+    const ok=await backend.perform(async()=>{
+      await api('/auth/password','POST',{currentPassword:passwords.current,newPassword:passwords.next});
+    });
+    if(ok){setPasswords({current:'',next:'',confirm:''});setSessions([{current:true}]);setMessage('Пароль изменён. Другие сеансы завершены.');}
+  };
+  return <SettingsSection title="Безопасность" description="" icon={Lock}>
+    <form onSubmit={changePassword} className="space-y-4">
+      <SettingField label="Текущий пароль"><input required autoComplete="current-password" type="password" className={settingInputClass} value={passwords.current} onChange={e=>{setMessage('');setPasswords({...passwords,current:e.target.value});}} /></SettingField>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <SettingField label="Новый пароль" className="min-w-0"><input required minLength={12} maxLength={256} autoComplete="new-password" type="password" className={settingInputClass} placeholder="Минимум 12 символов" value={passwords.next} onChange={e=>{setMessage('');setPasswords({...passwords,next:e.target.value});}} /></SettingField>
+        <SettingField label="Подтверждение пароля" className="min-w-0"><input required minLength={12} maxLength={256} autoComplete="new-password" type="password" className={settingInputClass} value={passwords.confirm} onChange={e=>{setMessage('');setPasswords({...passwords,confirm:e.target.value});}} /></SettingField>
+      </div>
+      <div className="flex justify-end"><Button variant="primary" type="submit" disabled={backend.busy}>Сменить пароль</Button></div>
+    </form>
+    <div className="mt-6 grid grid-cols-1 gap-4 border-t border-[#d4e0ed] pt-5 sm:grid-cols-2">
+      <div className="min-w-0"><SettingField label="Двухфакторная защита"><CustomSelect className="mt-2" options={['Отключена', 'Код на почту', 'Приложение-аутентификатор']} /></SettingField></div>
+      {backend.user.role==='publisher' && <div className="min-w-0"><SettingField label="API-доступ"><CustomSelect className="mt-2" options={['Отключен', 'Только чтение заказов', 'Заказы и выплаты']} /></SettingField></div>}
+    </div>
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-[#d4e0ed] pt-5">
+      <div><div className="text-sm font-medium text-[#0b3558]">Сеансы аккаунта</div><p className="mt-1 text-xs text-[#476788]">{sessions===null?'Загрузка…':`Других активных сеансов: ${sessions.filter(s=>!s.current).length}`}</p></div>
+      <Button variant="secondary" size="sm" disabled={backend.busy || !sessions?.some(s=>!s.current)} onClick={async()=>{
+        setMessage('');setError('');
+        const ok=await backend.perform(()=>api('/auth/sessions/revoke-others','POST',{}));
+        if(ok){setSessions(sessions.filter(s=>s.current));setMessage('Другие сеансы завершены.');}
+      }}>Завершить другие сеансы</Button>
+    </div>
+    {message && <p role="status" className="mt-4 text-sm text-emerald-700">{message}</p>}
+    {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+  </SettingsSection>;
+};
+
+const OrderLimitsSettings = () => {
+  const backend=useBackend();
+  const [value,setValue]=useState(backend.data.limits.orderLimit===null?'':String(backend.data.limits.orderLimit/100));
+  const [saved,setSaved]=useState(false);
+  const [error,setError]=useState('');
+  return <SettingsSection title="Лимиты и согласования" description="Защита от случайной заморозки крупных сумм." icon={CreditCard}>
+    <form onSubmit={async e=>{
+      e.preventDefault();setSaved(false);setError('');
+      const normalized=value.replace(/[\s₽]/g,'').replace(',','.');
+      if(normalized && !/^\d+(\.\d{1,2})?$/.test(normalized)){setError('Укажите сумму в рублях.');return;}
+      const orderLimit=normalized?Math.round(Number(normalized)*100):null;
+      const ok=await backend.perform(async()=>{await api('/settings/limits','PUT',{orderLimit,autoAccept:false});await backend.refresh();});
+      if(ok)setSaved(true);
+    }}>
+      <SettingField label="Лимит без дополнительного подтверждения, ₽"><input inputMode="decimal" className={settingInputClass} value={value} placeholder="Без лимита" onChange={e=>{setValue(e.target.value);setSaved(false);setError('');}} /></SettingField>
+      <div className="mt-4"><SettingField label="Автоприёмка"><CustomSelect className="mt-2" options={['Выключена', 'Через 72 часа без жалобы']} /></SettingField></div>
+      <Button type="submit" variant="primary" className="mt-5 w-full" disabled={backend.busy}>{backend.busy?'Сохранение…':'Сохранить лимиты'}</Button>
+      {saved && <p role="status" className="mt-3 text-sm text-emerald-700">Лимиты сохранены</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+    </form>
+  </SettingsSection>;
+};
+
 const NotificationsSettingsBlock = ({ events }) => {
   const [editing, setEditing] = useState(false);
 
@@ -6611,24 +6547,7 @@ const ClientSettingsView = () => {
           <div className="mt-6 flex justify-end"><Button variant="primary">Сохранить профиль</Button></div>
         </SettingsSection>
 
-        <SettingsSection title="Безопасность" description="Смена пароля, двухфакторная защита и контроль активных сессий." icon={Lock}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <SettingField label="Текущий пароль"><input type="password" className={settingInputClass} defaultValue="password" /></SettingField>
-            <SettingField label="Новый пароль"><input type="password" className={settingInputClass} placeholder="Минимум 12 символов" /></SettingField>
-            <SettingField label="Подтверждение пароля"><input type="password" className={settingInputClass} placeholder="Повторите новый пароль" /></SettingField>
-	            <SettingField label="Двухфакторная защита"><CustomSelect options={['Включена: код на почту', 'Включить приложение-аутентификатор', 'Отключена']} /></SettingField>
-          </div>
-          <div className="mt-5 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-[#0b3558]">Активная сессия: Chrome, macOS</div>
-                <div className="text-xs text-[#476788] mt-1">Последняя активность сегодня, 12:44 · Москва</div>
-              </div>
-              <Button variant="secondary" size="sm">Завершить другие сессии</Button>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end"><Button variant="primary">Обновить безопасность</Button></div>
-        </SettingsSection>
+        <AccountSecuritySettings />
 
         {legalDocumentsSection}
       </div>
@@ -6653,13 +6572,7 @@ const ClientSettingsView = () => {
           ]}
         />
 
-        <SettingsSection title="Лимиты и согласования" description="Защита от случайной заморозки крупных сумм." icon={CreditCard}>
-          <div className="space-y-4">
-            <SettingField label="Лимит заказа без согласования"><input className={settingInputClass} defaultValue="100 000 ₽" /></SettingField>
-            <SettingField label="Автоприемка"><CustomSelect options={['Выключена', 'Через 72 часа без жалобы']} /></SettingField>
-          </div>
-          <Button variant="primary" className="w-full mt-5">Сохранить лимиты</Button>
-        </SettingsSection>
+        <OrderLimitsSettings />
       </div>
     </div>
   </div>
@@ -6691,15 +6604,7 @@ const PublisherSettingsView = () => {
           <div className="mt-6 flex justify-end"><Button variant="primary">Сохранить профиль</Button></div>
         </SettingsSection>
 
-        <SettingsSection title="Безопасность" description="Пароль, 2FA и API-ключи для интеграций." icon={Lock}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <SettingField label="Текущий пароль"><input type="password" className={settingInputClass} defaultValue="password" /></SettingField>
-            <SettingField label="Новый пароль"><input type="password" className={settingInputClass} placeholder="Новый пароль" /></SettingField>
-            <SettingField label="Двухфакторная защита"><CustomSelect className="mt-2" options={['Включена: почта', 'Приложение-аутентификатор', 'Отключена']} /></SettingField>
-            <SettingField label="API-доступ"><CustomSelect className="mt-2" options={['Отключен', 'Только чтение заказов', 'Заказы и выплаты']} /></SettingField>
-          </div>
-          <div className="mt-6 flex flex-wrap justify-end gap-3"><Button variant="primary">Обновить безопасность</Button></div>
-        </SettingsSection>
+        <AccountSecuritySettings />
 
         <SettingsSection title="Реквизиты выплат" description="Сюда платформа перечисляет выплаты после приемки заказов и удержания комиссии 15%." icon={CreditCard}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
@@ -9577,7 +9482,7 @@ export default function App() {
 
   // Состояние кабинета заказчика
 	  const [clientView, setClientView] = useCabinetView('customer','dashboard');
-	  const [favoritePlatforms, setFavoritePlatforms] = useState([101, 102]);
+	  const favoritePlatforms = backend.data.favorites;
 	  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const projects = backend.data.projects;
   const clientMaterials = backend.data.materials;
@@ -9613,11 +9518,10 @@ export default function App() {
   });
   const [adminNavOpenGroup, setAdminNavOpenGroup] = useState('participants');
 
-  const toggleFavoritePlatform = (id) => {
-    setFavoritePlatforms((current) =>
-      current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id],
-    );
-  };
+  const toggleFavoritePlatform = (id) => backend.perform(async () => {
+    await api(`/favorites/${id}`,'PUT',{favorite:!favoritePlatforms.includes(id)});
+    await backend.refresh();
+  });
 
   const clientNav = [
     { id: 'dashboard', label: 'Панель', icon: LayoutDashboard },
@@ -9860,14 +9764,14 @@ export default function App() {
   });
   const changeOrderProject = (id, projectId) => backend.perform(async () => { await api(`/orders/${id}/project`,'POST',{projectId}); await backend.refresh(); });
   const moveOrders = (ids, projectId) => backend.perform(async () => { await api('/orders/project','POST',{ids,projectId}); await backend.refresh(); });
-  const createOrdersFromMaterial = (material, platforms, key) => backend.perform(async () => {
-    await api('/orders','POST',{materialId:material.id,outletIds:platforms.map(p => p.id),expectedAmount:Math.round(platforms.reduce((sum,p)=>sum+p.price,0)*100)},key); await backend.refresh(); setClientView('orders');
+  const createOrdersFromMaterial = (material, platforms, key, limitConfirmed = false) => backend.perform(async () => {
+    await api('/orders','POST',{materialId:material.id,outletIds:platforms.map(p => p.id),expectedAmount:Math.round(platforms.reduce((sum,p)=>sum+p.price,0)*100),limitConfirmed},key); await backend.refresh(); setClientView('orders');
   });
 
   const renderContent = () => {
     if (isClient) {
       switch (clientView) {
-        case 'dashboard': return <ClientDashboardView navigate={setClientView} informerItems={informerItems} />;
+        case 'dashboard': return <ClientDashboardView navigate={setClientView} onOpenOrder={openOrder} informerItems={informerItems} />;
         case 'projects': return <ClientProjectsView projects={projects} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openProject={openProject} onCreateProject={createProject} />;
         case 'project_detail': return <ClientProjectDetailView project={projects.find((project) => project.id === selectedProjectId)} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openMaterial={openMaterial} openOrder={openOrder} onAddMaterial={startCreateMaterial} onToggleStatus={toggleProjectStatus} onDelete={deleteProject} />;
         case 'materials': return <ClientMaterialsView navigate={setClientView} projects={projects} materials={clientMaterials} openProject={openProject} openMaterial={openMaterial} startCreateMaterial={startCreateMaterial} />;
@@ -9884,14 +9788,14 @@ export default function App() {
         case 'order_pending_detail': return <ClientOrderDetailView navigate={setClientView} state="pending" sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
         case 'order_rejected_detail': return <ClientOrderDetailView navigate={setClientView} state="rejected" sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
         case 'order_completed_detail': return <ClientOrderDetailView navigate={setClientView} state="completed" orderId={selectedOrderId} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
-        case 'complaint': return <Disputes orderId={selectedOrderId} />;
-        case 'dispute_detail': return <Disputes orderId={selectedOrderId} />;
+        case 'complaint': return <ClientComplaintView navigate={setClientView} />;
+        case 'dispute_detail': return <DisputeDetailView navigate={setClientView} />;
         case 'order_chat': return <OrderConversation orderId={selectedOrderId} />;
         case 'report_detail': return <ClientReportDetailView navigate={setClientView} report={mockReports.find((report) => report.order === selectedReportOrder)} projects={projects} openProject={openProject} />;
         case 'project_report': return <ClientProjectReportView navigate={setClientView} config={projectReportConfig} projects={projects} reports={mockReports} onOpenPlacementReport={openPlacementReport} />;
         case 'orders': return <ClientOrdersView navigate={setClientView} projects={projects} orders={clientOrders} openProject={openProject} openOrder={openOrder} onMoveOrders={moveOrders} />;
         case 'reports': return <ClientReportsView projects={projects} openProject={openProject} onOpenReport={openPlacementReport} onCreateProjectReport={openProjectReport} />;
-        case 'support': return <SupportDesk />;
+        case 'support': return <SupportDesk navigate={setClientView} onOpenDispute={(orderId)=>{setSelectedOrderId(orderId);setClientView('dispute_detail');}} />;
         case 'balance': return <ClientBalanceView navigate={setClientView} />;
         case 'topup': return <ClientTopUpView navigate={setClientView} />;
         case 'operations': return <ClientOperationsView navigate={setClientView} />;
@@ -9917,9 +9821,9 @@ export default function App() {
         case 'pub_publication': return <PublisherOrderDetailView navigate={setPublisherView} />;
         case 'pub_finance': return <PublisherFinanceView />;
         case 'pub_payout_request': return <PublisherPayoutRequestView navigate={setPublisherView} />;
-        case 'pub_complaint': return <Disputes orderId={selectedOrderId} />;
-        case 'pub_dispute_detail': return <Disputes orderId={selectedOrderId} />;
-        case 'pub_support': return <SupportDesk />;
+        case 'pub_complaint': return <PublisherComplaintView navigate={setPublisherView} />;
+        case 'pub_dispute_detail': return <DisputeDetailView navigate={setPublisherView} role="publisher" />;
+        case 'pub_support': return <SupportDesk navigate={setPublisherView} onOpenDispute={(orderId)=>{setSelectedOrderId(orderId);setPublisherView('pub_dispute_detail');}} />;
         case 'pub_sanctions': return <PublisherSanctionsView navigate={setPublisherView} />;
         case 'pub_settings': return <PublisherSettingsView />;
         default: return (
@@ -9949,10 +9853,10 @@ export default function App() {
         case 'admin_finance_detail': return <AdminFinanceDetailView navigate={setAdminView} selection={adminSelection} />;
         case 'admin_operations': return <AdminRecords kind="ledger" />;
         case 'admin_complaints': return <Disputes />;
-        case 'admin_dispute_detail': return <Disputes orderId={selectedOrderId} />;
+        case 'admin_dispute_detail': return <AdminDisputeDetailView navigate={setAdminView} selection={adminSelection} />;
         case 'admin_payouts': return <AdminWorklistView section="admin_payouts" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_payout_detail': return <AdminPayoutDetailView navigate={setAdminView} selection={adminSelection} />;
-        case 'admin_support': return <SupportDesk />;
+        case 'admin_support': return <SupportDesk navigate={setAdminView} onOpenDispute={(orderId)=>{setSelectedOrderId(orderId);setAdminView('admin_dispute_detail');}} />;
         case 'admin_ticket_detail': return <AdminTicketDetailView navigate={setAdminView} selection={adminSelection} />;
         case 'admin_documents': return <AdminWorklistView section="admin_documents" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_document_detail': return <AdminEntityDetailView navigate={setAdminView} type="document" selection={adminSelection} />;
@@ -10086,12 +9990,7 @@ export default function App() {
                 <span className="text-[#476788] mr-2">Очередь:</span>
                 <span className="font-semibold text-[#006bff] tabular-nums">{mockAdminQueue.length} задачи</span>
               </>
-            ) : (
-              <>
-                <span className="text-[#476788] mr-2">Площадка:</span>
-                <span className="font-semibold text-[#0b3558]">{backend.data.outlets.find(o=>o.id===backend.outletId)?.name || 'Все площадки'}</span>
-              </>
-            )}
+            ) : null}
             </div>
           </div>
 	          <div className="flex items-center gap-3">

@@ -1,4 +1,6 @@
 import React,{useEffect,useState} from 'react';
+import {createPortal} from 'react-dom';
+import {Paperclip} from 'lucide-react';
 import {useBackend} from './prototype-backend';
 import {api} from './api';
 const panel='rounded-lg border border-[#d4e0ed] bg-white p-6';
@@ -34,9 +36,80 @@ export function OrderConversation({orderId}:{orderId:any}) {
  const backend=useBackend();const order=backend.data.orders.find(o=>o.id===orderId);
  return order?<Conversation path={`/orders/${order.id}/messages`} title={`Чат заказа №${order.number}`} />:<div className={panel}>Сначала выберите заказ в списке.</div>;
 }
-export function SupportDesk() {
- const backend=useBackend(),{rows,reload}=useRows('/tickets'),[selected,setSelected]=useState<any>(null),[creating,setCreating]=useState(false),[subject,setSubject]=useState(''),[body,setBody]=useState('');
- return <div className="space-y-5"><h1 className="font-display text-2xl font-bold">Поддержка</h1>{selected?<><button onClick={()=>setSelected(null)}>← К обращениям</button><Conversation path={`/tickets/${selected.id}/messages`} title={`Обращение №${selected.number}: ${selected.subject}`} />{backend.user.role==='admin'&&<button className={button} onClick={()=>backend.perform(async()=>{await api(`/tickets/${selected.id}`,'PATCH',{status:selected.status==='closed'?'open':'closed'});setSelected(null);await reload();})}>{selected.status==='closed'?'Открыть обращение':'Закрыть обращение'}</button>}</>:<>{backend.user.role!=='admin'&&<button className={button} onClick={()=>setCreating(!creating)}>Новое обращение</button>}{creating&&<form className={`${panel} space-y-4`} onSubmit={e=>{e.preventDefault();backend.perform(async()=>{const ticket=await api('/tickets','POST',{subject,body});setCreating(false);setSubject('');setBody('');await reload();setSelected(ticket);});}}><input aria-label="Тема обращения" required className={input} value={subject} onChange={e=>setSubject(e.target.value)} /><textarea aria-label="Текст обращения" required className={input} value={body} onChange={e=>setBody(e.target.value)} /><button disabled={backend.busy} className={button}>Создать обращение</button></form>}<div className={panel}>{rows.map(t=><button key={t.id} className="block w-full border-b py-4 text-left" onClick={()=>setSelected(t)}>№{t.number} · {t.subject}<span className="block text-sm text-[#476788]">{t.email} · {t.status==='open'?'Открыто':'Закрыто'}</span></button>)}</div></>}</div>;
+function TicketConversation({ticket,onStatusChange}:{ticket:any;onStatusChange:()=>Promise<void>}) {
+ const backend=useBackend(),{rows,reload}=useRows(`/tickets/${ticket.id}/messages`),[body,setBody]=useState('');
+ useEffect(()=>{const timer=setInterval(()=>reload().catch(()=>{}),5000);return()=>clearInterval(timer);},[ticket.id]);
+ const closed=ticket.status==='closed';
+ return <section className="flex min-h-[620px] flex-col overflow-hidden rounded-lg border border-[#d4e0ed] bg-white">
+   <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[#d4e0ed] bg-[#f8f9fb] px-6 py-4">
+     <div><h2 className="font-semibold text-[#0b3558]">T-{ticket.number} · {ticket.subject}</h2><p className="mt-1 text-xs text-[#476788]">Менеджер: Операции Аксиомы · SLA 4 часа</p></div>
+     {backend.user.role==='admin'&&<button className="rounded-lg border border-[#d4e0ed] bg-white px-3 py-2 text-xs font-semibold text-[#0b3558]" onClick={()=>backend.perform(onStatusChange)}>{closed?'Открыть тикет':'Закрыть тикет'}</button>}
+   </header>
+   <div className="flex-1 space-y-4 overflow-y-auto p-6">
+     {rows.map(message=>{
+       const manager=message.role==='admin',own=message.author_id===backend.user.id;
+       return <article key={message.id} data-message-owner={own?'self':'other'} className={`max-w-[82%] rounded-2xl border p-4 text-sm text-[#0b3558] ${own?'ml-auto border-[#cfe0ff] bg-[#e6f0ff]':'border-[#d4e0ed] bg-[#f8f9fb]'}`}>
+         <p className="whitespace-pre-wrap break-words">{message.body}</p>
+         <div className="mt-2 text-[11px] text-[#6885a2]">{manager?'Менеджер поддержки':message.email} · {new Date(message.created_at).toLocaleString('ru-RU')}</div>
+       </article>;
+     })}
+     {!rows.length&&<p className="text-sm text-[#476788]">Сообщений пока нет</p>}
+   </div>
+   <form className="border-t border-[#d4e0ed] p-4" onSubmit={event=>{event.preventDefault();backend.perform(async()=>{await api(`/tickets/${ticket.id}/messages`,'POST',{body});setBody('');await reload();});}}>
+     <textarea aria-label="Сообщение менеджеру" required maxLength={10000} disabled={closed} className="min-h-[100px] w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm disabled:bg-[#f8f9fb]" placeholder={closed?'Тикет закрыт':'Напишите сообщение менеджеру'} value={body} onChange={event=>setBody(event.target.value)} />
+     <div className="mt-3 flex flex-col justify-between gap-3 sm:flex-row">
+       <button type="button" className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#d4e0ed] bg-white px-4 py-3 text-sm font-semibold text-[#0b3558]" title="Ожидает подключения"><Paperclip className="h-4 w-4" />Прикрепить файл</button>
+       <button className={button} disabled={backend.busy||closed||!body.trim()}>Отправить</button>
+     </div>
+   </form>
+ </section>;
+}
+
+export function SupportDesk({navigate=()=>{},onOpenDispute}:{navigate?:(view:string)=>void;onOpenDispute?:(id:any)=>void}) {
+ const backend=useBackend(),{rows,reload,loading}=useRows('/tickets'),[tab,setTab]=useState('tickets'),[selectedId,setSelectedId]=useState<any>(null),[creating,setCreating]=useState(false),[subject,setSubject]=useState(''),[body,setBody]=useState('');
+ useEffect(()=>{if(rows.length&&!rows.some(ticket=>ticket.id===selectedId))setSelectedId(rows[0].id);},[rows,selectedId]);
+ const selected=rows.find(ticket=>ticket.id===selectedId);
+ const createTicket=async event=>{event.preventDefault();await backend.perform(async()=>{const ticket=await api('/tickets','POST',{subject,body});setCreating(false);setSubject('');setBody('');await reload();setSelectedId(ticket.id);});};
+ return <div className="space-y-6">
+   <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+     <h1 className="font-display text-2xl font-bold text-[#0b3558]">Поддержка</h1>
+     <div className="flex w-fit rounded-lg border border-[#d4e0ed] bg-white p-1">
+       <button className={`rounded-md px-4 py-2 text-sm font-semibold ${tab==='tickets'?'bg-[#0b3558] text-white':'text-[#476788]'}`} onClick={()=>setTab('tickets')}>Тикеты</button>
+       <button className={`rounded-md px-4 py-2 text-sm font-semibold ${tab==='disputes'?'bg-[#0b3558] text-white':'text-[#476788]'}`} onClick={()=>setTab('disputes')}>Жалобы и споры</button>
+     </div>
+   </div>
+   {tab==='disputes'?<SupportDisputes navigate={navigate} onOpen={onOpenDispute||(()=>{})} />:<div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+     <aside className="overflow-hidden rounded-lg border border-[#d4e0ed] bg-white">
+       <div className="border-b border-[#d4e0ed] bg-[#f8f9fb] px-5 py-4 font-semibold text-[#0b3558]">Список тикетов</div>
+       <div>{loading?<p className="p-5 text-sm text-[#476788]">Загрузка…</p>:rows.map(ticket=><button key={ticket.id} className={`w-full border-b border-[#d4e0ed] px-5 py-4 text-left hover:bg-[#f8f9fb] ${ticket.id===selectedId?'bg-[#f8f9fb]':''}`} onClick={()=>setSelectedId(ticket.id)}><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-[#0b3558]">T-{ticket.number}</span><span className={`rounded-full px-3 py-1 text-xs ${ticket.status==='closed'?'bg-[#f0f3f8] text-[#476788]':'bg-[#e6f0ff] text-[#0054c7]'}`}>{ticket.status==='closed'?'Закрыт':'Открыт'}</span></div><div className="mt-1 text-sm text-[#476788]">{ticket.subject}</div></button>)}</div>
+       {backend.user.role!=='admin'&&<div className="p-5"><button className={`${button} w-full`} onClick={()=>setCreating(true)}>Создать тикет</button></div>}
+     </aside>
+     {selected?<TicketConversation ticket={selected} onStatusChange={async()=>{await api(`/tickets/${selected.id}`,'PATCH',{status:selected.status==='closed'?'open':'closed'});await reload();}} />:<div className={`${panel} min-h-[620px] text-sm text-[#476788]`}>Выберите тикет в списке.</div>}
+   </div>}
+   {creating&&createPortal(<div className="fixed inset-0 z-[300] flex items-center justify-center bg-[#0b3558]/20 p-4 backdrop-blur-sm" onClick={()=>setCreating(false)}><form className="w-full max-w-lg rounded-2xl border border-[#d4e0ed] bg-white p-6 shadow-xl" onClick={event=>event.stopPropagation()} onSubmit={createTicket}><h2 className="font-display text-xl font-bold text-[#0b3558]">Новый тикет</h2><label className="mt-5 block text-sm text-[#476788]">Тема<input aria-label="Тема обращения" required maxLength={200} className={`${input} mt-2`} value={subject} onChange={event=>setSubject(event.target.value)} /></label><label className="mt-4 block text-sm text-[#476788]">Сообщение<textarea aria-label="Текст обращения" required maxLength={10000} className={`${input} mt-2 min-h-[140px]`} value={body} onChange={event=>setBody(event.target.value)} /></label><div className="mt-5 flex justify-end gap-3"><button type="button" className="rounded-lg border border-[#d4e0ed] px-5 py-3 text-sm font-semibold text-[#0b3558]" onClick={()=>setCreating(false)}>Отмена</button><button className={button} disabled={backend.busy}>Создать тикет</button></div></form></div>,document.body)}
+ </div>;
+}
+
+function SupportDisputes({navigate,onOpen}:{navigate:(view:string)=>void;onOpen:(id:any)=>void}) {
+ const backend=useBackend(),isPublisher=backend.user.role==='publisher';
+ const disputes=backend.data.orders.filter(order=>order.dispute_number);
+ return <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+   <section className={`${panel} lg:col-span-2`}>
+     <h2 className="mb-5 font-display text-lg font-bold text-[#0b3558]">Жалобы и споры</h2>
+     {disputes.length?disputes.map(order=>{
+       const pending=order.apiStatus==='disputed';
+       return <div key={order.id} className="flex flex-col justify-between gap-4 border-b border-[#d4e0ed] py-4 first:pt-0 sm:flex-row sm:items-center">
+         <div className="min-w-0"><div className="break-words text-sm font-semibold text-[#0b3558]">#C-{String(order.dispute_number).padStart(3,'0')} · Заказ №{order.number} · {order.platform}</div><div className="mt-1 text-xs text-[#476788]">Доказательства, переписка и решение модератора</div></div>
+         <div className="flex shrink-0 items-center gap-3"><span className={`rounded-full px-3 py-1 text-xs ${pending?'bg-[#fff3d6] text-[#8a5700]':'bg-[#dcfce7] text-[#16723a]'}`}>{pending?'на рассмотрении':'решен'}</span><button className="rounded-lg border border-[#d4e0ed] bg-white px-4 py-2.5 text-sm font-semibold text-[#0b3558]" onClick={()=>onOpen(order.id)}>Открыть</button></div>
+       </div>;
+     }):<p className="text-sm text-[#476788]">Жалоб и споров пока нет.</p>}
+   </section>
+   <aside className={panel}>
+     <h2 className="font-display text-lg font-bold text-[#0b3558]">{isPublisher?'Ответ по спору':'Новая жалоба'}</h2>
+     <p className="mt-3 text-sm leading-6 text-[#476788]">{isPublisher?'Ответ и доказательства отправляются из карточки спора, чтобы сохранить связь с заказом, публикацией и выплатой.':'Жалоба открывается из карточки заказа, чтобы сохранить связь с публикацией, деньгами и доказательствами.'}</p>
+     <button className={`${button} mt-5 w-full`} onClick={()=>navigate(isPublisher?'pub_orders':backend.user.role==='admin'?'admin_orders':'orders')}>Перейти к заказам</button>
+   </aside>
+ </div>;
 }
 export function Disputes({orderId=null}:{orderId?:any}) {
  const backend=useBackend(),[selected,setSelected]=useState(orderId),[reason,setReason]=useState('');

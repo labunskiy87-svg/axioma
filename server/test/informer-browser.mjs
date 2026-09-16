@@ -34,7 +34,15 @@ try {
  await admin.locator('tbody').getByText(title,{exact:true}).waitFor();
  await sessions.customer.reload();await sessions.customer.locator('aside').waitFor();
  assert.equal(await sessions.customer.getByText(title,{exact:true}).count(),0);
+ assert.equal(await sessions.customer.getByRole('heading',{name:'Актуальное',exact:true}).count(),0);
+ await sessions.customer.getByRole('heading',{name:'Сводка',exact:true}).waitFor();
+ await admin.locator('tbody').getByText(title,{exact:true}).click();
+ await admin.getByRole('button',{name:'Опубликовать',exact:true}).click();
+ await admin.locator('tbody').getByText(title,{exact:true}).waitFor();
+ await sessions.customer.reload();
+ await sessions.customer.getByText(title,{exact:true}).waitFor();
+ await sessions.customer.getByRole('heading',{name:'Актуальное',exact:true}).waitFor();
  await admin.screenshot({path:'/tmp/axioma-informer-admin.png'});
- console.log('Informer created, persisted, displayed and paused through UI');
+ console.log('Informer created, persisted, displayed, paused with empty state, and published again through UI');
 }catch(error){if(admin){console.log(await admin.locator('body').innerText());await admin.screenshot({path:'/tmp/axioma-informer-error.png'});}throw error;}
 finally {await browser.close();}

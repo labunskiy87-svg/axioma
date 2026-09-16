@@ -46,6 +46,44 @@ async function fixture(t) {
   return {db,app,cookies,users,call,ok,material,outlet,input};
 }
 
+test('favorites, limits, project changes and account security persist and enforce ownership',async t=>{
+  const {ok,call,app,users,cookies,material,outlet}=await fixture(t);
+  assert.deepEqual(await ok('customer','GET','/api/favorites'),[]);
+  await ok('customer','PUT',`/api/favorites/${outlet.id}`,{favorite:true});
+  await ok('customer','PUT',`/api/favorites/${outlet.id}`,{favorite:true});
+  assert.deepEqual(await ok('customer','GET','/api/favorites'),[outlet.id]);
+  assert.deepEqual(await ok('other','GET','/api/favorites'),[]);
+  assert.equal((await call('publisher','PUT',`/api/favorites/${outlet.id}`,{favorite:true})).statusCode,403);
+  await ok('customer','PUT',`/api/favorites/${outlet.id}`,{favorite:false});
+  assert.deepEqual(await ok('customer','GET','/api/favorites'),[]);
+  await ok('customer','PUT','/api/settings/limits',{orderLimit:10000,autoAccept:false});
+  assert.equal((await ok('customer','GET','/api/settings/limits')).orderLimit,10000);
+  assert.equal((await ok('other','GET','/api/settings/limits')).orderLimit,null);
+  assert.equal((await call('customer','PUT','/api/settings/limits',{orderLimit:10000,autoAccept:true})).statusCode,400);
+  await ok('customer','POST','/api/materials/submit',{ids:[material.id],expedited:false});
+  await ok('admin','POST',`/api/moderation/${material.id}`,{approved:true});
+  const before=await ok('customer','GET','/api/balance');
+  const payload={materialId:material.id,outletIds:[outlet.id]};
+  assert.equal((await call('customer','POST','/api/orders',payload)).statusCode,409);
+  assert.deepEqual(await ok('customer','GET','/api/balance'),before);
+  const [order]=await ok('customer','POST','/api/orders',{...payload,limitConfirmed:true});
+  const project=await ok('customer','POST','/api/projects',{name:'Order project'});
+  await ok('customer','POST',`/api/orders/${order.id}/project`,{projectId:project.id});
+  assert.equal((await ok('customer','GET','/api/orders')).find(o=>o.id===order.id).project_id,project.id);
+  assert.equal((await call('other','POST',`/api/orders/${order.id}/project`,{projectId:null})).statusCode,404);
+  const extra=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:'http://127.0.0.1:5173'},payload:{email:users.customer.email,password:'a-valid-test-password'}});
+  const extraCookie=extra.headers['set-cookie'].split(';')[0];
+  assert.equal((await call('customer','POST','/api/auth/password',{currentPassword:'wrong',newPassword:'a-new-test-password'})).statusCode,400);
+  await ok('customer','POST','/api/auth/password',{currentPassword:'a-valid-test-password',newPassword:'a-new-test-password'});
+  assert.equal((await app.inject({method:'GET',url:'/api/auth/me',headers:{cookie:extraCookie}})).statusCode,401);
+  assert.equal((await ok('customer','GET','/api/auth/sessions')).length,1);
+  const login=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:'http://127.0.0.1:5173'},payload:{email:users.customer.email,password:'a-new-test-password'}});
+  assert.equal(login.statusCode,200);
+  await ok('customer','POST','/api/auth/sessions/revoke-others',{});
+  assert.equal((await app.inject({method:'GET',url:'/api/auth/me',headers:{cookie:login.headers['set-cookie'].split(';')[0]}})).statusCode,401);
+  assert.equal((await call('customer','GET','/api/auth/me')).statusCode,200);
+});
+
 test('administration, persistent conversations and informers enforce role boundaries',async t=>{
  const {ok,call,material,outlet,users}=await fixture(t);
  const listed=await ok('admin','GET','/api/admin/users');
