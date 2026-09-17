@@ -31,7 +31,11 @@ try {
   await page.goto(base+path);await page.locator('main h1').waitFor();
   if(path.endsWith('/users'))await page.locator('tbody tr').first().waitFor();
   if(path.endsWith('/support'))await page.getByRole('button',{name:/Демо: проверка резерва/}).waitFor();
-  if(path.endsWith('/complaints'))await page.getByRole('button',{name:/Спор №/}).first().waitFor();
+  if(path.endsWith('/complaints')) {
+   await page.getByRole('button',{name:'Открыть',exact:true}).first().waitFor();
+   assert.equal(await page.getByRole('button',{name:'Тикеты',exact:true}).count(),0);
+   assert.equal(await page.getByText('Новая жалоба',{exact:true}).count(),0);
+  }
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
   await page.screenshot({path:`/tmp/axioma-mobile-${path.split('/').at(-1)}.png`});
  }

@@ -4,7 +4,7 @@ export const format = z.enum(['article','news','post','longread']);
 export const url = z.string().url().max(2048).refine(v => ['http:','https:'].includes(new URL(v).protocol), 'HTTP(S) URL required');
 export const credentials = z.object({ email: z.string().trim().email().max(254).transform(v => v.toLowerCase()), password: z.string().min(12).max(128) }).strict();
 export const materialInput = z.object({
-  advertiserId: uuid, projectId: uuid.nullable().default(null),
+  advertiserId: uuid.nullable().default(null), projectId: uuid.nullable().default(null),
   title: z.string().trim().min(1).max(200), body: z.string().trim().min(1).max(100000), format,
   metadata: z.object({ tags: z.string().max(500).optional(), title: z.string().max(200).optional(), description: z.string().max(1000).optional(), desiredUrl: z.string().max(2048).optional(), notes: z.string().max(10000).optional(), attachments:z.array(uuid).max(50).refine(v=>new Set(v).size===v.length).optional() }).strict().default({}),
 }).strict();

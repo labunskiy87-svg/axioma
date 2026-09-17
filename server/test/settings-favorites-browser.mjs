@@ -29,11 +29,11 @@ try {
     await row.getByRole('button',{name:originallyOn?'В избранное':'В избранном',exact:true}).waitFor();
     assert.equal((await get('/favorites')).includes(outletId),!originallyOn);
     await page.goto(base+'/customer/settings');
-    await page.getByLabel('Лимит без дополнительного подтверждения, ₽').fill('20 000 ₽');
+    await page.getByLabel('Лимит автоприемки, ₽').fill('20 000 ₽');
     await page.getByRole('button',{name:'Сохранить лимиты',exact:true}).click();
     await page.getByRole('status').getByText('Лимиты сохранены').waitFor();
     await page.reload();
-    assert.equal(await page.getByLabel('Лимит без дополнительного подтверждения, ₽').inputValue(),'20000');
+    assert.equal(await page.getByLabel('Лимит автоприемки, ₽').inputValue(),'20000');
     await page.goto(base+'/customer');
     await page.getByRole('row').filter({hasText:`№${order.number}`}).click();
     assert.ok(page.url().includes(order.id));

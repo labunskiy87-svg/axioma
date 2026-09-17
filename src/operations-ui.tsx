@@ -1,12 +1,19 @@
 import React,{useEffect,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Paperclip} from 'lucide-react';
+import {ChevronLeft,Paperclip} from 'lucide-react';
 import {useBackend} from './prototype-backend';
 import {api} from './api';
 const panel='rounded-lg border border-[#d4e0ed] bg-white p-6';
 const input='w-full rounded-lg border border-[#476788] p-3 text-sm';
 const button='rounded-lg bg-[#006bff] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50';
 const money=(v:any)=>`${(Number(v)/100).toLocaleString('ru-RU')} ₽`;
+const auditAction=(action:string)=>({
+ 'project.create':'Создан проект','project.status':'Изменен статус проекта','project.delete':'Удален проект',
+ 'material.create':'Создан материал','material.save':'Сохранен материал','material.edit':'Изменен материал','material.submit':'Материал отправлен на модерацию','material.moderate':'Материал проверен','material.project':'Изменен проект материала',
+ 'outlet.create':'Создана площадка','outlet.edit':'Изменена площадка','outlet.activity':'Изменена активность площадки','outlet.moderate':'Площадка проверена','outlet.favorite':'Измено избранное',
+ 'advertiser.create':'Создан рекламодатель','order.create':'Создан заказ','order.project':'Изменен проект заказа','order.message':'Отправлено сообщение по заказу','order.resolve':'Закрыт спор по заказу',
+ 'settings.limits':'Изменены лимиты','auth.password.change':'Изменен пароль','auth.sessions.revoke':'Завершены сеансы',
+}[action]??action.split('.').join(' · '));
 export function useRows(path:string) {
  const backend=useBackend(),[rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true);
  const reload=async()=>{setRows(await api(path));setLoading(false);};
@@ -20,7 +27,7 @@ export function AdminRecords({kind}:{kind:string}) {
  const visible=rows.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase()));
  if(selected && ['users','balances'].includes(kind))return <div className="space-y-5"><button onClick={()=>setSelected(null)}>← К пользователям</button><div className={panel}><h1 className="text-xl font-bold">{selected.email}</h1><div className="mt-4 flex gap-8"><span>Доступно: {money(selected.available)}</span><span>В резерве: {money(selected.reserved)}</span></div></div><UserLedger user={selected} /></div>;
  return <div className="space-y-5"><h1 className="font-display text-2xl font-bold">{titles[kind]}</h1><input aria-label="Поиск" className={input} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск" /><div className={`${panel} overflow-x-auto`}>
- {loading?'Загрузка…':!visible.length?'Записей нет':<table className="w-full text-left text-sm"><thead><tr>{(kind==='users'||kind==='balances'?['Email','Роль','Доступно','В резерве']:kind==='advertisers'?['Название','ИНН','Владелец','Проверка']:kind==='audit'?['Дата','Пользователь','Действие','Объект']:['Дата','Списание','Зачисление','Сумма','Основание']).map(s=><th key={s} className="border-b p-3 text-[#476788]">{s}</th>)}</tr></thead><tbody>{visible.map(r=><tr key={r.id} className="border-b hover:bg-[#f8f9fb]" onClick={()=>setSelected(r)}>{(kind==='users'||kind==='balances'?[r.email,({customer:'Заказчик',publisher:'Паблишер',admin:'Администратор'})[r.role],money(r.available),money(r.reserved)]:kind==='advertisers'?[r.name,r.inn,r.email,({verified:'Проверен',pending:'На проверке',blocked:'Заблокирован'})[r.verification]]:kind==='audit'?[new Date(r.created_at).toLocaleString('ru-RU'),r.email||'Система',r.action,r.entity_id||'—']:[new Date(r.created_at).toLocaleString('ru-RU'),r.debit_account,r.credit_account,money(r.amount),r.reference]).map((cell,i)=><td key={i} className="p-3 break-words">{cell}</td>)}</tr>)}</tbody></table>}
+ {loading?'Загрузка…':!visible.length?'Записей нет':<table className="w-full text-left text-sm"><thead><tr>{(kind==='users'||kind==='balances'?['Email','Роль','Доступно','В резерве']:kind==='advertisers'?['Название','ИНН','Владелец','Проверка']:kind==='audit'?['Дата','Пользователь','Действие','Объект']:['Дата','Списание','Зачисление','Сумма','Основание']).map(s=><th key={s} className="border-b p-3 text-[#476788]">{s}</th>)}</tr></thead><tbody>{visible.map(r=><tr key={r.id} className="border-b hover:bg-[#f8f9fb]" onClick={()=>setSelected(r)}>{(kind==='users'||kind==='balances'?[r.email,({customer:'Заказчик',publisher:'Паблишер',admin:'Администратор'})[r.role],money(r.available),money(r.reserved)]:kind==='advertisers'?[r.name,r.inn,r.email,({verified:'Проверен',pending:'На проверке',blocked:'Заблокирован'})[r.verification]]:kind==='audit'?[new Date(r.created_at).toLocaleString('ru-RU'),r.email||'Система',auditAction(r.action),r.entity_label||'—']:[new Date(r.created_at).toLocaleString('ru-RU'),r.debit_account,r.credit_account,money(r.amount),r.reference]).map((cell,i)=><td key={i} className="p-3 break-words">{cell}</td>)}</tr>)}</tbody></table>}
  </div></div>;
 }
 function UserLedger({user}) {
@@ -32,9 +39,31 @@ export function Conversation({path,title}:{path:string;title:string}) {
  useEffect(()=>{const timer=setInterval(()=>{reload().catch(()=>{});},5000);return()=>clearInterval(timer);},[path]);
  return <section className={panel}><h2 className="mb-5 font-display text-xl font-bold">{title}</h2><div className="space-y-4">{rows.map(m=><article key={m.id} className="border-b pb-4"><div className="text-xs text-[#476788]">{m.email} · {new Date(m.created_at).toLocaleString('ru-RU')}</div><p className="mt-2 whitespace-pre-wrap break-words">{m.body}</p></article>)}{!rows.length&&<p>Сообщений пока нет</p>}</div><form className="mt-5 space-y-3" onSubmit={e=>{e.preventDefault();backend.perform(async()=>{await api(path,'POST',{body});setBody('');await reload();});}}><textarea aria-label="Сообщение" required maxLength={10000} className={input} value={body} onChange={e=>setBody(e.target.value)} /><button className={button} disabled={backend.busy||!body.trim()}>Отправить сообщение</button></form></section>;
 }
-export function OrderConversation({orderId}:{orderId:any}) {
+export function OrderConversation({orderId,onBack}:{orderId:any;onBack?:()=>void}) {
  const backend=useBackend();const order=backend.data.orders.find(o=>o.id===orderId);
- return order?<Conversation path={`/orders/${order.id}/messages`} title={`Чат заказа №${order.number}`} />:<div className={panel}>Сначала выберите заказ в списке.</div>;
+ if(!order)return <div className={panel}>Сначала выберите заказ в списке.</div>;
+ return <OrderChat order={order} onBack={onBack} />;
+}
+function OrderChat({order,onBack}:{order:any;onBack?:()=>void}) {
+ const backend=useBackend(),{rows,reload}=useRows(`/orders/${order.id}/messages`),[body,setBody]=useState('');
+ useEffect(()=>{const timer=setInterval(()=>reload().catch(()=>{}),5000);return()=>clearInterval(timer);},[order.id]);
+ const events=['Заказ создан',...(order.apiStatus==='pending'?[]:['Площадка приняла заказ']),...(['submitted','completed','disputed','refunded'].includes(order.apiStatus)?['Площадка загрузила ссылку']:[]),...(order.apiStatus==='disputed'?['Заказчик открыл спор']:[]),...(order.apiStatus==='completed'?['Заказ завершен']:[]),...(order.apiStatus==='rejected'?['Площадка отказалась от заказа']:[]),...(order.apiStatus==='refunded'?['Средства возвращены заказчику']:[])];
+ return <div className="mx-auto max-w-6xl space-y-6">
+   {onBack&&<button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={onBack}><ChevronLeft className="h-4 w-4" />К карточке заказа</button>}
+   <div><h1 className="font-display text-2xl font-bold text-[#0b3558]">Чат заказа №{order.number}</h1><p className="mt-1 text-sm text-[#476788]">Сообщения, файлы и системные события по заказу.</p></div>
+   <section className="grid grid-cols-1 overflow-hidden rounded-lg border border-[#d4e0ed] bg-white lg:grid-cols-3">
+     <div className="flex min-h-[620px] flex-col lg:col-span-2">
+       <header className="border-b border-[#d4e0ed] bg-[#f8f9fb] px-6 py-4"><h2 className="font-display text-sm font-bold text-[#0b3558]">Сообщения и системные события</h2></header>
+       <div className="flex-1 space-y-5 overflow-y-auto bg-[#f8f9fb] p-6">
+         {events.map(event=><div key={event} className="flex justify-center"><div className="rounded-lg border border-[#d4e0ed] bg-white px-3 py-2 text-xs text-[#476788]">{event}</div></div>)}
+         {rows.map(message=>{const own=message.author_id===backend.user.id;return <article key={message.id} data-message-owner={own?'self':'other'} className={`max-w-[82%] rounded-2xl border p-4 text-sm ${own?'ml-auto border-[#0b3558] bg-[#0b3558] text-white':'border-[#d4e0ed] bg-white text-[#0b3558]'}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><div className={`mt-2 text-[11px] ${own?'text-white/70':'text-[#6885a2]'}`}>{message.email} · {new Date(message.created_at).toLocaleString('ru-RU')}</div></article>;})}
+         {!rows.length&&<div className="flex min-h-40 items-center justify-center text-sm text-[#476788]">Напишите первое сообщение по заказу</div>}
+       </div>
+       <form className="border-t border-[#d4e0ed] bg-white p-4" onSubmit={event=>{event.preventDefault();backend.perform(async()=>{await api(`/orders/${order.id}/messages`,'POST',{body});setBody('');await reload();});}}><div className="flex flex-col gap-2 sm:flex-row"><input aria-label="Сообщение" required maxLength={10000} className="min-h-[44px] flex-1 rounded-lg border border-[#476788] px-4 py-2 text-sm" placeholder="Написать сообщение..." value={body} onChange={event=>setBody(event.target.value)} /><button className={button} disabled={backend.busy||!body.trim()}>Отправить</button></div></form>
+     </div>
+     <aside className="space-y-5 border-t border-[#d4e0ed] p-6 lg:border-l lg:border-t-0"><div><h3 className="mb-3 text-sm font-semibold text-[#0b3558]">Файлы и версии</h3><div className="border-b border-[#d4e0ed] py-2 text-sm text-[#006bff]">Материал версия {order.snapshot?.version||1}</div></div><div><h3 className="mb-3 text-sm font-semibold text-[#0b3558]">События</h3><div className="space-y-2">{events.map(event=><div key={event} className="text-xs text-[#476788]">{event}</div>)}</div></div></aside>
+   </section>
+ </div>;
 }
 function TicketConversation({ticket,onStatusChange}:{ticket:any;onStatusChange:()=>Promise<void>}) {
  const backend=useBackend(),{rows,reload}=useRows(`/tickets/${ticket.id}/messages`),[body,setBody]=useState('');
@@ -66,19 +95,19 @@ function TicketConversation({ticket,onStatusChange}:{ticket:any;onStatusChange:(
 }
 
 export function SupportDesk({navigate=()=>{},onOpenDispute}:{navigate?:(view:string)=>void;onOpenDispute?:(id:any)=>void}) {
- const backend=useBackend(),{rows,reload,loading}=useRows('/tickets'),[tab,setTab]=useState('tickets'),[selectedId,setSelectedId]=useState<any>(null),[creating,setCreating]=useState(false),[subject,setSubject]=useState(''),[body,setBody]=useState('');
+ const backend=useBackend(),isAdmin=backend.user.role==='admin',{rows,reload,loading}=useRows('/tickets'),[tab,setTab]=useState('tickets'),[selectedId,setSelectedId]=useState<any>(null),[creating,setCreating]=useState(false),[subject,setSubject]=useState(''),[body,setBody]=useState('');
  useEffect(()=>{if(rows.length&&!rows.some(ticket=>ticket.id===selectedId))setSelectedId(rows[0].id);},[rows,selectedId]);
  const selected=rows.find(ticket=>ticket.id===selectedId);
  const createTicket=async event=>{event.preventDefault();await backend.perform(async()=>{const ticket=await api('/tickets','POST',{subject,body});setCreating(false);setSubject('');setBody('');await reload();setSelectedId(ticket.id);});};
  return <div className="space-y-6">
    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
      <h1 className="font-display text-2xl font-bold text-[#0b3558]">Поддержка</h1>
-     <div className="flex w-fit rounded-lg border border-[#d4e0ed] bg-white p-1">
+     {!isAdmin&&<div className="flex w-fit rounded-lg border border-[#d4e0ed] bg-white p-1">
        <button className={`rounded-md px-4 py-2 text-sm font-semibold ${tab==='tickets'?'bg-[#0b3558] text-white':'text-[#476788]'}`} onClick={()=>setTab('tickets')}>Тикеты</button>
        <button className={`rounded-md px-4 py-2 text-sm font-semibold ${tab==='disputes'?'bg-[#0b3558] text-white':'text-[#476788]'}`} onClick={()=>setTab('disputes')}>Жалобы и споры</button>
-     </div>
+     </div>}
    </div>
-   {tab==='disputes'?<SupportDisputes navigate={navigate} onOpen={onOpenDispute||(()=>{})} />:<div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+   {!isAdmin&&tab==='disputes'?<SupportDisputes navigate={navigate} onOpen={onOpenDispute||(()=>{})} />:<div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
      <aside className="overflow-hidden rounded-lg border border-[#d4e0ed] bg-white">
        <div className="border-b border-[#d4e0ed] bg-[#f8f9fb] px-5 py-4 font-semibold text-[#0b3558]">Список тикетов</div>
        <div>{loading?<p className="p-5 text-sm text-[#476788]">Загрузка…</p>:rows.map(ticket=><button key={ticket.id} className={`w-full border-b border-[#d4e0ed] px-5 py-4 text-left hover:bg-[#f8f9fb] ${ticket.id===selectedId?'bg-[#f8f9fb]':''}`} onClick={()=>setSelectedId(ticket.id)}><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-[#0b3558]">T-{ticket.number}</span><span className={`rounded-full px-3 py-1 text-xs ${ticket.status==='closed'?'bg-[#f0f3f8] text-[#476788]':'bg-[#e6f0ff] text-[#0054c7]'}`}>{ticket.status==='closed'?'Закрыт':'Открыт'}</span></div><div className="mt-1 text-sm text-[#476788]">{ticket.subject}</div></button>)}</div>

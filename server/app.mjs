@@ -3,12 +3,14 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { z, ZodError } from 'zod';
+import sanitizeHtml from 'sanitize-html';
 import { digest, hashPassword, verifyPassword, fail, role } from './security.mjs';
 import { credentials, materialInput, outletInput, uuid, url } from './validation.mjs';
 import { audit, once, quote, transfer } from './finance.mjs';
 import { registerFiles } from './files.mjs';
 import { registerOperations } from './operations.mjs';
 import { registerSettings } from './settings.mjs';
+import { registerReports } from './reports.mjs';
 
 export async function createUser(tx, email, password, userRole = 'customer') {
   const id = randomUUID();
@@ -24,7 +26,7 @@ async function owned(tx, table, id, userId) {
   return row;
 }
 async function relations(tx, data, owner) {
-  await owned(tx,'advertisers',data.advertiserId,owner);
+  if(data.advertiserId) await owned(tx,'advertisers',data.advertiserId,owner);
   if (data.projectId) await owned(tx,'projects',data.projectId,owner);
   const ids=data.metadata?.attachments??[];
   if(ids.length) {
@@ -37,6 +39,13 @@ async function outletLogo(tx,data,owner) {
   const file=await owned(tx,'files',data.details.logoFileId,owner);
   if(!['image/png','image/jpeg','image/webp'].includes(file.mime))fail(400,'Logo must be an image');
 }
+const cleanMaterial=data=>({...data,body:sanitizeHtml(data.body,{
+  allowedTags:['p','br','h1','h2','strong','b','em','i','ul','ol','li','blockquote','a','img','font','span'],
+  allowedAttributes:{a:['href','target','rel'],img:['src','alt'],font:['face','size'],span:['style']},
+  allowedSchemes:['http','https','mailto'],
+  allowedStyles:{span:{'font-family':[/^(Manrope|Arial|Georgia)$/],'font-size':[/^(10|12|14|16|18|20|24|28|32|36|48)px$/]}},
+  transformTags:{a:(tag,attrs)=>({tagName:tag,attribs:{...attrs,target:'_blank',rel:'noopener noreferrer'}})},
+}).trim()});
 
 export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = false, logger = false, commissionBps = 1500, storageRoot = process.env.STORAGE_ROOT ?? './.local-files' }) {
   if (!Number.isInteger(commissionBps) || commissionBps < 0 || commissionBps > 10000) throw new Error('Invalid commission');
@@ -65,12 +74,6 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
     return reply.code(201).send(user);
   });
   const dummyHash = await hashPassword(randomBytes(32).toString('hex'));
-  app.addHook('onResponse',async(req,reply)=>{
-    if(req.user && !['GET','HEAD','OPTIONS'].includes(req.method) && reply.statusCode<400) {
-      try {await db.transaction(tx=>audit(tx,req.user.id,`request.${req.method.toLowerCase()}`,null,{route:req.routeOptions.url,status:reply.statusCode}));}
-      catch(error) {req.log.error({err:error},'Request audit failed');}
-    }
-  });
   app.post('/api/auth/login',{config:{rateLimit:{max:10,timeWindow:'1 minute'}}},async (req,reply) => {
     const data = credentials.extend({expectedRole:z.enum(['customer','publisher','admin']).optional()}).parse(req.body);
     const user = (await db.query('SELECT * FROM users WHERE email=$1',[data.email])).rows[0];
@@ -127,7 +130,8 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
     role(req.user,'customer');const d=z.object({items:z.array(materialInput.extend({clientKey:uuid})).min(1).max(50).refine(v=>new Set(v.map(m=>m.clientKey)).size===v.length),submit:z.boolean(),expedited:z.boolean()}).strict().parse(req.body);
     return once(db,req,'materials.save-batch',async tx=>{
       const ids=[];
-      for(const m of [...d.items].sort((a,b)=>a.clientKey.localeCompare(b.clientKey))) {
+      for(const raw of [...d.items].sort((a,b)=>a.clientKey.localeCompare(b.clientKey))) {
+        const m=cleanMaterial(raw);
         await relations(tx,m,req.user.id);
         await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`${req.user.id}:${m.clientKey}`]);
         const old=(await tx.query('SELECT * FROM materials WHERE owner_id=$1 AND client_key=$2 FOR UPDATE',[req.user.id,m.clientKey])).rows[0];
@@ -136,8 +140,10 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
         if(old) await tx.query('UPDATE materials SET title=$2,body=$3,format=$4,advertiser_id=$5,project_id=$6,metadata=$7,version=version+1 WHERE id=$1',[id,m.title,m.body,m.format,m.advertiserId,m.projectId,JSON.stringify(m.metadata)]);
         else await tx.query('INSERT INTO materials(id,owner_id,client_key,title,body,format,advertiser_id,project_id,metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',[id,req.user.id,m.clientKey,m.title,m.body,m.format,m.advertiserId,m.projectId,JSON.stringify(m.metadata)]);
         if(d.submit) {
-          const advertiser=await owned(tx,'advertisers',m.advertiserId,req.user.id);
-          if(advertiser.verification!=='verified') fail(409,'Advertiser verification required');
+          if(m.advertiserId) {
+            const advertiser=await owned(tx,'advertisers',m.advertiserId,req.user.id);
+            if(advertiser.verification!=='verified') fail(409,'Advertiser verification required');
+          }
           if(d.expedited) await transfer(tx,`${req.user.id}:available`,'platform:revenue',5000,`moderation:${id}`);
           await tx.query("UPDATE materials SET status='pending',expedited=$2,submitted_at=now() WHERE id=$1",[id,d.expedited]);
         }
@@ -148,7 +154,7 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   });
   app.get('/api/advertisers',async req => { role(req.user,'customer'); return (await db.query('SELECT * FROM advertisers WHERE owner_id=$1 LIMIT 200',[req.user.id])).rows; });
   app.post('/api/advertisers',async req => {
-    role(req.user,'customer'); const d = z.object({ name:z.string().trim().min(1).max(300),inn:z.string().regex(/^(\d{10}|\d{12})$/),details:z.object({kpp:z.string().max(9).optional(),ogrn:z.string().max(15).optional(),address:z.string().max(1000).optional()}).strict().default({}) }).strict().parse(req.body);
+    role(req.user,'customer'); const d = z.object({ name:z.string().trim().min(2,'Укажите юридическое название').max(300),inn:z.string().regex(/^(\d{10}|\d{12})$/,'ИНН должен состоять из 10 или 12 цифр'),details:z.object({kpp:z.string().regex(/^(\d{9})?$/,'КПП должен состоять из 9 цифр').optional(),ogrn:z.string().regex(/^(\d{13}|\d{15})?$/,'ОГРН должен состоять из 13 или 15 цифр').optional(),address:z.string().max(1000).optional()}).strict().default({}) }).strict().parse(req.body);
     return db.transaction(async tx=>{const id=randomUUID();const row=(await tx.query('INSERT INTO advertisers(id,owner_id,name,inn,details) VALUES ($1,$2,$3,$4,$5) RETURNING *',[id,req.user.id,d.name,d.inn,JSON.stringify(d.details)])).rows[0];await audit(tx,req.user.id,'advertiser.create',id);return row;});
   });
   app.get('/api/materials',async req => {
@@ -159,7 +165,8 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
     role(req.user,'customer'); const items = z.array(materialInput).min(1).max(50).parse(req.body);
     return once(db,req,'materials.create',async tx => {
       const result = [];
-      for (const d of items) {
+      for (const raw of items) {
+        const d=cleanMaterial(raw);
         await relations(tx,d,req.user.id);
         result.push((await tx.query('INSERT INTO materials(id,owner_id,advertiser_id,project_id,title,body,format,metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',[randomUUID(),req.user.id,d.advertiserId,d.projectId,d.title,d.body,d.format,JSON.stringify(d.metadata)])).rows[0]);
         await audit(tx,req.user.id,'material.create',result.at(-1).id);
@@ -169,7 +176,8 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   });
   app.put('/api/materials/:id',async req => {
     role(req.user,'customer'); const id=uuid.parse(req.params.id);
-    const {version,...data} = materialInput.extend({version:z.number().int().positive()}).parse(req.body);
+    const {version,...parsed} = materialInput.extend({version:z.number().int().positive()}).parse(req.body);
+    const data=cleanMaterial(parsed);
     return db.transaction(async tx => {
       const current=await owned(tx,'materials',id,req.user.id);
       if (current.version !== version || current.status === 'pending') fail(409,'Material changed or under moderation');
@@ -184,8 +192,10 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
       for (const id of [...d.ids].sort()) {
         const material=await owned(tx,'materials',id,req.user.id);
         if (!['draft','rejected'].includes(material.status)) fail(409,'Material is not a draft');
-        const advertiser=await owned(tx,'advertisers',material.advertiser_id,req.user.id);
-        if (advertiser.verification !== 'verified') fail(409,'Advertiser verification required');
+        if(material.advertiser_id) {
+          const advertiser=await owned(tx,'advertisers',material.advertiser_id,req.user.id);
+          if (advertiser.verification !== 'verified') fail(409,'Advertiser verification required');
+        }
         if (d.expedited) await transfer(tx,`${req.user.id}:available`,'platform:revenue',5000,`moderation:${id}:${material.version}`);
         await tx.query("UPDATE materials SET status='pending',expedited=$2,submitted_at=now(),moderation_reason=null WHERE id=$1",[id,d.expedited]);
         await audit(tx,req.user.id,'material.submit',id,{ expedited:d.expedited });
@@ -206,7 +216,7 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   app.get('/api/outlets',async req => {
     role(req.user,'customer','publisher','admin');
     const filters=z.object({goal:z.enum(['pr','seo','serm']).optional(),kind:z.enum(['media','telegram','vk','max','dzen']).optional(),geography:z.string().max(100).optional()}).parse(req.query);
-    return (await db.query("SELECT * FROM outlets WHERE ($1='admin' OR ($1='publisher' AND owner_id=$2) OR ($1='customer' AND active AND status='approved')) AND ($3::text IS NULL OR details->'goals' ? $3) AND ($4::text IS NULL OR kind=$4) AND ($5::text IS NULL OR geography=$5) ORDER BY created_at DESC LIMIT 200",[req.user.role,req.user.id,filters.goal??null,filters.kind??null,filters.geography??null])).rows;
+    return (await db.query("SELECT o.*,u.email AS owner_email FROM outlets o JOIN users u ON u.id=o.owner_id WHERE ($1='admin' OR ($1='publisher' AND o.owner_id=$2) OR ($1='customer' AND o.active AND o.status='approved')) AND ($3::text IS NULL OR o.details->'goals' ? $3) AND ($4::text IS NULL OR o.kind=$4) AND ($5::text IS NULL OR o.geography=$5) ORDER BY o.created_at DESC LIMIT 200",[req.user.role,req.user.id,filters.goal??null,filters.kind??null,filters.geography??null])).rows;
   });
   app.post('/api/outlets',async req => {
     role(req.user,'publisher'); const d=outletInput.parse(req.body);
@@ -252,25 +262,37 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
     return (await db.query('SELECT * FROM ledger WHERE debit_account=ANY($1::text[]) OR credit_account=ANY($1::text[]) ORDER BY created_at DESC LIMIT 200',[[`${req.user.id}:available`,`${req.user.id}:reserved`]])).rows;
   });
   app.post('/api/orders',async req => {
-    role(req.user,'customer'); const d=z.object({materialId:uuid,outletIds:z.array(uuid).min(1).max(50).refine(v=>new Set(v).size===v.length),expectedAmount:z.number().int().nonnegative().optional(),limitConfirmed:z.boolean().default(false)}).strict().parse(req.body);
+    role(req.user,'customer'); const d=z.object({
+      materialId:uuid,
+      outletIds:z.array(uuid).min(1).max(50).optional(),
+      placements:z.array(z.object({outletId:uuid,format:z.enum(['article','news','post','longread'])}).strict()).min(1).max(50).optional(),
+      expectedAmount:z.number().int().nonnegative().optional(),
+      limitConfirmed:z.boolean().default(false),
+      autoAccept:z.boolean().default(false),
+    }).strict().refine(value=>Boolean(value.outletIds)!==Boolean(value.placements),'Provide either outletIds or placements').refine(value=>{
+      const ids=value.placements?.map(item=>item.outletId)??value.outletIds??[];
+      return new Set(ids).size===ids.length;
+    },'Duplicate outlets are not allowed').parse(req.body);
     return once(db,req,'orders.create',async tx => {
       const material=await owned(tx,'materials',d.materialId,req.user.id);
       if (material.status!=='approved') fail(409,'Material not approved');
-      const advertiser=await owned(tx,'advertisers',material.advertiser_id,req.user.id);
-      if (advertiser.verification!=='verified') fail(409,'Advertiser verification required');
+      const advertiser=material.advertiser_id ? await owned(tx,'advertisers',material.advertiser_id,req.user.id) : null;
+      if (advertiser && advertiser.verification!=='verified') fail(409,'Advertiser verification required');
       const result=[];
       const {order_limit:orderLimit}=(await tx.query('SELECT order_limit FROM users WHERE id=$1 FOR UPDATE',[req.user.id])).rows[0];
-      for (const outletId of [...d.outletIds].sort()) {
+      const placements=(d.placements??d.outletIds.map(outletId=>({outletId,format:material.format}))).sort((a,b)=>a.outletId.localeCompare(b.outletId));
+      for (const placement of placements) {
+        const {outletId,format}=placement;
         const outlet=(await tx.query('SELECT * FROM outlets WHERE id=$1 FOR UPDATE',[outletId])).rows[0];
         if (!outlet?.active || outlet.status!=='approved') fail(409,'Outlet unavailable');
-        const amount=quote(outlet,material.format); const payout=amount-Math.round(amount*commissionBps/10000); const id=randomUUID();
+        const amount=quote(outlet,format); const payout=amount-Math.round(amount*commissionBps/10000); const id=randomUUID();
         await transfer(tx,`${req.user.id}:available`,`${req.user.id}:reserved`,amount,`order:${id}:reserve`);
-        const snapshot={title:material.title,body:material.body,format:material.format,metadata:material.metadata,version:material.version,advertiser:{name:advertiser.name,inn:advertiser.inn},outlet:{name:outlet.name,url:outlet.url},commissionBps};
+        const snapshot={title:material.title,body:material.body,format,metadata:material.metadata,version:material.version,advertiser:advertiser?{name:advertiser.name,inn:advertiser.inn}:null,outlet:{name:outlet.name,url:outlet.url},commissionBps,autoAccept:d.autoAccept};
         result.push((await tx.query('INSERT INTO orders(id,customer_id,publisher_id,material_id,outlet_id,project_id,snapshot,amount,payout) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[id,req.user.id,outlet.owner_id,material.id,outletId,material.project_id,JSON.stringify(snapshot),amount,payout])).rows[0]);
         await audit(tx,req.user.id,'order.create',id,{amount,payout});
       }
       if (d.expectedAmount !== undefined && result.reduce((sum,o)=>sum+o.amount,0)!==d.expectedAmount) fail(409,'Price changed; review the order total');
-      if(orderLimit!==null && result.reduce((sum,o)=>sum+o.amount,0)>Number(orderLimit) && !d.limitConfirmed)fail(409,'Сумма превышает ваш лимит. Подтвердите превышение при оформлении заказа.');
+      if(d.autoAccept && orderLimit!==null && result.reduce((sum,o)=>sum+o.amount,0)>Number(orderLimit) && !d.limitConfirmed)fail(409,'Сумма превышает лимит автоприемки');
       return result;
     });
   });
@@ -288,15 +310,37 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   });
   app.post('/api/orders/:id/action',async req => {
     role(req.user,'customer','publisher','admin'); const id=uuid.parse(req.params.id);
-    const d=z.object({action:z.enum(['accept','reject','publish','complete','dispute','refund','release']),url:url.optional(),markingConfirmed:z.boolean().optional(),reason:z.string().trim().max(5000).optional()}).strict().parse(req.body);
+    const d=z.object({
+      action:z.enum(['accept','reject','publish','complete','dispute','refund','release','resolve']),
+      url:url.optional(),
+      markingConfirmed:z.boolean().optional(),
+      reason:z.string().trim().max(5000).optional(),
+      decision:z.enum(['full_refund','full_payout','partial','no_sanctions']).optional(),
+      publisherAmount:z.number().int().positive().optional(),
+    }).strict().parse(req.body);
     return once(db,req,`order:${id}:action`,async tx=>{
       const o=(await tx.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE',[id])).rows[0];
       if (!o || (req.user.role!=='admin' && ![o.customer_id,o.publisher_id].includes(req.user.id))) fail(404,'Not found');
-      const rules={accept:['publisher','pending','accepted'],reject:['publisher','pending','rejected'],publish:['publisher','accepted','submitted'],complete:['customer','submitted','completed'],dispute:['customer','submitted','disputed'],refund:['admin','disputed','refunded'],release:['admin','disputed','completed']};
+      const rules={accept:['publisher','pending','accepted'],reject:['publisher','pending','rejected'],publish:['publisher','accepted','submitted'],complete:['customer','submitted','completed'],dispute:['customer','submitted','disputed'],refund:['admin','disputed','refunded'],release:['admin','disputed','completed'],resolve:['admin','disputed',null]};
       const [required,from,to]=rules[d.action]; role(req.user,required);
       if(o.status!==from) fail(409,'Invalid order transition');
-      if(['reject','dispute','refund','release'].includes(d.action) && !d.reason) fail(400,'Reason required');
+      if(['reject','dispute','refund','release','resolve'].includes(d.action) && !d.reason) fail(400,'Reason required');
       if(d.action==='publish' && (!d.url || d.markingConfirmed!==true)) fail(400,'Publication URL and marking confirmation required');
+      if(d.action==='resolve') {
+        if(!d.decision) fail(400,'Decision required');
+        if(d.decision==='partial' && (!d.publisherAmount || d.publisherAmount>=o.amount)) fail(400,'Partial payout must be less than the order amount');
+        const publisherAmount=d.decision==='full_refund'?0:d.decision==='full_payout'?o.amount:d.decision==='partial'?d.publisherAmount:o.payout;
+        const customerAmount=d.decision==='partial'?o.amount-publisherAmount:d.decision==='full_refund'?o.amount:0;
+        const platformAmount=d.decision==='no_sanctions'?o.amount-o.payout:0;
+        if(publisherAmount)await transfer(tx,`${o.customer_id}:reserved`,`${o.publisher_id}:available`,publisherAmount,`order:${id}:dispute:${d.decision}:publisher`);
+        if(customerAmount)await transfer(tx,`${o.customer_id}:reserved`,`${o.customer_id}:available`,customerAmount,`order:${id}:dispute:${d.decision}:customer`);
+        if(platformAmount)await transfer(tx,`${o.customer_id}:reserved`,'platform:revenue',platformAmount,`order:${id}:dispute:${d.decision}:commission`);
+        const status=publisherAmount?'completed':'refunded';
+        const snapshot={...o.snapshot,disputeResolution:{decision:d.decision,publisherAmount,customerAmount,platformAmount,resolvedAt:new Date().toISOString()}};
+        const result=(await tx.query('UPDATE orders SET status=$2,snapshot=$3,reason=$4,updated_at=now() WHERE id=$1 RETURNING *',[id,status,JSON.stringify(snapshot),d.reason])).rows[0];
+        await audit(tx,req.user.id,'order.resolve',id,{from,status,decision:d.decision,publisherAmount,customerAmount,platformAmount});
+        return result;
+      }
       if(d.action==='dispute')await tx.query("UPDATE orders SET dispute_number=coalesce(dispute_number,nextval('dispute_number_seq')) WHERE id=$1",[id]);
       if(['rejected','refunded'].includes(to)) await transfer(tx,`${o.customer_id}:reserved`,`${o.customer_id}:available`,o.amount,`order:${id}:refund`);
       if(to==='completed') {
@@ -310,5 +354,6 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   await registerFiles(app,db,storageRoot);
   await registerOperations(app,db);
   registerSettings(app,db);
+  registerReports(app,db);
   return app;
 }

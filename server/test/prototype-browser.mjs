@@ -27,12 +27,19 @@ try {
   await page.getByRole('button',{name:'Добавить рекламодателя',exact:true}).click();
   await page.getByPlaceholder('ООО «Название компании»').fill('QA advertiser');
   await page.getByPlaceholder('7700000000',{exact:true}).fill('7700000000');
+  await page.getByPlaceholder('770001001',{exact:true}).fill('770001001');
+  await page.getByPlaceholder('1237700000000',{exact:true}).fill('1237700000000');
+  await page.getByPlaceholder('Индекс, город, улица, дом',{exact:true}).fill('123100, Москва, Тестовая улица, 1');
   await page.getByRole('button',{name:'Сохранить рекламодателя',exact:true}).click();
   await page.getByText('QA advertiser',{exact:true}).waitFor();
   await page.locator('aside').getByRole('button',{name:'Материалы',exact:true}).click();
   await page.getByRole('button',{name:/Загрузить материал|Добавить материал|Создать материал/}).first().click();
   await page.getByPlaceholder('Введите заголовок материала').fill('QA original interface');
-  await page.getByRole('textbox',{name:'Текст материала',exact:true}).fill('Persistent prototype text');
+  const editor=page.getByRole('textbox',{name:'Текст материала',exact:true});
+  await editor.fill('Persistent prototype text');
+  await editor.evaluate(node=>{const range=document.createRange();range.selectNodeContents(node);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
+  await page.getByRole('button',{name:'Жирный',exact:true}).click();
+  assert.match(await editor.innerHTML(),/<(b|strong)>Persistent prototype text<\/(b|strong)>/);
   // The only available advertiser is already selected by the original selector.
   const advertiserLabel=page.locator('label').filter({has:page.getByText('Рекламодатель',{exact:true})});
   await advertiserLabel.getByRole('button').click();
@@ -52,7 +59,7 @@ try {
   assert.equal(await downloaded.text(),'Attached original brief');
   assert.equal(await page.getByText('Финтех Решения запускает новую платформу аналитики',{exact:true}).count(),0);
   await page.getByRole('button',{name:'Редактировать материал',exact:true}).click();
-  assert.equal(await page.getByRole('textbox',{name:'Текст материала',exact:true}).inputValue(),'Persistent prototype text');
+  assert.equal((await page.getByRole('textbox',{name:'Текст материала',exact:true}).textContent())?.trim(),'Persistent prototype text');
   assert.equal(await page.getByRole('button',{name:'Сохранить и добавить еще материал',exact:true}).count(),0);
   await page.screenshot({path:'/tmp/axioma-original-desktop.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});

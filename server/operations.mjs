@@ -23,7 +23,28 @@ export async function registerOperations(app,db) {
    role(req.user,'admin');
    return (await db.query("SELECT u.id,u.email,u.role,u.created_at,coalesce(a.balance,0) AS available,coalesce(r.balance,0) AS reserved FROM users u LEFT JOIN accounts a ON a.id=u.id::text||':available' LEFT JOIN accounts r ON r.id=u.id::text||':reserved' ORDER BY u.created_at DESC LIMIT 500")).rows;
  });
- app.get('/api/admin/audit',async req=>{role(req.user,'admin');return (await db.query('SELECT a.*,u.email FROM audit a LEFT JOIN users u ON u.id=a.actor_id ORDER BY a.created_at DESC LIMIT 500')).rows;});
+ app.get('/api/admin/audit',async req=>{
+   role(req.user,'admin');
+   return (await db.query(`SELECT a.*,u.email,
+     CASE
+       WHEN a.action LIKE 'order.%' AND o.number IS NOT NULL THEN 'Заказ №'||o.number
+       WHEN a.action LIKE 'material.%' AND m.number IS NOT NULL THEN 'Материал №'||m.number
+       WHEN a.action LIKE 'outlet.%' AND ot.name IS NOT NULL THEN 'Площадка: '||ot.name
+       WHEN a.action LIKE 'advertiser.%' AND ad.name IS NOT NULL THEN 'Рекламодатель: '||ad.name
+       WHEN a.action LIKE 'project.%' AND p.name IS NOT NULL THEN 'Проект: '||p.name
+       WHEN a.entity_id=u.id THEN u.email
+       ELSE '—'
+     END AS entity_label
+     FROM audit a
+     LEFT JOIN users u ON u.id=a.actor_id
+     LEFT JOIN orders o ON o.id=a.entity_id
+     LEFT JOIN materials m ON m.id=a.entity_id
+     LEFT JOIN outlets ot ON ot.id=a.entity_id
+     LEFT JOIN advertisers ad ON ad.id=a.entity_id
+     LEFT JOIN projects p ON p.id=a.entity_id
+     WHERE a.action NOT LIKE 'request.%'
+     ORDER BY a.created_at DESC LIMIT 500`)).rows;
+ });
  app.get('/api/admin/ledger',async req=>{role(req.user,'admin');return (await db.query('SELECT * FROM ledger ORDER BY created_at DESC LIMIT 500')).rows;});
  app.get('/api/admin/advertisers',async req=>{role(req.user,'admin');return (await db.query('SELECT a.*,u.email FROM advertisers a JOIN users u ON u.id=a.owner_id ORDER BY a.name LIMIT 500')).rows;});
  app.get('/api/orders/:id/messages',async req=>{

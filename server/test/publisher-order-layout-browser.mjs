@@ -7,12 +7,14 @@ const base='http://127.0.0.1:5173';
 try {
   const account=accounts.find(item=>item.role==='publisher'),context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage();
   page.setDefaultTimeout(15000);
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
   assert.equal((await context.request.post(`${base}/api/auth/login`,{headers:{origin:base},data:{email:account.email,password:account.password}})).status(),200);
   await page.goto(`${base}/publisher/orders`);
   const firstOrder=page.locator('tbody tr').first();
   await firstOrder.waitFor();
   await firstOrder.click();
-  await page.getByText('Назад к списку',{exact:true}).waitFor();
+  try { await page.getByText('Назад к списку',{exact:true}).waitFor(); }
+  catch(error) { console.error(errors,await page.locator('body').innerText()); await page.screenshot({path:'/tmp/axioma-publisher-order-failure.png',fullPage:true}); throw error; }
   await page.getByText('Данные для маркировки',{exact:true}).waitFor();
   await page.getByRole('heading',{name:'Прикрепленные файлы',exact:true}).waitFor();
   await page.getByRole('heading',{name:'Параметры размещения',exact:true}).waitFor();

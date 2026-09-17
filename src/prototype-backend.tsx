@@ -4,7 +4,7 @@ import { api, ApiError } from './api';
 export const formatLabels = { article: 'Статья', news: 'Новость', post: 'Пост', longread: 'Лонгрид' };
 const statusLabels = { draft: 'Черновик', pending: 'На модерации', approved: 'Принят в систему', rejected: 'Отклонен' };
 const orderLabels = { pending: 'Площадка рассматривает', accepted: 'Ожидает публикации', submitted: 'Ожидает приемки', completed: 'Завершено', rejected: 'Площадка отказала', disputed: 'Спор', refunded: 'Возврат' };
-const empty = { materials: [], orders: [], projects: [], advertisers: [], outlets: [], informers:[], favorites:[], limits:{orderLimit:null,autoAccept:false}, balance: { available: 0, reserved: 0 } };
+const empty = { materials: [], orders: [], projects: [], advertisers: [], outlets: [], informers:[], favorites:[], reports:{placements:[],saved:[]}, limits:{orderLimit:null,autoAccept:false}, balance: { available: 0, reserved: 0 } };
 const Context = createContext<any>(null);
 export const useBackend = () => useContext(Context);
 const date = (v: string) => new Date(v).toLocaleDateString('ru-RU');
@@ -19,10 +19,11 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
   const [outletId, setOutletId] = useState<string | null>(()=>new URLSearchParams(location.search).get('outlet'));
   async function refresh(u = user) {
     if (!u) return;
-    const paths = u.role === 'customer' ? ['materials', 'orders', 'projects', 'advertisers', 'outlets', 'balance','informers','favorites','settings/limits'] : u.role === 'admin' ? ['materials', 'orders', 'outlets', 'balance','informers'] : ['orders', 'outlets', 'balance','informers'];
+    const paths = u.role === 'customer' ? ['materials', 'orders', 'projects', 'advertisers', 'outlets', 'balance','informers','favorites','settings/limits','reports'] : u.role === 'admin' ? ['materials', 'orders', 'outlets', 'balance','informers'] : ['orders', 'outlets', 'balance','informers'];
     const next = { ...empty, ...Object.fromEntries(await Promise.all(paths.map(async p => [p, await api(`/${p}`)]))) };
     const advertisers = next.advertisers.map(a => ({ ...a, code: a.id.slice(0, 8), type: a.inn.length === 12 ? 'ИП' : 'Юридическое лицо', ogrn: a.details?.ogrn || '', status: a.verification === 'verified' ? 'Проверен' : a.verification === 'blocked' ? 'Заблокирован' : 'Проверка запрошена', color: a.verification === 'verified' ? 'green' : 'amber' }));
-    const orders = next.orders.map(o => ({ ...o, material: o.snapshot.title, platform: o.snapshot.outlet.name, price: o.amount / 100, frozen: ['completed','rejected','refunded'].includes(o.status) ? 0 : o.amount / 100, projectId: o.project_id, date: date(o.created_at), status: orderLabels[o.status], apiStatus: o.status, statusColor: o.status === 'completed' ? 'green' : 'blue', action: orderLabels[o.status] }));
+    const orderColors = {pending:'blue',accepted:'amber',submitted:'indigo',completed:'green',rejected:'red',disputed:'red',refunded:'gray'};
+    const orders = next.orders.map(o => ({ ...o, material: o.snapshot.title, platform: o.snapshot.outlet.name, price: o.amount / 100, frozen: ['completed','rejected','refunded'].includes(o.status) ? 0 : o.amount / 100, projectId: o.project_id, date: date(o.created_at), status: orderLabels[o.status], apiStatus: o.status, statusColor: orderColors[o.status] ?? 'blue', action: orderLabels[o.status] }));
     setData({ ...next, limits:next['settings/limits']??empty.limits, advertisers, orders,
       materials: next.materials.map(m => ({ ...m, name: m.title, type: formatLabels[m.format], advertiser: advertisers.find(a => a.id === m.advertiser_id)?.name ?? '', advertiserId: m.advertiser_id, projectId: m.project_id, note: m.metadata.notes ?? '', status: statusLabels[m.status], apiStatus: m.status, statusColor: m.status === 'approved' ? 'green' : m.status === 'rejected' ? 'red' : 'blue', placements: orders.filter(o => o.material_id === m.id).length, date: date(m.created_at) })),
       projects: next.projects.map(p => ({ ...p, code: p.id.slice(0, 8), description: p.description ?? '', advertisers: p.advertisers ?? [], status: p.completed ? 'Завершен' : 'Активный', updatedAt: date(p.created_at) })),
@@ -57,7 +58,6 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function materialPayload(material: any, advertisers: any[]) {
-  const advertiserId = material.advertiserId ?? advertisers.find(a => a.name === material.advertiser)?.id;
-  if (!advertiserId) throw new Error('Сначала добавьте и выберите рекламодателя.');
+  const advertiserId = material.advertiserId ?? advertisers.find(a => a.name === material.advertiser)?.id ?? null;
   return { title: material.name, body: material.body ?? '', format: Object.keys(formatLabels).find(k => formatLabels[k] === material.type), advertiserId, projectId: material.projectId ?? null, metadata: { ...material.metadata, notes: material.note ?? '' } };
 }

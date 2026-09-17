@@ -63,7 +63,7 @@ test('favorites, limits, project changes and account security persist and enforc
   await ok('customer','POST','/api/materials/submit',{ids:[material.id],expedited:false});
   await ok('admin','POST',`/api/moderation/${material.id}`,{approved:true});
   const before=await ok('customer','GET','/api/balance');
-  const payload={materialId:material.id,outletIds:[outlet.id]};
+  const payload={materialId:material.id,outletIds:[outlet.id],autoAccept:true};
   assert.equal((await call('customer','POST','/api/orders',payload)).statusCode,409);
   assert.deepEqual(await ok('customer','GET','/api/balance'),before);
   const [order]=await ok('customer','POST','/api/orders',{...payload,limitConfirmed:true});
@@ -115,7 +115,9 @@ test('administration, persistent conversations and informers enforce role bounda
  assert.equal((await ok('customer','GET','/api/informers')).length,0);
  assert.equal((await call('admin','PUT',`/api/informers/${id}`,{...data,startsAt:'31.02.2026'})).statusCode,400);
  assert.equal((await call('publisher','POST','/api/informers',{title:'Denied',status:'Черновик'})).statusCode,403);
- assert.ok((await ok('admin','GET','/api/admin/audit')).some(a=>a.action==='order.message'));
+ const auditRows=await ok('admin','GET','/api/admin/audit');
+ assert.ok(auditRows.some(a=>a.action==='order.message'&&a.entity_label===`Заказ №${order.number}`));
+ assert.ok(auditRows.every(a=>!a.action.startsWith('request.')));
  assert.ok((await ok('admin','GET','/api/admin/ledger')).length);
 });
 
@@ -152,6 +154,61 @@ test('saving batch drafts updates existing forms without duplication and rejects
   assert.equal((await call('customer','POST','/api/orders',{materialId:first.ids[0],outletIds:[outlet.id],expectedAmount:1})).statusCode,409);
   assert.equal((await ok('customer','GET','/api/orders')).length,0);
   assert.equal((await ok('customer','GET','/api/balance')).reserved,0);
+});
+
+test('materials have numeric public numbers and formatted content is sanitized',async t=>{
+  const {ok,input,material}=await fixture(t);
+  assert.ok(Number.isInteger(material.number) && material.number>=1001);
+  const [formatted]=await ok('customer','POST','/api/materials/batch',[{...input,title:'Formatted',body:'<h1>Heading</h1><p><span style="font-size:10px"><strong>Safe</strong></span><script>alert(1)</script></p>'}]);
+  assert.ok(Number.isInteger(formatted.number));
+  assert.match(formatted.body,/<h1>Heading<\/h1>/);
+  assert.match(formatted.body,/<strong>Safe<\/strong>/);
+  assert.match(formatted.body,/font-size:10px/);
+  assert.doesNotMatch(formatted.body,/<script/i);
+  assert.equal((await ok('admin','GET','/api/materials')).find(row=>row.id===formatted.id).number,formatted.number);
+});
+
+test('materials can be submitted without an advertiser',async t=>{
+  const {ok,call}=await fixture(t);
+  const [material]=await ok('customer','POST','/api/materials/batch',[{advertiserId:null,title:'Independent editorial material',body:'No advertiser is required for moderation',format:'article'}]);
+  assert.equal(material.advertiser_id,null);
+  await ok('customer','POST','/api/materials/submit',{ids:[material.id],expedited:false});
+  assert.equal((await ok('admin','GET','/api/moderation')).find(row=>row.id===material.id).advertiser_id,null);
+  await ok('admin','POST',`/api/moderation/${material.id}`,{approved:true});
+  assert.equal((await call('customer','PUT',`/api/materials/${material.id}`,{advertiserId:'not-an-id',title:'Bad',body:'Bad',format:'article',version:1})).statusCode,400);
+});
+
+test('orders use the format selected on the outlet card, not the material type',async t=>{
+  const {ok,material,outlet}=await fixture(t);
+  await ok('customer','POST','/api/materials/submit',{ids:[material.id],expedited:false});
+  await ok('admin','POST',`/api/moderation/${material.id}`,{approved:true});
+  const [order]=await ok('customer','POST','/api/orders',{materialId:material.id,placements:[{outletId:outlet.id,format:'article'}],expectedAmount:135000});
+  assert.equal(order.amount,135000);
+  assert.equal(order.snapshot.format,'article');
+  assert.equal(order.snapshot.autoAccept,false);
+});
+
+test('project reports persist and download as PDF and CSV',async t=>{
+  const {ok,call,material,outlet}=await fixture(t);
+  const project=await ok('customer','POST','/api/projects',{name:'Report project'});
+  await ok('customer','POST',`/api/materials/${material.id}/project`,{projectId:project.id});
+  await ok('customer','POST','/api/materials/submit',{ids:[material.id],expedited:false});
+  await ok('admin','POST',`/api/moderation/${material.id}`,{approved:true});
+  const [order]=await ok('customer','POST','/api/orders',{materialId:material.id,outletIds:[outlet.id]});
+  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'accept'});
+  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'publish',url:'https://example.test/report-publication',markingConfirmed:true});
+  const today=new Date().toISOString().slice(0,10);
+  const report=await ok('customer','POST','/api/reports',{projectId:project.id,dateFrom:today,dateTo:today});
+  const listed=await ok('customer','GET','/api/reports');
+  assert.equal(listed.placements.find(row=>row.id===order.id).number,order.number);
+  assert.equal(listed.saved.find(row=>row.id===report.id).snapshot.rows.length,1);
+  const pdf=await call('customer','GET',`/api/reports/${report.id}/pdf`);
+  assert.equal(pdf.statusCode,200,pdf.body);assert.equal(pdf.headers['content-type'],'application/pdf');assert.match(pdf.rawPayload.subarray(0,4).toString(),/%PDF/);
+  const placementPdf=await call('customer','GET',`/api/orders/${order.id}/report.pdf`);
+  assert.equal(placementPdf.statusCode,200,placementPdf.body);assert.match(placementPdf.rawPayload.subarray(0,4).toString(),/%PDF/);
+  const csv=await call('customer','GET','/api/reports/export.csv');
+  assert.equal(csv.statusCode,200,csv.body);assert.match(csv.body,/report-publication/);
+  assert.equal((await call('other','GET',`/api/reports/${report.id}/pdf`)).statusCode,404);
 });
 
 test('order lifecycle uses news tariff, snapshot, reserve, commission and idempotency',async t=>{
@@ -215,11 +272,11 @@ test('rejection and dispute release reconcile every account with ledger entries'
  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'accept'});
  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'publish',url:'https://example.test/published',markingConfirmed:true});
  const dispute=await ok('customer','POST',`/api/orders/${order.id}/action`,{action:'dispute',reason:'Check placement'});
- const result=await ok('admin','POST',`/api/orders/${order.id}/action`,{action:'release',reason:'Placement meets requirements'});
+ const result=await ok('admin','POST',`/api/orders/${order.id}/action`,{action:'resolve',decision:'no_sanctions',reason:'Placement meets requirements'});
  assert.equal(result.dispute_number,dispute.dispute_number);
  assert.equal((await ok('publisher','GET','/api/balance')).available,65025);
  assert.equal((await ok('customer','GET','/api/balance')).reserved,0);
- assert.equal((await call('admin','POST',`/api/orders/${order.id}/action`,{action:'release',reason:'Repeated'})).statusCode,409);
+ assert.equal((await call('admin','POST',`/api/orders/${order.id}/action`,{action:'resolve',decision:'no_sanctions',reason:'Repeated'})).statusCode,409);
  const ledger=await ok('admin','GET','/api/admin/ledger');
  const balances=(await db.query('SELECT * FROM accounts')).rows;
  for(const account of balances) {
@@ -241,9 +298,40 @@ test('refund holds funds during dispute and releases once',async t=>{
   const dispute=await ok('customer','POST',`/api/orders/${order.id}/action`,{action:'dispute',reason:'Wrong publication'});
   assert.ok(Number.isInteger(dispute.dispute_number)&&dispute.dispute_number>=1001);
   assert.equal((await ok('customer','GET','/api/balance')).reserved,76500);
-  await ok('admin','POST',`/api/orders/${order.id}/action`,{action:'refund',reason:'Complaint confirmed'});
+  await ok('admin','POST',`/api/orders/${order.id}/action`,{action:'resolve',decision:'full_refund',reason:'Complaint confirmed'});
   assert.equal((await ok('customer','GET','/api/balance')).available,1000000);
-  assert.equal((await call('admin','POST',`/api/orders/${order.id}/action`,{action:'refund',reason:'Again'})).statusCode,409);
+  assert.equal((await call('admin','POST',`/api/orders/${order.id}/action`,{action:'resolve',decision:'full_refund',reason:'Again'})).statusCode,409);
+});
+
+test('full dispute payout sends the gross amount to the publisher',async t=>{
+  const {ok,material,outlet}=await fixture(t);
+  await ok('customer','POST','/api/materials/submit',{ids:[material.id],expedited:false});
+  await ok('admin','POST',`/api/moderation/${material.id}`,{approved:true});
+  const [order]=await ok('customer','POST','/api/orders',{materialId:material.id,outletIds:[outlet.id]});
+  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'accept'});
+  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'publish',url:'https://example.test/full-payout',markingConfirmed:true});
+  await ok('customer','POST',`/api/orders/${order.id}/action`,{action:'dispute',reason:'Review requested'});
+  const resolved=await ok('admin','POST',`/api/orders/${order.id}/action`,{action:'resolve',decision:'full_payout',reason:'Publisher fulfilled the order'});
+  assert.equal(resolved.status,'completed');
+  assert.equal(resolved.snapshot.disputeResolution.publisherAmount,76500);
+  assert.equal((await ok('publisher','GET','/api/balance')).available,76500);
+  assert.equal((await ok('customer','GET','/api/balance')).reserved,0);
+});
+
+test('partial dispute resolution splits the reserve once',async t=>{
+  const {ok,call,material,outlet}=await fixture(t);
+  await ok('customer','POST','/api/materials/submit',{ids:[material.id],expedited:false});
+  await ok('admin','POST',`/api/moderation/${material.id}`,{approved:true});
+  const [order]=await ok('customer','POST','/api/orders',{materialId:material.id,outletIds:[outlet.id]});
+  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'accept'});
+  await ok('publisher','POST',`/api/orders/${order.id}/action`,{action:'publish',url:'https://example.test/partial',markingConfirmed:true});
+  await ok('customer','POST',`/api/orders/${order.id}/action`,{action:'dispute',reason:'Partial mismatch'});
+  const resolved=await ok('admin','POST',`/api/orders/${order.id}/action`,{action:'resolve',decision:'partial',publisherAmount:25000,reason:'Partial compensation'});
+  assert.equal(resolved.status,'completed');
+  assert.equal(resolved.snapshot.disputeResolution.customerAmount,51500);
+  assert.equal((await ok('publisher','GET','/api/balance')).available,25000);
+  assert.equal((await ok('customer','GET','/api/balance')).available,975000);
+  assert.equal((await call('admin','POST',`/api/orders/${order.id}/action`,{action:'resolve',decision:'partial',publisherAmount:25000,reason:'Again'})).statusCode,409);
 });
 
 test('auth, CSRF, validation, inactive outlets and insufficient funds',async t=>{

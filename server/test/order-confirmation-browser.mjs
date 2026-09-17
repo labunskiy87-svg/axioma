@@ -24,12 +24,12 @@ try {
       assert.ok(box && box.x>=0 && box.y>=0 && box.x+box.width<=width+1 && box.y+box.height<=height+1);
     }
     const button=dialog.getByRole('button',{name:'Создать заказ',exact:true});
-    const limitConfirmation=dialog.getByRole('checkbox',{name:/Подтверждаю заказ сверх лимита/});
-    if(await limitConfirmation.count()) {
-      assert.ok(await button.isDisabled());
-      await limitConfirmation.check();
-    }
+    assert.equal(await dialog.getByRole('checkbox',{name:/Подтверждаю заказ сверх лимита/}).count(),0);
+    assert.equal(await dialog.getByRole('checkbox',{name:/Автоприёмка/}).isChecked(),false);
+    let confirmationShown=false;
+    page.once('dialog',async nativeDialog=>{confirmationShown=true;await nativeDialog.dismiss();});
     await button.click({trial:true});
+    assert.equal(confirmationShown,false);
     assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth));
     await page.screenshot({path:`/tmp/axioma-confirmation-${width}.png`});
     await dialog.getByRole('button',{name:'Отмена',exact:true}).click();

@@ -8,15 +8,18 @@ try {
   for(const role of ['customer','publisher']) {
     const account=accounts.find(item=>item.role===role),context=await browser.newContext(),page=await context.newPage();
     page.setDefaultTimeout(15000);
+    const errors=[];page.on('pageerror',error=>errors.push(error.message));
     assert.equal((await context.request.post(`${base}/api/auth/login`,{headers:{origin:base},data:{email:account.email,password:account.password}})).status(),200);
     for(const [width,height] of [[1440,1000],[390,844]]) {
       await page.setViewportSize({width,height});
       await page.goto(`${base}/${role}/support`);
-      await page.getByRole('heading',{name:'Поддержка',exact:true}).waitFor();
+      try { await page.getByRole('heading',{name:'Поддержка',exact:true}).waitFor(); }
+      catch(error) { console.error(role,width,errors,await page.locator('body').innerText()); throw error; }
       await page.getByRole('button',{name:'Тикеты',exact:true}).waitFor();
       await page.getByRole('button',{name:'Жалобы и споры',exact:true}).waitFor();
       await page.getByText('Список тикетов',{exact:true}).waitFor();
-      await page.getByLabel('Сообщение менеджеру').waitFor();
+      try { await page.getByLabel('Сообщение менеджеру').waitFor(); }
+      catch(error) { console.error(role,width,await page.locator('body').innerText()); await page.screenshot({path:`/tmp/axioma-support-failure-${role}-${width}.png`,fullPage:true}); throw error; }
       await page.getByRole('button',{name:'Прикрепить файл',exact:true}).waitFor();
       const ownMessages=page.locator('[data-message-owner="self"]'),receivedMessages=page.locator('[data-message-owner="other"]');
       if(!await ownMessages.count()) {

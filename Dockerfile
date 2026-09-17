@@ -6,6 +6,8 @@ RUN pnpm install --frozen-lockfile --prod
 FROM node:24-alpine
 ENV NODE_ENV=production HOST=0.0.0.0
 WORKDIR /app
+USER root
+RUN apk add --no-cache font-dejavu
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY package.json ./
 COPY server ./server
