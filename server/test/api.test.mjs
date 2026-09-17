@@ -12,11 +12,22 @@ import { transfer,quote } from '../finance.mjs';
 // The same suite runs against PostgreSQL in CI. Embedded Postgres is a local fallback.
 async function fixture(t) {
   let db;
-  if(process.env.TEST_DATABASE_URL) db=database(process.env.TEST_DATABASE_URL);
-  else {
+  let closeDb;
+  if(process.env.TEST_DATABASE_URL) {
+    const schema=`test_${randomUUID().replaceAll('-','')}`;
+    const adminDb=database(process.env.TEST_DATABASE_URL);
+    await adminDb.query(`CREATE SCHEMA ${schema}`);
+    db=database(process.env.TEST_DATABASE_URL,{schema});
+    closeDb=async()=>{
+      await db.close();
+      await adminDb.query(`DROP SCHEMA ${schema} CASCADE`);
+      await adminDb.close();
+    };
+  } else {
     const pg=new PGlite();
     const wrap=client=>({query:async(sql,args)=>args?client.query(sql,args):(await client.exec(sql)).at(-1)});
     db={...wrap(pg),transaction:fn=>pg.transaction(tx=>fn(wrap(tx))),close:()=>pg.close()};
+    closeDb=()=>db.close();
   }
   await migrate(db); await migrate(db);
   const users=await db.transaction(async tx=>{
@@ -28,7 +39,7 @@ async function fixture(t) {
   });
   const storageRoot=await mkdtemp(join(tmpdir(),'axioma-files-'));
   const app=await buildApp({db,storageRoot});
-  t.after(async()=>{await app.close();await db.close();await rm(storageRoot,{recursive:true,force:true});});
+  t.after(async()=>{await app.close();await closeDb();await rm(storageRoot,{recursive:true,force:true});});
   const cookies={};
   for(const [key,u] of Object.entries(users)) {
     const res=await app.inject({method:'POST',url:'/api/auth/login',headers:{origin:'http://127.0.0.1:5173'},payload:{email:u.email,password:'a-valid-test-password'}});

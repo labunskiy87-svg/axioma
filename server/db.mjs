@@ -2,8 +2,14 @@ import pg from 'pg';
 import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
-export function database(connectionString) {
-  const pool = new pg.Pool({ connectionString, max: 10, statement_timeout: 10000 });
+export function database(connectionString,{schema}={}) {
+  if(schema && !/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error('Invalid database schema');
+  const pool = new pg.Pool({
+    connectionString,
+    max:10,
+    statement_timeout:10000,
+    ...(schema?{options:`-c search_path=${schema},public`}:{}),
+  });
   return {
     query: (sql, args) => pool.query(sql, args),
     async transaction(fn) {
