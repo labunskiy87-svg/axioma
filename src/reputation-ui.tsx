@@ -186,12 +186,17 @@ const subjectTypes=[
 const SubjectSetup=({onOpenDemo,onSave,onCancel,hasExisting=false})=>{
   const [type,setType]=useState('Бренд');
   const [name,setName]=useState('');
+  const [searchQueries,setSearchQueries]=useState(['']);
   const field={
     'Бренд':{name:'Название бренда',placeholder:'Например, Neuroreel',relation:'Компания-владелец',relationPlaceholder:'Название компании'},
     'Человек':{name:'Имя и фамилия',placeholder:'Например, Иван Иванов',relation:'Компания и должность',relationPlaceholder:'Компания · должность'},
     'Компания':{name:'Название компании',placeholder:'Например, ООО «Альфа»',relation:'Сайт компании',relationPlaceholder:'https://example.ru'},
   }[type];
   const queryBase=name.trim()||field.placeholder.replace('Например, ','');
+  const updateSearchQuery=(index,value)=>setSearchQueries(current=>current.map((item,itemIndex)=>itemIndex===index?value:item));
+  const addSearchQuery=()=>setSearchQueries(current=>current.length>=5?current:[...current,'']);
+  const removeSearchQuery=index=>setSearchQueries(current=>current.filter((_,itemIndex)=>itemIndex!==index));
+  const normalizedQueries=searchQueries.map(item=>item.trim()).filter(Boolean).slice(0,5);
   return <div className={`${cardClass} overflow-hidden`}>
     <div className="border-b border-[#d4e0ed] px-6 py-5 sm:px-8 sm:py-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -224,9 +229,15 @@ const SubjectSetup=({onOpenDemo,onSave,onCancel,hasExisting=false})=>{
       </div>
     </div>
 
+    <div className="border-t border-[#d4e0ed] bg-[#f8f9fb] px-6 py-6 sm:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-sm font-semibold text-[#0b3558]">Поисковые запросы</h3><p className="mt-1 text-xs leading-5 text-[#476788]">Добавьте до пяти запросов для первого сканирования. Позже их можно изменить в настройках мониторинга.</p></div><Badge color="gray">{searchQueries.length} из 5</Badge></div>
+      <div className="mt-4 space-y-3">{searchQueries.map((item,index)=><div key={index} className="grid grid-cols-[28px_minmax(0,1fr)_40px] items-center gap-3"><span className="text-center text-xs font-semibold text-[#6f88a3]">{index+1}</span><input value={item} onChange={event=>updateSearchQuery(index,event.target.value)} aria-label={`Первичный поисковый запрос ${index+1}`} placeholder={index===0?queryBase:'Введите поисковый запрос'} className="h-10 min-w-0 rounded-lg border border-[#476788] bg-white px-3 text-sm text-[#0b3558] outline-none placeholder:text-[#a0aabc] focus:border-[#006bff] focus:ring-2 focus:ring-[#006bff]/10"/><button type="button" aria-label={`Удалить первичный запрос ${index+1}`} title="Удалить запрос" disabled={searchQueries.length===1} onClick={()=>removeSearchQuery(index)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#d4e0ed] bg-white text-[#476788] transition-colors hover:bg-[#eef2f7] hover:text-[#ef4444] disabled:cursor-not-allowed disabled:opacity-40"><Trash2 className="h-4 w-4"/></button></div>)}</div>
+      <button type="button" onClick={addSearchQuery} disabled={searchQueries.length>=5} className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-[#d4e0ed] bg-white px-3 text-xs font-semibold text-[#0b3558] transition-colors hover:bg-[#eef2f7] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-3.5 w-3.5"/>Добавить запрос</button>
+    </div>
+
     <div className="flex flex-col-reverse gap-3 border-t border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-end sm:px-8">
       <DemoButton variant="secondary" onClick={hasExisting?onCancel:onOpenDemo}>{hasExisting?'Отмена':'Открыть демо'}</DemoButton>
-      <DemoButton onClick={()=>onSave({name:name.trim()||queryBase,type})}><Search className="h-4 w-4"/>Запустить сканирование</DemoButton>
+      <DemoButton onClick={()=>onSave({name:name.trim()||queryBase,type,queries:normalizedQueries.length?normalizedQueries:[queryBase]})}><Search className="h-4 w-4"/>Запустить сканирование</DemoButton>
     </div>
   </div>;
 };
@@ -257,20 +268,23 @@ const ReputationOnboarding=({onAdd,onOpenDemo})=><div className="space-y-6">
   </div>
 </div>;
 
-const MonitoringSettings=({subject,queries,onSave,onCancel})=>{
+const MonitoringSettings=({subject,queries,period,onSave,onCancel,onDelete})=>{
   const [draft,setDraft]=useState(queries.length?queries:[subject.name]);
+  const [scanPeriod,setScanPeriod]=useState(period||'30 дней');
+  const [confirmDelete,setConfirmDelete]=useState(false);
   const updateQuery=(index,value)=>setDraft(current=>current.map((item,itemIndex)=>itemIndex===index?value:item));
   const removeQuery=index=>setDraft(current=>current.filter((_,itemIndex)=>itemIndex!==index));
   const addQuery=()=>setDraft(current=>current.length>=5?current:[...current,'']);
   const normalized=draft.map(item=>item.trim()).filter(Boolean).slice(0,5);
-  return <div className="space-y-6">
+  return <><div className="space-y-6">
     <div><div className="flex flex-wrap items-center gap-3"><h1 className="font-display text-2xl font-bold text-[#0b3558]">Настройки мониторинга</h1><Badge color="blue">{subject.name}</Badge></div><p className="mt-2 text-sm text-[#476788]">Управление поисковыми запросами объекта</p></div>
     <div className={`${cardClass} overflow-hidden`}>
       <div className="flex flex-col gap-3 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-8"><div><h2 className="font-display text-lg font-bold text-[#0b3558]">Поисковые запросы</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-[#476788]">Добавьте основные варианты, по которым нужно отслеживать спрос и поисковую выдачу. Не более пяти запросов на один объект.</p></div><Badge color="gray">{draft.length} из 5</Badge></div>
       <div className="px-6 py-6 sm:px-8"><div className="space-y-3">{draft.map((item,index)=><div key={index} className="grid grid-cols-[36px_minmax(0,1fr)_44px] items-center gap-3"><span className="text-center text-sm font-semibold text-[#6f88a3]">{index+1}</span><input value={item} onChange={event=>updateQuery(index,event.target.value)} aria-label={`Поисковый запрос ${index+1}`} placeholder="Введите поисковый запрос" className="h-11 min-w-0 rounded-lg border border-[#476788] bg-white px-4 text-sm text-[#0b3558] outline-none placeholder:text-[#a0aabc] focus:border-[#006bff] focus:ring-2 focus:ring-[#006bff]/10"/><button type="button" aria-label={`Удалить запрос ${index+1}`} title="Удалить запрос" disabled={draft.length===1} onClick={()=>removeQuery(index)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#d4e0ed] bg-white text-[#476788] transition-colors hover:bg-[#f0f3f8] hover:text-[#ef4444] disabled:cursor-not-allowed disabled:opacity-40"><Trash2 className="h-4 w-4"/></button></div>)}</div><button type="button" onClick={addQuery} disabled={draft.length>=5} className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-[#d4e0ed] bg-white px-4 text-sm font-semibold text-[#0b3558] transition-colors hover:bg-[#f0f3f8] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4"/>Добавить запрос</button></div>
-      <div className="flex flex-col-reverse gap-3 border-t border-[#d4e0ed] bg-[#f8f9fb] px-6 py-5 sm:flex-row sm:items-center sm:justify-end sm:px-8"><DemoButton variant="secondary" onClick={onCancel}>Отмена</DemoButton><DemoButton onClick={()=>onSave(normalized.length?normalized:[subject.name])}>Сохранить настройки</DemoButton></div>
+      <div className="border-t border-[#d4e0ed] px-6 py-6 sm:px-8"><div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center"><div><h3 className="text-sm font-semibold text-[#0b3558]">Период сканирования</h3><p className="mt-1 text-xs leading-5 text-[#476788]">Система соберет публикации и изменения выдачи за выбранный период. Максимальный период — 30 дней.</p></div><PrototypeSelect value={scanPeriod} options={['7 дней','14 дней','30 дней']} onChange={setScanPeriod}/></div></div>
+      <div className="flex flex-col gap-3 border-t border-[#d4e0ed] bg-[#f8f9fb] px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><button type="button" onClick={()=>setConfirmDelete(true)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#ef4444] bg-white px-5 text-sm font-semibold text-[#ef4444] transition-colors hover:bg-[#fff1f1]"><Trash2 className="h-4 w-4"/>Удалить объект</button><div className="flex flex-col-reverse gap-3 sm:flex-row"><DemoButton variant="secondary" onClick={onCancel}>Отмена</DemoButton><DemoButton onClick={()=>onSave({queries:normalized.length?normalized:[subject.name],period:scanPeriod})}>Сохранить настройки</DemoButton></div></div>
     </div>
-  </div>;
+  </div>{confirmDelete&&createPortal(<div className="fixed inset-0 z-[300] flex items-center justify-center bg-[#0b3558]/35 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-subject-title"><div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#d4e0ed] bg-white shadow-[rgba(11,53,88,0.18)_0px_24px_70px]"><div className="border-b border-[#d4e0ed] px-6 py-5"><h2 id="delete-subject-title" className="font-display text-xl font-bold text-[#0b3558]">Удалить объект мониторинга?</h2></div><div className="px-6 py-5"><p className="text-sm leading-6 text-[#476788]">Объект «{subject.name}» и его локальные настройки будут удалены. Это действие нельзя отменить.</p></div><div className="flex flex-col-reverse gap-3 border-t border-[#d4e0ed] bg-[#f8f9fb] px-6 py-4 sm:flex-row sm:justify-end"><DemoButton variant="secondary" onClick={()=>setConfirmDelete(false)}>Отмена</DemoButton><button type="button" onClick={onDelete} className="inline-flex h-11 items-center justify-center rounded-xl border border-[#ef4444] bg-[#ef4444] px-5 text-sm font-semibold text-white hover:bg-[#dc2626]">Удалить объект</button></div></div></div>,document.body)}</>;
 };
 
 export function ReputationIntelligenceView({navigate}) {
@@ -282,6 +296,9 @@ export function ReputationIntelligenceView({navigate}) {
   const [subject,setSubject]=useState(()=>subjects[0]||{name:'Neuroreel',type:'Бренд'});
   const [queriesBySubject,setQueriesBySubject]=useState(()=>{
     try{return JSON.parse(localStorage.getItem('axioma-reputation-queries')||'{}');}catch{return {};}
+  });
+  const [periodsBySubject,setPeriodsBySubject]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem('axioma-reputation-periods')||'{}');}catch{return {};}
   });
   const [section,setSection]=useState('Обзор');
   const [workspaceTab,setWorkspaceTab]=useState('Материалы');
@@ -309,21 +326,51 @@ export function ReputationIntelligenceView({navigate}) {
     });
     setQueriesBySubject(current=>{
       if(current[next.name])return current;
-      const defaults=next.type==='Человек'?[next.name,`${next.name} биография`,`${next.name} интервью`,`${next.name} отзывы`]:[next.name,`${next.name} отзывы`,`${next.name} новости`,`${next.name} руководство`];
+      const defaults=value.queries?.length?value.queries:(next.type==='Человек'?[next.name,`${next.name} биография`,`${next.name} интервью`,`${next.name} отзывы`]:[next.name,`${next.name} отзывы`,`${next.name} новости`,`${next.name} руководство`]);
       const updated={...current,[next.name]:defaults.slice(0,5)};
       localStorage.setItem('axioma-reputation-queries',JSON.stringify(updated));
+      return updated;
+    });
+    setPeriodsBySubject(current=>{
+      if(current[next.name])return current;
+      const updated={...current,[next.name]:'30 дней'};
+      localStorage.setItem('axioma-reputation-periods',JSON.stringify(updated));
       return updated;
     });
     setSubject(next);
     setSetupOpen(false);
   };
   const openDemo=()=>saveSubject({name:'Neuroreel',type:'Бренд'});
-  const saveMonitoringQueries=queries=>{
+  const saveMonitoringSettings=({queries,period})=>{
     setQueriesBySubject(current=>{
       const updated={...current,[subject.name]:queries.slice(0,5)};
       localStorage.setItem('axioma-reputation-queries',JSON.stringify(updated));
       return updated;
     });
+    setPeriodsBySubject(current=>{
+      const updated={...current,[subject.name]:period};
+      localStorage.setItem('axioma-reputation-periods',JSON.stringify(updated));
+      return updated;
+    });
+    setSettingsOpen(false);
+  };
+  const deleteSubject=()=>{
+    const remaining=subjects.filter(item=>item.name!==subject.name);
+    setSubjects(remaining);
+    localStorage.setItem('axioma-reputation-subjects',JSON.stringify(remaining));
+    setQueriesBySubject(current=>{
+      const updated={...current};
+      delete updated[subject.name];
+      localStorage.setItem('axioma-reputation-queries',JSON.stringify(updated));
+      return updated;
+    });
+    setPeriodsBySubject(current=>{
+      const updated={...current};
+      delete updated[subject.name];
+      localStorage.setItem('axioma-reputation-periods',JSON.stringify(updated));
+      return updated;
+    });
+    if(remaining.length)setSubject(remaining[0]);
     setSettingsOpen(false);
   };
 
@@ -335,7 +382,7 @@ export function ReputationIntelligenceView({navigate}) {
 
   if(!subjects.length&&!setupOpen)return <ReputationOnboarding onAdd={()=>setSetupOpen(true)} onOpenDemo={openDemo}/>;
 
-  if(settingsOpen)return <MonitoringSettings subject={subject} queries={queriesBySubject[subject.name]||[subject.name]} onSave={saveMonitoringQueries} onCancel={()=>setSettingsOpen(false)}/>;
+  if(settingsOpen)return <MonitoringSettings subject={subject} queries={queriesBySubject[subject.name]||[subject.name]} period={periodsBySubject[subject.name]||'30 дней'} onSave={saveMonitoringSettings} onCancel={()=>setSettingsOpen(false)} onDelete={deleteSubject}/>;
 
   if(setupOpen)return <div className="space-y-6">
     <div>
@@ -349,7 +396,7 @@ export function ReputationIntelligenceView({navigate}) {
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
         <div className="flex flex-wrap items-center gap-3"><h1 className="font-display text-2xl font-bold text-[#0b3558]">Репутация</h1><Badge color="blue">{subject.type}</Badge></div>
-        <p className="mt-2 text-sm text-[#476788]">{subject.name} · данные демонстрационного сканирования от 16.09.2026</p>
+        <p className="mt-2 text-sm text-[#476788]">{subject.name} · период {periodsBySubject[subject.name]||'30 дней'} · сканирование от 16.09.2026</p>
       </div>
       <div className="grid w-full grid-cols-[minmax(0,1fr)_44px_44px] gap-3 sm:w-auto sm:grid-cols-[208px_44px_44px_auto]"><PrototypeSelect value={subject.name} options={subjects.map(item=>item.name)} onChange={value=>{const next=subjects.find(item=>item.name===value);if(next)setSubject(next);}}/><button type="button" aria-label="Добавить объект мониторинга" title="Добавить объект мониторинга" onClick={()=>setSetupOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#d4e0ed] bg-white text-[#0b3558] transition-colors hover:bg-[#f0f3f8] focus:outline-none focus:ring-2 focus:ring-[#006bff]"><Plus className="h-5 w-5"/></button><button type="button" aria-label="Настройки мониторинга" title="Настройки мониторинга" onClick={()=>setSettingsOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#d4e0ed] bg-white text-[#0b3558] transition-colors hover:bg-[#f0f3f8] focus:outline-none focus:ring-2 focus:ring-[#006bff]"><Settings className="h-5 w-5"/></button><DemoButton className="col-span-3 sm:col-span-1"><Search className="h-4 w-4"/>Запустить сканирование</DemoButton></div>
     </div>
