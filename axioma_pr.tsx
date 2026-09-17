@@ -12,6 +12,7 @@ import { api, uploadFile } from './src/api';
 import { AdminLogin, useCabinetView } from './src/cabinet-routing';
 import { outletFormValues } from './src/outlet-form';
 import {AdminRecords,OrderConversation,SupportDesk} from './src/operations-ui';
+import {ReputationIntelligenceView} from './src/reputation-ui';
 const orderNumber = (order: {id: string | number; number?: number}) => order.number ?? (typeof order.id==='number' ? order.id : '—');
 const materialNumber = (material: {id: string | number; number?: number}) => material.number ?? (typeof material.id==='number' ? material.id : '—');
 const downloadFromApi = (path: string) => {
@@ -9716,6 +9717,7 @@ export default function App() {
 
   const clientNav = [
     { id: 'dashboard', label: 'Панель', icon: LayoutDashboard },
+    { id: 'reputation', label: 'Репутация', icon: BarChart3 },
     { id: 'projects', label: 'Проекты', icon: FolderKanban },
     { id: 'materials', label: 'Материалы', icon: FileText },
     { id: 'catalog', label: 'Каталог площадок', icon: Store },
@@ -9963,6 +9965,7 @@ export default function App() {
     if (isClient) {
       switch (clientView) {
         case 'dashboard': return <ClientDashboardView navigate={setClientView} onOpenOrder={openOrder} informerItems={informerItems} />;
+        case 'reputation': return <ReputationIntelligenceView navigate={setClientView} />;
         case 'projects': return <ClientProjectsView projects={projects} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openProject={openProject} onCreateProject={createProject} />;
         case 'project_detail': return <ClientProjectDetailView project={projects.find((project) => project.id === selectedProjectId)} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openMaterial={openMaterial} openOrder={openOrder} onAddMaterial={startCreateMaterial} onToggleStatus={toggleProjectStatus} onDelete={deleteProject} />;
         case 'materials': return <ClientMaterialsView navigate={setClientView} projects={projects} materials={clientMaterials} openProject={openProject} openMaterial={openMaterial} startCreateMaterial={startCreateMaterial} />;
