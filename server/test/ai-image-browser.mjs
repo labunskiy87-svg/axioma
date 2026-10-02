@@ -36,12 +36,13 @@ try {
     await page.screenshot({path:`/tmp/axioma-image-result-${width}.png`});
     await modal.getByRole('button',{name:'Закрыть',exact:true}).click();
     await page.getByRole('button',{name:'сгенерируйте изображение с помощью ИИ за 50 ₽',exact:true}).click();
-    await modal.getByRole('button',{name:'Сгенерировать за 50 ₽',exact:true}).click();
-    await preview.waitFor();assert.equal(await editor.locator('img').count(),1);
+    await modal.getByRole('button',{name:'Сгенерировать ещё за 50 ₽',exact:true}).click();
+    await page.waitForFunction(()=>!document.querySelector('[role="dialog"] textarea')?.disabled);
+    await preview.waitFor();assert.equal(await editor.locator('img').count(),2);
     assert.deepEqual(await f.balance(),{available:10000,reserved:0});
     await modal.getByRole('button',{name:'Сгенерировать ещё за 50 ₽',exact:true}).click();
     await page.waitForFunction(()=>!document.querySelector('[role="dialog"] textarea')?.disabled);
-    assert.deepEqual(await f.balance(),{available:5000,reserved:0});assert.equal(await editor.locator('img').count(),1);
+    assert.deepEqual(await f.balance(),{available:5000,reserved:0});assert.equal(await editor.locator('img').count(),3);
     await modal.getByRole('button',{name:'Закрыть',exact:true}).click();
     const attachments=page.getByRole('button',{name:/^Удалить файл ai-image-/});await attachments.first().waitFor();
     assert.equal(await attachments.count(),3);
@@ -51,5 +52,5 @@ try {
     await page.screenshot({path:`/tmp/axioma-image-panel-${width}.png`});
     assert.deepEqual(errors,[]);await context.close();await f.close();f=null;
   }
-  assert.equal(calls,6);console.log('Image panel, preview, editor insertion, attachment-only generation and paid repeat verified on desktop/mobile');
+  assert.equal(calls,6);console.log('Both generation entry points insert images into text and attachments; repeats retain previous images on desktop/mobile');
 } finally {await browser.close();if(f)await f.close();}

@@ -4120,7 +4120,7 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
     {assetPanel==='link'&&<div className="flex flex-col gap-3 border-b border-[#d4e0ed] bg-white p-4 sm:flex-row sm:items-end"><label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес ссылки</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label><Button variant="primary" size="sm" onClick={setLink}>{assetUrl.trim()?'Применить':'Удалить ссылку'}</Button></div>}
     <EditorContent editor={editor} />
     <AiAssistModal isOpen={rewriteOpen} onClose={()=>setRewriteOpen(false)} body={value} onApply={body=>editor.commands.setContent(body)} onBusyChange={busy=>editor.setEditable(!busy)} />
-    <AiAssistModal isOpen={imageOpen} onClose={()=>onImageOpenChange(false)} type="image" onImage={result=>{insertImage(result.url);onImageStored(result.file.id);}} onBusyChange={busy=>editor.setEditable(!busy)} />
+    <AiAssistModal isOpen={imageOpen} onClose={()=>onImageOpenChange(false)} type="image" onImage={result=>{editor.chain().focus().insertContentAt(editor.state.selection.to,{type:'image',attrs:{src:result.url,alt:'Изображение материала'}}).run();setAssetPanel(null);onImageStored(result.file.id);}} onBusyChange={busy=>editor.setEditable(!busy)} />
   </div>;
 };
 
@@ -4188,7 +4188,7 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
             <span className="text-xs text-[#476788]">{richTextLength(draft.body)} знаков</span>
           </div>
         </div>
-        <RichTextEditor value={draft.body||''} onChange={body=>onChange({body})} imageOpen={imageTarget==='editor'} onImageOpenChange={open=>setImageTarget(open?'editor':null)} onImageStored={attachImage} />
+        <RichTextEditor value={draft.body||''} onChange={body=>onChange({body})} imageOpen={Boolean(imageTarget)} onImageOpenChange={open=>setImageTarget(open?'editor':null)} onImageStored={attachImage} />
       </div>
     </div>
     <details className="mt-6 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
@@ -4197,7 +4197,6 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
         {Object.entries({tags:'Тэги',title:'Title',description:'Description',desiredUrl:'Желаемый URL'}).map(([key,label]) => <label key={key}><span className="text-sm font-medium text-[#476788]">{label}</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" value={draft.metadata?.[key] || ''} onChange={e => onChange({metadata:{...draft.metadata,[key]:e.target.value}})} /></label>)}
       </div>
     </details>
-    <AiAssistModal isOpen={imageTarget==='attachments'} onClose={()=>setImageTarget(null)} type="image" onImage={result=>attachImage(result.file.id)} />
   </Card>
 ); };
 
