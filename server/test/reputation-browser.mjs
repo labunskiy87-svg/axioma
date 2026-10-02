@@ -136,7 +136,7 @@ try {
     await page.getByRole('main').getByRole('tab',{name:'Google',exact:true}).click();
     await page.getByText('repost.news',{exact:true}).first().waitFor();
     const referenceRow=page.getByRole('link',{name:/Справочная карточка/});
-    assert.match(await referenceRow.innerText(),/Нейтральный/);
+    assert.match(await referenceRow.innerText(),/Нейтральная/);
     await page.screenshot({path:`/tmp/pr-market-reputation-serp-${width}.png`,fullPage:true});
     await page.getByRole('button',{name:'Негатив',exact:true}).click();
     await page.getByText('Влияющие на цифровой портрет',{exact:true}).waitFor();
