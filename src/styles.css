@@ -128,6 +128,11 @@ textarea {
 .material-content figure img { margin: 0; }
 .material-content figure :where([data-resize-container], [data-resize-wrapper]) { max-width: 100%; min-width: 0; }
 .material-content figure.ProseMirror-selectednode img { outline: 2px solid #006bff; outline-offset: 2px; }
+.material-content figure:has([data-image-controls] > *) { outline: 2px solid #006bff; outline-offset: 2px; border-radius: 8px; }
+.material-content figure:has([data-image-controls] > *) img { outline: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.material-content figure:has([data-image-controls] > *) figcaption { display: block; min-height: 24px; }
+.material-content figcaption[contenteditable="true"] { outline: none; cursor: text; }
+.material-content figcaption[contenteditable="true"]:empty::before { content: attr(data-placeholder); color: #748ba5; pointer-events: none; }
 .material-content figcaption { margin-top: .5em; color: #476788; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 
 @keyframes ui-enter {
