@@ -17,7 +17,7 @@ try {
   const user=await db.transaction(tx=>createUser(tx,`customer-${randomUUID()}@example.test`,'browser-test-password','customer'));
   const admin=await db.transaction(tx=>createUser(tx,`admin-${randomUUID()}@example.test`,'browser-test-password','admin'));
   const fetchImpl=async(url,options={})=>{
-    if(String(url).startsWith('https://serpapi.com/search.md'))return new Response(new URL(url).searchParams.get('engine')==='google_ai_mode'?'---\nstatus: Success\n---\nGoogle AI: ответ о тестовой марке. [Источник](https://example.org/story)':'# Google results');
+    if(String(url).startsWith('https://serpapi.com/search.md'))return new Response(new URL(url).searchParams.get('engine')==='google_ai_mode'?'---\nstatus: Success\n---\nGoogle AI: ответ о тестовой марке. [0]\n\nЕсли нужны подробности, дайте знать.\n\n## References\n\n[0] [Источник](https://example.org/story) — описание источника.':'# Google results');
     if(String(url).startsWith('https://serpapi.com/search.json'))return Response.json({search_metadata:{id:'search-1'},organic_results:[{link:longUrl,title:'Крестный отец теневого российского бизнеса — председатель совета директоров',snippet:'Текст публикации',position:1,date:'20240611T054603'},...[2,3,4,5,6].map(position=>({link:`https://example.org/article-${position}`,title:`Проверенный материал ${position}`,snippet:'Текст публикации',position})),{link:'https://zachestnyibiznes.ru/fl/123',title:'Справочная карточка',snippet:'Сведения реестра',position:8}]});
     if(String(url).endsWith('/scrape'))return Response.json({success:true,data:{markdown:'Текст публикации о тестовой марке',metadata:{}}});
     if(String(url).endsWith('/chat/completions')){
@@ -44,7 +44,7 @@ try {
   await inject('POST',`/api/reputation/subjects/${subject.id}/scans`,{});
   assert.equal((await processNextReputationScan(db,{fetchImpl})).status,'completed');
   browser=await chromium.launch({headless:true,channel:'chrome'});
-  for(const [width,height] of [[1440,900],[390,844]]) {
+  for(const [width,height] of [[1440,900],[1180,900],[390,844]]) {
     const context=await browser.newContext({viewport:{width,height}});
     await context.route('**/api/**',async route=>{
       const request=route.request(),url=new URL(request.url());
@@ -57,16 +57,18 @@ try {
     await page.getByText('Тестовая марка',{exact:true}).first().waitFor();
     await page.getByText('Общая оценка репутации',{exact:true}).first().waitFor();
     await page.getByText('Репутация тестовой марки в найденном материале нейтральная.',{exact:true}).waitFor();
-    assert.equal(await page.getByText('Проверить первоисточники утверждений, сопоставить их с прошлыми результатами и продолжить наблюдение за поисковой выдачей.',{exact:true}).count(),1);
+    for(const label of ['Хронология сигнала','Структура спроса'])assert.equal(await page.getByRole('heading',{name:label,exact:true}).count(),0);
+    const presence=page.getByRole('heading',{name:'Каналы присутствия'}).locator('..').locator('..');
+    assert.equal(await presence.getByText('Поиск',{exact:true}).locator('..').getByText('6',{exact:true}).count(),1);
+    assert.equal(await page.getByText(/Часть найденных URL не вошла в анализ/).count(),0);
     assert.equal(await page.getByText('12 430',{exact:true}).count(),0);
     assert.equal(await page.getByText('1,4 млн',{exact:true}).count(),0);
     assert.equal(await page.getByText('Не подключен',{exact:true}).count()>0,true);
     await page.screenshot({path:`/tmp/pr-market-reputation-${width}.png`,fullPage:true});
-    await page.getByText('Главное изменение',{exact:true}).scrollIntoViewIfNeeded();
-    const summaryValue=page.getByText('Подтвержденного изменения репутационного фона за выбранный период не установлено; найденные публикации требуют проверки в сравнении с предыдущим снимком.',{exact:true});
-    assert.equal(await summaryValue.evaluate(element=>getComputedStyle(element).webkitLineClamp),'none');
+    for(const label of ['Главное изменение','Источник риска','Следующий шаг'])assert.equal(await page.getByText(label,{exact:true}).count(),0);
     await page.screenshot({path:`/tmp/pr-market-reputation-assessment-${width}.png`});
     await page.getByRole('button',{name:'Аналитика',exact:true}).click();
+    assert.equal(await page.getByRole('main').getByRole('button',{name:'Каналы',exact:true}).count(),0);
     await page.getByRole('main').getByRole('button',{name:'Материалы',exact:true}).click();
     await page.getByText('Крестный отец теневого российского бизнеса — председатель совета директоров',{exact:true}).first().waitFor();
     const materialButton=page.getByText('Крестный отец теневого российского бизнеса — председатель совета директоров',{exact:true}).first().locator('xpath=ancestor::button[1]');
@@ -89,6 +91,9 @@ try {
     await page.getByRole('tab',{name:'Google AI'}).click();
     await page.getByText('Google AI: ответ о тестовой марке.').waitFor();
     await page.getByText('Источники в ответе',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('heading',{name:'References',exact:true}).count(),0);
+    assert.equal(await page.getByText('Если нужны подробности, дайте знать.',{exact:true}).count(),0);
+    assert.equal(await page.getByRole('tabpanel').getByRole('link',{name:'1',exact:true}).getAttribute('href'),'https://example.org/story');
     assert.equal(await page.getByText('Источник: SerpApi',{exact:true}).count(),0);
     assert.equal(await page.getByRole('button',{name:'Показать полностью'}).count(),0);
     assert.equal(await page.getByRole('link',{name:'example.org'}).count(),1);
@@ -101,6 +106,12 @@ try {
     await page.getByRole('button',{name:'Негатив',exact:true}).click();
     await page.getByRole('heading',{name:'Тематики негатива'}).waitFor();
     assert.match(await page.getByRole('img',{name:/Тестовая марка: 100%/}).getAttribute('style'),/conic-gradient/);
+    const chartBox=await page.getByRole('heading',{name:'Тематики негатива'}).locator('..').boundingBox();
+    const publicationsBox=await page.getByRole('heading',{name:'Негативные публикации'}).locator('..').locator('..').boundingBox();
+    if(width>=1024) {
+      assert.ok(Math.abs(chartBox.y-publicationsBox.y)<2,'Desktop chart must remain beside the publication list');
+      assert.ok(chartBox.x>publicationsBox.x,'Desktop chart must be on the right');
+    } else assert.ok(chartBox.y<publicationsBox.y,'Mobile chart must precede the publication list');
     await page.getByRole('heading',{name:'Тематики негатива'}).locator('..').screenshot({path:`/tmp/pr-market-reputation-negative-chart-${width}.png`});
     await page.screenshot({path:`/tmp/pr-market-reputation-negative-${width}.png`,fullPage:true});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);

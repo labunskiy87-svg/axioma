@@ -48,8 +48,10 @@ test('scan uses configured APIs, deduplicates URLs and never synthesizes unavail
   assert.match(analysisPrompt,/ФИО, должность и связь с организацией используются только для идентификации/);
   assert.match(synthesisPrompt,/В topics\[\]\.name называй предмет обсуждения/);
   assert.match(synthesisPrompt,/не выдавай за факты/);
-  assert.match(synthesisPrompt,/recommendations и nextStep — исключительно коммуникационные действия/);
-  assert.match(synthesisPrompt,/Не предлагай судебные, юридические/);
+  assert.match(synthesisPrompt,/recommendations и nextStep — исключительно коммуникационные действия SERM/);
+  assert.match(synthesisPrompt,/Не советуй писать редакциям негативных сайтов/);
+  assert.match(synthesisPrompt,/Не утверждай, что негатив заказан конкурентами/);
+  assert.match(synthesisPrompt,/Не предлагай юридические, правоохранительные/);
 });
 test('Google AI Mode receives one synthesis prompt with all saved queries and no AI Overview token',async()=>{
   const queries=['Николаев Станислав Юрьевич','Николаев Станислав Юрьевич Меркатор'];
@@ -81,7 +83,7 @@ test('Google organic search paginates to 50 distinct results while retaining the
     if(request.searchParams.has('tbs'))return Response.json({organic_results:[]});
     const start=Number(request.searchParams.get('start'));
     pages.push(start);
-    assert.equal(request.searchParams.get('q'),'"Тестовый бренд"');
+    assert.equal(request.searchParams.get('q'),'Тестовый бренд');
     return Response.json({organic_results:Array.from({length:10},(_,index)=>({link:`https://example.org/story-${start+index+1}`,title:`Публикация ${start+index+1}`,snippet:'Текст',position:start+index+1}))});
   };
   const result=await collectReputationScan({name:'Тестовый бренд',type:'brand',region:'Москва',queries:['Тестовый бренд'],profile:{},officialSources:[]},{integrations:{yandex_search:null,serpapi:{apiKey:'s'},openrouter:null,firecrawl:null},fetchImpl});
@@ -184,7 +186,7 @@ test('each saved key has separate Yandex, Google and Wordstat requests before sh
   const queries=['Николаев Станислав Юрьевич','Станислав Николаев Меркатор'];
   const result=await collectReputationScan({name:'Станислав Николаев',type:'person',region:'Москва',periodDays:30,queries,profile:{},officialSources:[]},{fetchImpl,integrations:{yandex_search:{apiKey:'y',settings:{folderId:'folder'}},serpapi:{apiKey:'s'},openrouter:{apiKey:'o',settings:{model:'model-test'}},firecrawl:null}});
   assert.deepEqual(requests.filter(item=>item.url.endsWith('/web/search')).map(item=>item.body.query.queryText),[...queries,...queries]);
-  assert.deepEqual(requests.filter(item=>item.url.startsWith('https://serpapi.com/search.json')).map(item=>new URL(item.url).searchParams.get('q')),[...queries,...queries].map(query=>`"${query}"`));
+  assert.deepEqual(requests.filter(item=>item.url.startsWith('https://serpapi.com/search.json')).map(item=>new URL(item.url).searchParams.get('q')),[...queries,...queries]);
   assert.deepEqual(requests.filter(item=>item.url.endsWith('/wordstat/topRequests')).map(item=>item.body.phrase),queries);
   assert.deepEqual(result.searches.map(item=>item.query),[queries[0],queries[0],queries[1],queries[1]]);
   assert.equal(requests.filter(item=>item.url.endsWith('/gen/search')).length,1);

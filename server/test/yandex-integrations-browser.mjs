@@ -13,7 +13,11 @@ let app,browser;
 try {
   await migrate(db);
   const user=await db.transaction(tx=>createUser(tx,`admin-${randomUUID()}@example.test`,'browser-test-password','admin'));
-  const fetchImpl=async url=>url.includes('dadata.ru')
+  const fetchImpl=async url=>url.includes('searchapi.io')
+    ?{ok:true,json:async()=>new URL(url).searchParams.get('engine')==='google'
+      ?{organic_results:[],search_metadata:{status:'Success'}}
+      :{markdown:'Google — поисковая система.',reference_links:[]}}
+    :url.includes('dadata.ru')
     ?{ok:true,json:async()=>({suggestions:url.endsWith('/findById/party')?[{data:{inn:'7707083893'}}]:[{value:'Москва'}]})}
     :url.endsWith('/gen/search')
     ?{ok:false,status:403}
@@ -26,6 +30,8 @@ try {
   assert.equal(configured.statusCode,200,configured.body);
   const dadata=await app.inject({method:'PUT',url:'/api/admin/reputation/integrations/dadata',headers:{cookie,origin:base},payload:{apiKey:'dadata-browser-test-key',enabled:true,settings:{}}});
   assert.equal(dadata.statusCode,200,dadata.body);
+  const searchapi=await app.inject({method:'PUT',url:'/api/admin/reputation/integrations/searchapi',headers:{cookie,origin:base},payload:{apiKey:'searchapi-browser-test-key',enabled:true,settings:{}}});
+  assert.equal(searchapi.statusCode,200,searchapi.body);
   browser=await chromium.launch({headless:true,channel:'chrome'});
   for(const [width,height] of [[1440,900],[390,844]]) {
     const context=await browser.newContext({viewport:{width,height}});
@@ -59,6 +65,14 @@ try {
     await dadataDetails.click();
     assert.equal(await dadataRow.locator('#dadata-check-details').getByText('Доступен',{exact:true}).count(),2);
     assert.equal(await dadataRow.getByText('Неожиданный тип ответа').count(),0);
+    const searchapiRow=page.locator('section').filter({has:page.getByRole('heading',{name:'SearchAPI',exact:true})});
+    await searchapiRow.getByRole('button',{name:'Проверить'}).click();
+    const searchapiDetails=searchapiRow.getByRole('button',{name:/Проверка сервисов/});
+    await searchapiDetails.getByText('2 из 2 доступны').waitFor();
+    await searchapiDetails.click();
+    assert.equal(await searchapiRow.locator('#searchapi-check-details').getByText('Доступен',{exact:true}).count(),2);
+    assert.equal(await searchapiRow.locator('input').count(),1);
+    await searchapiRow.screenshot({path:`/tmp/pr-market-searchapi-row-${width}.png`});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:`/tmp/pr-market-yandex-integrations-${width}.png`,fullPage:true});
     await yandex.screenshot({path:`/tmp/pr-market-yandex-row-${width}.png`});

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { audit, once } from './finance.mjs';
 import { fail, role } from './security.mjs';
 import { uuid } from './validation.mjs';
+import { testSearchApiIntegration } from './searchapi.mjs';
 
 const OPENROUTER_BASE_URL='https://openrouter.ai/api/v1';
 const YANDEX_BASE_URL='https://searchapi.api.cloud.yandex.net/v2';
@@ -10,6 +11,7 @@ const providers={
   dadata:{name:'DaData',description:'Подсказки адресов и проверка рекламодателей по реестру',settings:{}},
   openrouter:{name:'OpenRouter',description:'LLM-анализ материалов',settings:{model:'openai/gpt-5.6-terra'}},
   yandex_search:{name:'Яндекс',description:'Поиск, генеративный ответ и Wordstat',settings:{folderId:''}},
+  searchapi:{name:'SearchAPI',description:'Google-поиск и AI-ответ Google',settings:{}},
   serpapi:{name:'SerpApi',description:'Выдача Google',settings:{}},
   ahrefs:{name:'Ahrefs',description:'AI-ответы и backlink-анализ',settings:{}},
   tgstat:{name:'TGStat',description:'Публикации и метрики Telegram',settings:{}},
@@ -251,6 +253,10 @@ export function registerReputation(app,db,{integrationSecret='local-development-
       details=await testYandexIntegration({apiKey:decrypt(row.encrypted_secret,encryptionKey),folderId,fetchImpl});
       status=details.every(check=>check.status==='success')?'success':'failed';
       message=status==='success'?'Все сервисы Яндекса доступны':'Часть сервисов Яндекса недоступна';
+    } else if(provider==='searchapi') {
+      details=await testSearchApiIntegration(decrypt(row.encrypted_secret,encryptionKey),fetchImpl);
+      status=details.every(check=>check.status==='success')?'success':'failed';
+      message=status==='success'?'Google-поиск и Google AI доступны':'Часть сервисов SearchAPI недоступна';
     } else if(provider==='dadata') {
       details=await testDadataIntegration(decrypt(row.encrypted_secret,encryptionKey),fetchImpl);
       status=details.every(check=>check.status==='success')?'success':'failed';
