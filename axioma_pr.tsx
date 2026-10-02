@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import {MaterialImage} from './src/material-image';
-import {MaterialImageControls} from './src/material-image-controls';
+import {MaterialImage,setMaterialImageDragPreview} from './src/material-image';
 import Link from '@tiptap/extension-link';
 import UnderlineExtension from '@tiptap/extension-underline';
 import FontFamily from '@tiptap/extension-font-family';
@@ -4052,7 +4051,6 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
   const [assetUrl,setAssetUrl]=useState('');
   const [uploading,setUploading]=useState(false);
   const [assetError,setAssetError]=useState('');
-  const [selectedImage,setSelectedImage]=useState<HTMLImageElement|null>(null);
   const editor=useEditor({
     immediatelyRender:false,
     shouldRerenderOnTransaction:true,
@@ -4065,12 +4063,18 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
       Link.configure({openOnClick:false,autolink:true,HTMLAttributes:{rel:'noopener noreferrer',target:'_blank'}}),
       MaterialImage.configure({
         allowBase64:false,
-        resize:{enabled:true,directions:['top-left','top-right','bottom-left','bottom-right'],minWidth:80,minHeight:50,alwaysPreserveAspectRatio:true},
+        minWidth:80,maxWidth:4096,minHeight:40,maxHeight:4096,withCaption:true,
+        captionProps:{role:'textbox','aria-label':'Подпись изображения'},
         HTMLAttributes:{class:'max-w-full rounded-lg'},
       }),
     ],
     content:value||'',
-    editorProps:{attributes:{role:'textbox','aria-label':'Текст материала','aria-multiline':'true',class:'material-content min-h-[320px] w-full p-6 outline-none'}},
+    editorProps:{attributes:{role:'textbox','aria-label':'Текст материала','aria-multiline':'true',class:'material-content min-h-[320px] w-full p-6 outline-none'},handleDOMEvents:{dragstart:(view,event)=>{
+      const target=event.target as HTMLElement;
+      const image=target.closest('.material-image-node')?.querySelector('img')||(target.classList?.contains('react-renderer')?target.querySelector('img'):null);
+      if(image)setMaterialImageDragPreview(event,image);
+      return false;
+    }}},
     onUpdate:({editor:instance})=>onChange(instance.getHTML()),
   },[MaterialImage]);
   useEffect(()=>{
@@ -4086,7 +4090,7 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
     chain.run();
   };
   const button=(label,Icon,run,active=false,text='')=><button type="button" title={label} aria-label={label} onClick={run} className={`inline-flex h-9 min-w-9 items-center justify-center rounded-lg border px-2 ${active?'border-[#006bff] bg-[#e7f1ff] text-[#006bff]':'border-transparent text-[#476788] hover:border-[#d4e0ed] hover:bg-white hover:text-[#0b3558]'}`}><Icon className="h-4 w-4" />{text&&<span className="ml-2 text-xs font-medium">{text}</span>}</button>;
-  const insertImage=(src)=>{if(!src)return;editor.chain().focus().setImage({src,alt:'Изображение материала'}).run();setAssetUrl('');setAssetPanel(null);};
+  const insertImage=(src)=>{if(!src)return;editor.chain().focus().setResizableImage({src,alt:'Изображение материала'}).run();setAssetUrl('');setAssetPanel(null);};
   const uploadImage=async event=>{
     const file=event.target.files?.[0];if(!file)return;
     setUploading(true);setAssetError('');
@@ -4124,13 +4128,7 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
       {assetError&&<p role="alert" className="mt-2 text-xs text-red-700">{assetError}</p>}
     </div>}
     {assetPanel==='link'&&<div className="flex flex-col gap-3 border-b border-[#d4e0ed] bg-white p-4 sm:flex-row sm:items-end"><label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес ссылки</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label><Button variant="primary" size="sm" onClick={setLink}>{assetUrl.trim()?'Применить':'Удалить ссылку'}</Button></div>}
-    <EditorContent editor={editor} onClickCapture={event=>{
-      const image=(event.target as HTMLElement)?.closest('img');if(!image)return;
-      event.preventDefault();event.stopPropagation();
-      editor.state.doc.descendants((node,pos)=>{if(node.type.name==='image'&&(editor.view.nodeDOM(pos) as HTMLElement)?.contains(image)){editor.chain().focus().setNodeSelection(pos).run();return false;}});
-      setSelectedImage(current=>current===image?null:image);
-    }} />
-    {selectedImage&&!rewriteOpen&&!imageOpen&&<MaterialImageControls editor={editor} image={selectedImage} onClose={()=>setSelectedImage(null)}/>}
+    <EditorContent editor={editor}/>
     <AiAssistModal isOpen={rewriteOpen} onClose={()=>setRewriteOpen(false)} body={value} onApply={body=>editor.commands.setContent(body)} onBusyChange={busy=>editor.setEditable(!busy)} />
     <AiAssistModal isOpen={imageOpen} onClose={()=>onImageOpenChange(false)} type="image" onImage={result=>onImageStored(result.file.id)} onInsertImage={result=>{editor.chain().focus().insertContentAt(editor.state.selection.to,{type:'image',attrs:{src:result.url,alt:'Изображение материала'}}).run();setAssetPanel(null);}} onBusyChange={busy=>editor.setEditable(!busy)} />
   </div>;

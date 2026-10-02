@@ -30,9 +30,26 @@ try {
     const toolbar=page.getByRole('toolbar',{name:'Форматирование текста'});
     const toolbarBox=await toolbar.boundingBox();assert.ok(Math.abs(toolbarBox.y-64)<2,'Toolbar remains flush below the cabinet header');
     assert.ok((await editor.boundingBox()).y < -500,'Image is far below the start of the long material');
-    assert.equal(await editor.locator('[data-resize-handle]').count(),4);
+    assert.equal(await editor.locator('.image-resizer:visible').count(),4);
+    await image.scrollIntoViewIfNeeded();
+    await page.evaluate(()=>{
+      window.imageDragChecks=[];
+      const original=DataTransfer.prototype.setDragImage;
+      DataTransfer.prototype.setDragImage=function(element,x,y){window.imageDragChecks.push({tag:element.tagName,width:element.width,height:element.height});return original.call(this,element,x,y);};
+    });
+    const dragBox=await image.boundingBox();
+    await page.mouse.move(dragBox.x+dragBox.width/2,dragBox.y+dragBox.height/2);await page.mouse.down();await page.mouse.move(dragBox.x+dragBox.width/2+60,dragBox.y+dragBox.height/2+35,{steps:8});await page.waitForTimeout(150);await page.keyboard.press('Escape');await page.mouse.up();
+    const dragChecks=await page.evaluate(()=>window.imageDragChecks);
+    assert.ok(dragChecks.length>0&&dragChecks.at(-1).tag==='CANVAS'&&dragChecks.at(-1).width===256,'Native mouse drag uses isolated image canvas, not page layers');
+    assert.equal(await editor.locator('img').count(),1);
     await page.getByRole('button',{name:'50%',exact:true}).click();
     const half=await image.boundingBox();assert.ok(half.width>80&&half.width<(await editor.boundingBox()).width*.55);
+    const handle=editor.locator('.image-resizer-se');await handle.scrollIntoViewIfNeeded();
+    const handleBox=await handle.boundingBox(),beforeResize=await image.boundingBox();
+    await page.mouse.move(handleBox.x+handleBox.width/2,handleBox.y+handleBox.height/2);await page.mouse.down();await page.mouse.move(handleBox.x+handleBox.width/2+30,handleBox.y+handleBox.height/2+15,{steps:6});await page.mouse.up();
+    assert.ok((await image.boundingBox()).width>beforeResize.width+20,'Library drag resize updates image width');
+    await page.getByRole('button',{name:'100%',exact:true}).click();
+    const full=await image.boundingBox();assert.ok(full.width>(await editor.boundingBox()).width-55,'Preset restores full size after drag resize');
     await page.getByRole('spinbutton',{name:'Ширина изображения в пикселях'}).fill('160');
     assert.ok(Math.abs((await image.boundingBox()).width-160)<2);
     await caption.fill('Подпись к иллюстрации');
@@ -44,8 +61,8 @@ try {
       transfer.setDragImage=node=>{preview=node;};
       element.dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:transfer}));
       element.dispatchEvent(new DragEvent('dragend',{bubbles:true}));
-      return preview===element;
-    }),true,'Drag preview is the image, not the editor or page');
+      return preview?.tagName==='CANVAS'&&preview.width===256&&preview.height===144;
+    }),true,'Drag preview is a separate image thumbnail, not the editor or page');
     const panelBox=await controls.boundingBox(),imageBox=await image.boundingBox();
     assert.ok(panelBox.x>=0&&panelBox.x+panelBox.width<=width,'Image controls stay inside editor width');
     assert.ok(Math.abs(panelBox.x-imageBox.x)<2&&Math.abs(panelBox.y-imageBox.y-imageBox.height)<3,'Controls are inline and flush below image');
@@ -56,7 +73,8 @@ try {
     await page.getByRole('button',{name:'Закрыть настройки изображения',exact:true}).click();
     await controls.waitFor({state:'hidden'});await image.click();await controls.waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
-    await controls.scrollIntoViewIfNeeded();await page.waitForTimeout(200);await controls.waitFor();await page.screenshot({path:`/tmp/axioma-image-tools-${width}.png`});assert.equal(await controls.isVisible(),true);
+    await page.getByRole('button',{name:'100%',exact:true}).click();await controls.scrollIntoViewIfNeeded();await page.waitForTimeout(200);await controls.waitFor();await page.screenshot({path:`/tmp/axioma-image-module-${width}.png`});assert.equal(await controls.isVisible(),true);assert.ok(Math.abs((await toolbar.boundingBox()).y-64)<2,`Toolbar stays pinned after image interactions: ${JSON.stringify(await toolbar.boundingBox())}`);
+    await page.getByRole('spinbutton',{name:'Ширина изображения в пикселях'}).fill('160');
     await page.getByRole('button',{name:'Сохранить черновик',exact:true}).click();
     await page.getByText(title,{exact:true}).first().waitFor();
     const saved=(await f.db.query('SELECT * FROM materials WHERE title=$1',[title])).rows[0];
