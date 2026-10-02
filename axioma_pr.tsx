@@ -72,6 +72,7 @@ import {
   Tag,
   BookOpen,
   Sparkles,
+  LoaderCircle,
   Users,
   TrendingUp,
   Link2,
@@ -1444,8 +1445,34 @@ const MaterialRightsDisclaimer = () => (
   </div>
 );
 
-const AiAssistModal = ({ isOpen, onClose, type = 'rewrite' }) => (
-  <Modal isOpen={isOpen} onClose={onClose} title={type === 'image' ? 'Генерация изображения с помощью ИИ' : 'Рерайт с помощью ИИ'} className="max-w-2xl">
+const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply = (_body: string) => {}, onBusyChange = (_busy: boolean) => {} }) => {
+  const backend=useBackend();
+  const [prompt,setPrompt]=useState('Переписать материал в деловом стиле, сохранить факты, сделать текст короче и яснее.');
+  const [imagePrompt,setImagePrompt]=useState('Сгенерировать деловую иллюстрацию для материала о платформе аналитики.');
+  const [busy,setBusy]=useState(false);
+  const request=useRef(null);
+  const close=()=>{if(!busy)onClose();};
+  const rewrite=async()=>{
+    if(busy||backend.busy)return;
+    const payload={body,prompt},signature=JSON.stringify(payload);
+    if(request.current?.signature!==signature)request.current={signature,key:crypto.randomUUID()};
+    setBusy(true);onBusyChange(true);
+    try {
+      const ok=await backend.perform(async()=>{
+        let result=await api('/materials/ai-rewrite','POST',payload,request.current.key);
+        while(['queued','running'].includes(result.status)) {
+          await new Promise(resolve=>setTimeout(resolve,1500));
+          result=await api(`/materials/ai-rewrite/${result.id}`);
+        }
+        request.current=null;
+        if(result.status!=='completed')throw new Error(result.error||'Не удалось выполнить рерайт');
+        onApply(result.body);
+        await backend.refresh().catch(error=>backend.setError(error.message));
+      });
+      if(ok)onClose();
+    } finally {setBusy(false);onBusyChange(false);}
+  };
+  return <Modal isOpen={isOpen} onClose={close} title={type === 'image' ? 'Генерация изображения с помощью ИИ' : 'Рерайт с помощью ИИ'} className="max-w-2xl">
     <div className="space-y-5">
       <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
         <div className="text-sm font-semibold text-[#0b3558]">{type === 'image' ? 'Стоимость генерации: 50 ₽' : 'Стоимость рерайта: 30 ₽'}</div>
@@ -1455,16 +1482,18 @@ const AiAssistModal = ({ isOpen, onClose, type = 'rewrite' }) => (
         <span className="text-sm font-medium text-[#476788]">Промт / ТЗ</span>
         <textarea
           className="mt-2 w-full min-h-[180px] border border-[#476788] rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
-          defaultValue={type === 'image' ? 'Сгенерировать деловую иллюстрацию для материала о платформе аналитики.' : 'Переписать материал в деловом стиле, сохранить факты, сделать текст короче и яснее.'}
+          value={type === 'image' ? imagePrompt : prompt}
+          disabled={busy}
+          onChange={event=>type==='image'?setImagePrompt(event.target.value):setPrompt(event.target.value)}
         />
       </label>
-      <div className="flex justify-end gap-3">
-        <Button variant="secondary" onClick={onClose}>Отмена</Button>
-        <Button variant="primary" onClick={onClose}>{type === 'image' ? 'Сгенерировать за 50 ₽' : 'Запустить рерайт за 30 ₽'}</Button>
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <Button variant="secondary" disabled={busy} onClick={close}>Отмена</Button>
+        <Button variant="primary" disabled={busy||(type==='rewrite'&&(!prompt.trim()||!richTextLength(body)))} onClick={type==='image'?onClose:rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}{type === 'image' ? 'Сгенерировать за 50 ₽' : 'Запустить рерайт за 30 ₽'}</Button>
       </div>
     </div>
   </Modal>
-);
+};
 
 const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = [], materials = mockMaterials, projects = [], onCreateOrders, informer = null }) => {
   const backend = useBackend();
@@ -4009,6 +4038,7 @@ const richTextLength = (html = '') => {
 };
 
 const RichTextEditor = ({ value, onChange }) => {
+  const [rewriteOpen,setRewriteOpen]=useState(false);
   const imageInput=useRef(null);
   const [assetPanel,setAssetPanel]=useState(null);
   const [assetUrl,setAssetUrl]=useState('');
@@ -4072,6 +4102,7 @@ const RichTextEditor = ({ value, onChange }) => {
       <div className="mx-1 h-6 w-px bg-[#d4e0ed]" />
       <CustomSelect className="w-32" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" value={editor.getAttributes('textStyle').fontFamily||'Arial'} onChange={font=>applyTypography('fontFamily',font)} options={['Manrope','Arial','Georgia']} />
       <CustomSelect className="w-24" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" value={(editor.getAttributes('textStyle').fontSize||'16px').replace('px',' px')} onChange={size=>applyTypography('fontSize',size.replace(' ',''))} options={['10 px','12 px','14 px','16 px','18 px','20 px','24 px','28 px','32 px','36 px','48 px']} />
+      <Button variant="primary" size="sm" className="ml-auto w-full sm:w-auto" onClick={()=>setRewriteOpen(true)}><Sparkles className="h-4 w-4 shrink-0"/>Рерайт с помощью ИИ · 30 ₽</Button>
     </div>
     {assetPanel==='image'&&<div className="border-b border-[#d4e0ed] bg-white p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -4085,6 +4116,7 @@ const RichTextEditor = ({ value, onChange }) => {
     </div>}
     {assetPanel==='link'&&<div className="flex flex-col gap-3 border-b border-[#d4e0ed] bg-white p-4 sm:flex-row sm:items-end"><label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес ссылки</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label><Button variant="primary" size="sm" onClick={setLink}>{assetUrl.trim()?'Применить':'Удалить ссылку'}</Button></div>}
     <EditorContent editor={editor} />
+    <AiAssistModal isOpen={rewriteOpen} onClose={()=>setRewriteOpen(false)} body={value} onApply={body=>editor.commands.setContent(body)} onBusyChange={busy=>editor.setEditable(!busy)} />
   </div>;
 };
 
@@ -4147,7 +4179,6 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
           <span className="text-sm font-medium text-[#476788]">Текст материала</span>
           <div className="flex items-center gap-3">
             <span className="text-xs text-[#476788]">{richTextLength(draft.body)} знаков</span>
-            <Button variant="secondary" size="sm" onClick={() => onOpenAi('rewrite')}>Рерайт с помощью ИИ · 30 ₽</Button>
           </div>
         </div>
         <RichTextEditor value={draft.body||''} onChange={body=>onChange({body})} />

@@ -3,7 +3,8 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { z, ZodError } from 'zod';
-import sanitizeHtml from 'sanitize-html';
+import {sanitizeMaterialBody} from './material-content.mjs';
+import {registerAiRewrite} from './ai-rewrite.mjs';
 import { digest, hashPassword, verifyPassword, fail, role } from './security.mjs';
 import { credentials, materialInput, outletInput, uuid, url } from './validation.mjs';
 import { audit, once, quote, transfer } from './finance.mjs';
@@ -69,13 +70,7 @@ async function outletLogo(tx,data,owner) {
   const file=await owned(tx,'files',data.details.logoFileId,owner);
   if(!['image/png','image/jpeg','image/webp'].includes(file.mime))fail(400,'Logo must be an image');
 }
-const cleanMaterial=data=>({...data,body:sanitizeHtml(data.body,{
-  allowedTags:['p','br','h1','h2','strong','b','em','i','ul','ol','li','blockquote','a','img','font','span'],
-  allowedAttributes:{a:['href','target','rel'],img:['src','alt'],font:['face','size'],span:['style']},
-  allowedSchemes:['http','https','mailto'],
-  allowedStyles:{span:{'font-family':[/^(Manrope|Arial|Georgia)$/],'font-size':[/^(10|12|14|16|18|20|24|28|32|36|48)px$/]}},
-  transformTags:{a:(tag,attrs)=>({tagName:tag,attribs:{...attrs,target:'_blank',rel:'noopener noreferrer'}})},
-}).trim()});
+const cleanMaterial=data=>({...data,body:sanitizeMaterialBody(data.body)});
 
 const advertiserInput=z.object({
   name:z.string().trim().min(2,'Укажите юридическое название').max(300),
@@ -550,5 +545,6 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   registerReports(app,db);
   registerClosingDocuments(app,db,{sellerConfig,storageRoot});
   registerReputation(app,db,{integrationSecret,fetchImpl,appOrigin:origin});
+  registerAiRewrite(app,db,{integrationSecret,fetchImpl,appOrigin:origin});
   return app;
 }
