@@ -124,6 +124,11 @@ textarea {
 .material-content blockquote { border-left: 3px solid #9bb6d3; padding-left: 1em; }
 .material-content a { color: #006bff; text-decoration: underline; text-underline-offset: 2px; }
 .material-content img { display: block; max-width: 100%; height: auto; margin: 1em 0; }
+.material-content figure { margin: 1em 0; }
+.material-content figure img { margin: 0; }
+.material-content figure :where([data-resize-container], [data-resize-wrapper]) { max-width: 100%; min-width: 0; }
+.material-content figure.ProseMirror-selectednode img { outline: 2px solid #006bff; outline-offset: 2px; }
+.material-content figcaption { margin-top: .5em; color: #476788; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 
 @keyframes ui-enter {
   from {

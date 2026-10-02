@@ -14,7 +14,7 @@ try {
   for(const width of [1440,390]) {
     f=await createFixture();
     await f.db.query('UPDATE accounts SET balance=20000 WHERE id=$1',[`${f.user.id}:available`]);
-    const context=await browser.newContext({viewport:{width,height:950}});
+    const context=await browser.newContext({viewport:{width,height:700}});
     await context.route('**/api/**',async route=>{
       const req=route.request(),url=new URL(req.url());
       const result=await f.app.inject({method:req.method(),url:url.pathname+url.search,headers:{...req.headers(),cookie:f.cookie},payload:req.postData()??undefined});
@@ -31,19 +31,26 @@ try {
     await modal.getByRole('button',{name:'Сгенерировать за 50 ₽',exact:true}).click();
     const preview=modal.getByAltText('Сгенерированное изображение');await preview.waitFor();
     await page.waitForFunction(()=>document.querySelector('img[alt="Сгенерированное изображение"]')?.naturalWidth===1024);
-    assert.equal(await editor.locator('img').count(),1);assert.match(await editor.innerText(),/Исходный текст/);
+    assert.equal(await editor.locator('img').count(),0);assert.match(await editor.innerText(),/Исходный текст/);
     assert.deepEqual(await f.balance(),{available:15000,reserved:0});
+    assert.equal(await modal.locator('textarea').count(),0);
+    const repeat=modal.getByRole('button',{name:'Сгенерировать повторно · 50 ₽',exact:true});
+    const insert=modal.getByRole('button',{name:'Вставить в текст',exact:true});
+    for(const button of [repeat,insert]){const bounds=await button.boundingBox();assert.ok(bounds.y>=0&&bounds.y+bounds.height<=700);}
     await page.screenshot({path:`/tmp/axioma-image-result-${width}.png`});
-    await modal.getByRole('button',{name:'Закрыть',exact:true}).click();
-    await page.getByRole('button',{name:'сгенерируйте изображение с помощью ИИ за 50 ₽',exact:true}).click();
-    await modal.getByRole('button',{name:'Сгенерировать ещё за 50 ₽',exact:true}).click();
-    await page.waitForFunction(()=>!document.querySelector('[role="dialog"] textarea')?.disabled);
-    await preview.waitFor();assert.equal(await editor.locator('img').count(),2);
+    const firstUrl=await preview.getAttribute('src');
+    await repeat.click();
+    await page.waitForFunction(old=>document.querySelector('img[alt="Сгенерированное изображение"]')?.getAttribute('src')!==old,firstUrl);
+    await preview.waitFor();assert.equal(await editor.locator('img').count(),0);
     assert.deepEqual(await f.balance(),{available:10000,reserved:0});
-    await modal.getByRole('button',{name:'Сгенерировать ещё за 50 ₽',exact:true}).click();
-    await page.waitForFunction(()=>!document.querySelector('[role="dialog"] textarea')?.disabled);
-    assert.deepEqual(await f.balance(),{available:5000,reserved:0});assert.equal(await editor.locator('img').count(),3);
-    await modal.getByRole('button',{name:'Закрыть',exact:true}).click();
+    const selectedUrl=await preview.getAttribute('src');await insert.click();await modal.waitFor({state:'hidden'});
+    assert.equal(await editor.locator('img').count(),1);assert.equal(await editor.locator('img').getAttribute('src'),selectedUrl);
+    assert.deepEqual(await f.balance(),{available:10000,reserved:0});
+    await page.getByRole('button',{name:'сгенерируйте изображение с помощью ИИ за 50 ₽',exact:true}).click();
+    await repeat.click();await page.waitForFunction(old=>document.querySelector('img[alt="Сгенерированное изображение"]')?.getAttribute('src')!==old,selectedUrl);
+    assert.deepEqual(await f.balance(),{available:5000,reserved:0});assert.equal(await editor.locator('img').count(),1);
+    await insert.click();await modal.waitFor({state:'hidden'});assert.equal(await editor.locator('img').count(),2);
+    assert.deepEqual(await f.balance(),{available:5000,reserved:0});
     const attachments=page.getByRole('button',{name:/^Удалить файл ai-image-/});await attachments.first().waitFor();
     assert.equal(await attachments.count(),3);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
@@ -52,5 +59,5 @@ try {
     await page.screenshot({path:`/tmp/axioma-image-panel-${width}.png`});
     assert.deepEqual(errors,[]);await context.close();await f.close();f=null;
   }
-  assert.equal(calls,6);console.log('Both generation entry points insert images into text and attachments; repeats retain previous images on desktop/mobile');
+  assert.equal(calls,6);console.log('Compact result preview, visible repeat/insert buttons, paid regeneration and free explicit insertion verified on desktop/mobile');
 } finally {await browser.close();if(f)await f.close();}

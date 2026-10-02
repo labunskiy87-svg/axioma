@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Image from '@tiptap/extension-image';
+import {MaterialImage} from './src/material-image';
 import Link from '@tiptap/extension-link';
 import UnderlineExtension from '@tiptap/extension-underline';
 import FontFamily from '@tiptap/extension-font-family';
@@ -1445,7 +1445,7 @@ const MaterialRightsDisclaimer = () => (
   </div>
 );
 
-const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply = (_body: string) => {}, onImage = (_result: any) => {}, onBusyChange = (_busy: boolean) => {} }) => {
+const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply = (_body: string) => {}, onImage = (_result: any) => {}, onInsertImage = (_result: any) => {}, onBusyChange = (_busy: boolean) => {} }) => {
   const backend=useBackend();
   const [prompt,setPrompt]=useState('Переписать материал в деловом стиле, сохранить факты, сделать текст короче и яснее.');
   const [imagePrompt,setImagePrompt]=useState('Сгенерировать деловую иллюстрацию для материала о платформе аналитики.');
@@ -1473,9 +1473,14 @@ const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply =
       if(ok&&type!=='image')onClose();
     } finally {setBusy(false);onBusyChange(false);}
   };
-  return <Modal isOpen={isOpen} onClose={close} title={type === 'image' ? 'Генерация изображения с помощью ИИ' : 'Рерайт с помощью ИИ'} className="max-w-2xl">
+  const imageResult=type==='image'&&generatedImage;
+  const resultActions=imageResult?<div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+    <Button variant="secondary" disabled={busy} onClick={rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}Сгенерировать повторно · 50 ₽</Button>
+    <Button variant="primary" disabled={busy} onClick={()=>{onInsertImage(generatedImage);onClose();}}><ImageIcon className="h-4 w-4 shrink-0"/>Вставить в текст</Button>
+  </div>:null;
+  return <Modal isOpen={isOpen} onClose={close} title={type === 'image' ? 'Генерация изображения с помощью ИИ' : 'Рерайт с помощью ИИ'} className="max-w-2xl" footer={resultActions}>
+    {imageResult?<img src={generatedImage.url} alt="Сгенерированное изображение" className="block aspect-video max-h-[55dvh] w-full rounded-lg object-contain" />:
     <div className="space-y-5">
-      {type==='image'&&generatedImage&&<img src={generatedImage.url} alt="Сгенерированное изображение" className="block aspect-video w-full rounded-lg object-contain" />}
       <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
         <div className="text-sm font-semibold text-[#0b3558]">{type === 'image' ? 'Стоимость генерации: 50 ₽' : 'Стоимость рерайта: 30 ₽'}</div>
         <p className="text-sm text-[#476788] mt-1">Сумма будет списана с баланса после запуска операции.</p>
@@ -1490,10 +1495,10 @@ const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply =
         />
       </label>
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <Button variant="secondary" disabled={busy} onClick={close}>{type==='image'&&generatedImage?'Закрыть':'Отмена'}</Button>
-        <Button variant="primary" disabled={busy||(type==='image'?!imagePrompt.trim():(!prompt.trim()||!richTextLength(body)))} onClick={rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}{type === 'image' ? (generatedImage?'Сгенерировать ещё за 50 ₽':'Сгенерировать за 50 ₽') : 'Запустить рерайт за 30 ₽'}</Button>
+        <Button variant="secondary" disabled={busy} onClick={close}>Отмена</Button>
+        <Button variant="primary" disabled={busy||(type==='image'?!imagePrompt.trim():(!prompt.trim()||!richTextLength(body)))} onClick={rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}{type === 'image' ? 'Сгенерировать за 50 ₽' : 'Запустить рерайт за 30 ₽'}</Button>
       </div>
-    </div>
+    </div>}
   </Modal>
 };
 
@@ -4056,7 +4061,7 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
       FontSize,
       FontFamily.configure({types:['textStyle']}),
       Link.configure({openOnClick:false,autolink:true,HTMLAttributes:{rel:'noopener noreferrer',target:'_blank'}}),
-      Image.configure({
+      MaterialImage.configure({
         allowBase64:false,
         resize:{enabled:true,directions:['top-left','top-right','bottom-left','bottom-right'],minWidth:80,minHeight:50,alwaysPreserveAspectRatio:true},
         HTMLAttributes:{class:'max-w-full rounded-lg'},
@@ -4065,7 +4070,8 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
     content:value||'',
     editorProps:{attributes:{role:'textbox','aria-label':'Текст материала','aria-multiline':'true',class:'material-content min-h-[320px] w-full p-6 outline-none'}},
     onUpdate:({editor:instance})=>onChange(instance.getHTML()),
-  });
+    onSelectionUpdate:({editor:instance})=>{if(instance.isActive('image'))setAssetPanel('image');},
+  },[MaterialImage]);
   useEffect(()=>{
     if(editor && !editor.isFocused && editor.getHTML()!==(value||''))editor.commands.setContent(value||'',{emitUpdate:false});
   },[editor,value]);
@@ -4114,13 +4120,22 @@ const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImage
         <Button variant="primary" size="sm" disabled={uploading} onClick={()=>imageInput.current?.click()}><UploadCloud className="h-4 w-4" />{uploading?'Загрузка…':'Загрузить файл'}</Button>
         <Button variant="primary" size="sm" onClick={()=>onImageOpenChange(true)}><Sparkles className="h-4 w-4"/>Сгенерировать · 50 ₽</Button>
       </div>
-      {editor.isActive('image')&&<div className="mt-3 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-medium text-[#476788]">Ширина:</span>{['25%','50%','75%','100%'].map(width=><button key={width} type="button" className="rounded-lg border border-[#d4e0ed] px-3 py-1.5 text-xs font-semibold text-[#0b3558] hover:border-[#006bff]" onClick={()=>editor.chain().focus().updateAttributes('image',{width}).run()}>{width}</button>)}</div>}
+      {editor.isActive('image')&&<div className="mt-3 space-y-3">
+        <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-medium text-[#476788]">Ширина:</span>{[25,50,75,100].map(percent=><button key={percent} type="button" className="rounded-lg border border-[#d4e0ed] px-3 py-1.5 text-xs font-semibold text-[#0b3558] hover:border-[#006bff]" onClick={()=>editor.chain().focus().updateAttributes('image',{width:Math.round((editor.view.dom.clientWidth-48)*percent/100),height:null}).run()}>{percent}%</button>)}
+          <label className="flex items-center gap-2 text-xs text-[#476788]"><input aria-label="Ширина изображения в пикселях" type="number" min={80} max={4096} className="w-24 rounded-lg border border-[#476788] px-2 py-1.5 text-sm text-[#0b3558]" value={editor.getAttributes('image').width||''} onChange={event=>{const width=Number(event.target.value);if(width>=80&&width<=4096)editor.commands.updateAttributes('image',{width,height:null});}}/>px</label>
+          {button('Удалить изображение',Trash2,()=>editor.chain().focus().deleteSelection().run())}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label><span className="text-xs font-medium text-[#476788]">Подпись</span><input aria-label="Подпись изображения" maxLength={300} className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" value={editor.getAttributes('image').caption||''} onChange={event=>editor.commands.updateAttributes('image',{caption:event.target.value})}/></label>
+          <label><span className="text-xs font-medium text-[#476788]">Альтернативный текст</span><input aria-label="Альтернативный текст изображения" maxLength={500} className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" value={editor.getAttributes('image').alt||''} onChange={event=>editor.commands.updateAttributes('image',{alt:event.target.value})}/></label>
+        </div>
+      </div>}
       {assetError&&<p role="alert" className="mt-2 text-xs text-red-700">{assetError}</p>}
     </div>}
     {assetPanel==='link'&&<div className="flex flex-col gap-3 border-b border-[#d4e0ed] bg-white p-4 sm:flex-row sm:items-end"><label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес ссылки</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label><Button variant="primary" size="sm" onClick={setLink}>{assetUrl.trim()?'Применить':'Удалить ссылку'}</Button></div>}
-    <EditorContent editor={editor} />
+    <EditorContent editor={editor} onClickCapture={event=>{if((event.target as HTMLElement)?.closest('img'))setAssetPanel('image');}} />
     <AiAssistModal isOpen={rewriteOpen} onClose={()=>setRewriteOpen(false)} body={value} onApply={body=>editor.commands.setContent(body)} onBusyChange={busy=>editor.setEditable(!busy)} />
-    <AiAssistModal isOpen={imageOpen} onClose={()=>onImageOpenChange(false)} type="image" onImage={result=>{editor.chain().focus().insertContentAt(editor.state.selection.to,{type:'image',attrs:{src:result.url,alt:'Изображение материала'}}).run();setAssetPanel(null);onImageStored(result.file.id);}} onBusyChange={busy=>editor.setEditable(!busy)} />
+    <AiAssistModal isOpen={imageOpen} onClose={()=>onImageOpenChange(false)} type="image" onImage={result=>onImageStored(result.file.id)} onInsertImage={result=>{editor.chain().focus().insertContentAt(editor.state.selection.to,{type:'image',attrs:{src:result.url,alt:'Изображение материала'}}).run();setAssetPanel(null);}} onBusyChange={busy=>editor.setEditable(!busy)} />
   </div>;
 };
 
