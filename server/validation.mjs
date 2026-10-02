@@ -29,5 +29,7 @@ export const outletInput = z.object({
   prices: z.partialRecord(format,z.number().int().min(100).max(100000000)).refine(v => Object.keys(v).length > 0),
   coefficientBps: z.number().int().min(1000).max(30000).default(10000),
   discountBps: z.number().int().min(0).max(9000).default(0),
+  seasonStart: z.iso.date().nullable().default(null),
   discountUntil: z.iso.date().nullable().default(null),
-}).strict().refine(v => !v.discountBps || v.discountUntil, 'Discount end date required');
+}).strict().refine(v => !v.discountBps || v.discountUntil, 'Discount end date required')
+  .refine(v=>!v.seasonStart || (v.discountUntil && v.seasonStart<=v.discountUntil),'Season end date must not precede start date');

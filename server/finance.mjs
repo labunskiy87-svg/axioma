@@ -33,8 +33,11 @@ export function quote(outlet, format, today = new Date().toISOString().slice(0,1
   const base = outlet.prices[format];
   if (!Number.isInteger(base) || base <= 0) fail(409, 'Format unavailable');
   const until = outlet.discount_until instanceof Date ? outlet.discount_until.toISOString().slice(0,10) : outlet.discount_until;
-  const discount = until && until >= today ? outlet.discount_bps : 0;
-  return Math.round(base * outlet.coefficient_bps * (10000 - discount) / 100000000);
+  const start = outlet.season_start instanceof Date ? outlet.season_start.toISOString().slice(0,10) : outlet.season_start;
+  const seasonal = (!start || start <= today) && (!until || until >= today);
+  const discount = seasonal && until ? outlet.discount_bps : 0;
+  const coefficient = seasonal ? outlet.coefficient_bps : 10000;
+  return Math.round(base * coefficient * (10000 - discount) / 100000000);
 }
 
 export async function audit(tx, actor, action, entity, details = {}) {

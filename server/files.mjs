@@ -20,7 +20,7 @@ export async function registerFiles(app,db,storageRoot) {
     if(!order) fail(404,'File not found');return file;
   }
   app.post('/api/files',async req=>{
-    role(req.user,'customer','publisher');
+    role(req.user,'customer','publisher','admin');
     const part=await req.file();if(!part) fail(400,'File required');
     const buffer=await part.toBuffer();
     if(!buffer.length || part.file.truncated) fail(413,'File exceeds 20 MB');

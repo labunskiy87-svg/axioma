@@ -35,7 +35,7 @@ export async function seedDemo(db) {
       const id=randomUUID(),status=i===6?'pending':'approved',active=i!==5&&i!==6;
       const prices=kind==='media'?{article:4500000,news:2200000,longread:6500000}:{post:1500000,article:3000000};
       const details={topics:i===1?['Город','Общество']:['Технологии','Бизнес'],goals:i===1?['pr','serm']:['pr','seo'],aggregators:kind==='media'?['google_news','dzen']:[],dailyAudience:12000+i*5000,subscribers:kind==='media'?0:20000+i*3000,medialogiaRank:i+8,publicationDays:2,publicationDaysByFormat:Object.fromEntries(Object.keys(prices).map(f=>[f,f==='news'?1:2])),storageMonths:24,responseHours:4,requirements:'Демонстрационная площадка. Готовый текст, изображения с правами использования и сведения для маркировки. Реальные публикации не выполняются.'};
-      const outlet={id,name,url:`https://outlet-${i+1}.example.test`,prices,coefficient_bps:10000,discount_bps:i===0?1000:0,discount_until:'2099-12-31'};outlets.push(outlet);
+      const outlet={id,name,url:`https://outlet-${i+1}.example.test`,prices,details,coefficient_bps:10000,discount_bps:i===0?1000:0,discount_until:'2099-12-31'};outlets.push(outlet);
       await tx.query('INSERT INTO outlets(id,owner_id,name,url,kind,geography,details,prices,status,active,discount_bps,discount_until) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',[id,publisher,name,outlet.url,kind,geography,JSON.stringify(details),JSON.stringify(prices),status,active,outlet.discount_bps,outlet.discount_until]);
     }
     const materials=[];
@@ -51,7 +51,12 @@ export async function seedDemo(db) {
     const states=['pending','accepted','submitted','completed','rejected','disputed','refunded'];
     for(const [i,status] of states.entries()) {
       const m=materials[i>=4?2:i%2],o=outlets[i>=4?i-2:Math.floor(i/2)],id=randomUUID(),amount=quote(o,m.format),payout=amount-Math.round(amount*0.15);
-      const snapshot={...m,title:`Демо: ${m.title}`,advertiser:{name:m.advertiser.name,inn:m.advertiser.inn},outlet:{name:o.name,url:o.url},commissionBps:1500};
+      const deadlineAt=status==='pending'
+        ? new Date(Date.now()+Number(o.details?.responseHours||4)*3600000).toISOString()
+        : status==='accepted'
+          ? new Date(Date.now()+Number(o.details?.publicationDays||2)*86400000).toISOString()
+          : null;
+      const snapshot={...m,title:`Демо: ${m.title}`,advertiser:{name:m.advertiser.name,inn:m.advertiser.inn},outlet:{name:o.name,url:o.url},commissionBps:1500,schedule:{responseHours:Number(o.details?.responseHours||4),publicationDays:Number(o.details?.publicationDays||2),deadlineAt}};
       await transfer(tx,`${owner}:available`,`${owner}:reserved`,amount,`demo:order:${id}:reserve`);
       if(status==='completed') {
         await transfer(tx,`${owner}:reserved`,`${publisher}:available`,payout,`demo:order:${id}:payout`);
