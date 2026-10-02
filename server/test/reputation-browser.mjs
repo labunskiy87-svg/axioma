@@ -103,6 +103,17 @@ try {
     await page.getByRole('button',{name:'Темы',exact:true}).click();
     await page.getByRole('heading',{name:'Обвинения по контрактам',exact:true}).waitFor();
     assert.equal(await page.getByText('90',{exact:true}).count(),1);
+    const topicCard=page.locator('[data-topic-card]').first();
+    const toneLabel=await topicCard.getByText('Негативная',{exact:true}).boundingBox();
+    const headingBox=await topicCard.getByRole('heading').boundingBox();
+    assert.ok(toneLabel.y>=headingBox.y+headingBox.height);
+    assert.ok(Math.abs(toneLabel.x-headingBox.x)<2);
+    await topicCard.getByRole('heading').evaluate(node=>{node.textContent='Передача реликвий музеям и храмам и участие в историко-культурных проектах';});
+    const movedBadge=await topicCard.getByText('Негативная',{exact:true}).boundingBox();
+    const changedHeading=await topicCard.getByRole('heading').boundingBox();
+    assert.equal(movedBadge.x,toneLabel.x);
+    assert.ok(Math.abs((movedBadge.y-changedHeading.y-changedHeading.height)-(toneLabel.y-headingBox.y-headingBox.height))<2);
+    await page.screenshot({path:`/tmp/pr-market-reputation-topic-label-${width}.png`,fullPage:true});
     await page.getByRole('button',{name:'Поисковая выдача',exact:true}).click();
     await page.getByRole('tab',{name:'Google AI'}).click();
     await page.getByText('Google AI: ответ о тестовой марке.').waitFor();
