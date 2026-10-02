@@ -7,7 +7,7 @@ import {migrate} from '../db.mjs';
 import {collectReputationScan} from '../reputation-worker.mjs';
 import {searchApiGoogle,searchApiAiMode,testSearchApiIntegration} from '../searchapi.mjs';
 
-test('SearchAPI collects 50 results with unquoted queries, absolute ranks and Markdown',async()=>{
+test('SearchAPI collects 100 results with unquoted queries, absolute ranks and Markdown',async()=>{
   const pages=[];
   const result=await searchApiGoogle('Николаев Станислав Юрьевич','Москва',{apiKey:'private-key'},async(url,options)=>{
     const params=new URL(url).searchParams,page=Number(params.get('page'));pages.push(page);
@@ -17,9 +17,9 @@ test('SearchAPI collects 50 results with unquoted queries, absolute ranks and Ma
     assert.equal(params.has('api_key'),false);assert.equal(options.headers.Authorization,'Bearer private-key');
     return Response.json({search_metadata:{status:'Success',id:'search-1'},organic_results:Array.from({length:10},(_,index)=>({link:`https://example.org/${(page-1)*10+index+1}`,title:`Материал [${index}]`,snippet:'Очищенный сниппет',position:index+1}))});
   });
-  assert.deepEqual(pages,[1,2,3,4,5]);
-  assert.equal(result.items.length,50);assert.equal(result.items[49].position,50);
-  assert.match(result.markdown,/50\. \[Материал/);assert.doesNotMatch(JSON.stringify(result),/private-key/);
+  assert.deepEqual(pages,[1,2,3,4,5,6,7,8,9,10]);
+  assert.equal(result.items.length,100);assert.equal(result.items[99].position,100);
+  assert.match(result.markdown,/100\. \[Материал/);assert.doesNotMatch(JSON.stringify(result),/private-key/);
 });
 
 test('SearchAPI keeps collected pages on a later failure and deduplicates normalized URLs',async()=>{
@@ -63,8 +63,9 @@ test('monitoring prefers SearchAPI and sends each key separately before one shar
     const page=Number(params.get('page'));
     return Response.json({search_metadata:{status:'Success'},organic_results:Array.from({length:10},(_,index)=>({link:`https://example.org/${params.get('q').includes('Юрьевич')?'full':'brand'}-${page}-${index}`,title:'Материал',snippet:'Текст',position:index+1}))});
   }});
-  assert.deepEqual(result.searches.map(x=>x.items.length),[50,50]);
-  for(const query of queries)assert.equal(requests.filter(x=>x.q===query&&!x.time_period).length,5);
+  assert.deepEqual(result.searches.map(x=>x.items.length),[100,100]);
+  assert.deepEqual(result.publicationSearches.map(x=>x.items.length),[100,100]);
+  for(const query of queries)assert.equal(requests.filter(x=>x.q===query&&!x.time_period).length,10);
   const ai=requests.filter(x=>x.engine==='google_ai_mode');assert.equal(ai.length,1);
   assert.ok(queries.every(q=>ai[0].q.includes(q)));assert.match(ai[0].q,/до 1000 символов/);
   assert.equal(result.publicationSearches.length,2);assert.equal(result.googleAi[0].sources[0].url,'https://example.org/story');

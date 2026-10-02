@@ -3,11 +3,16 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { openRouterChat, reputationIntegration } from './reputation.mjs';
 import { searchApiGoogle, searchApiAiMode } from './searchapi.mjs';
+import {analyzeNegativeTopics,analyzeMaterialTopics,negativeMaterials} from './reputation-negative-topics.mjs';
+import {preselectMaterials} from './reputation-preselection.mjs';
 
 const YANDEX='https://searchapi.api.cloud.yandex.net/v2';
 const serpLocation={Москва:'Moscow,Russia',Россия:'Russia','Санкт-Петербург':'Saint Petersburg,Russia'};
 const yandexRegion={Москва:'213','Санкт-Петербург':'2'};
-const xml=new XMLParser({ignoreAttributes:false,removeNSPrefix:true,trimValues:true});
+const xml=new XMLParser({ignoreAttributes:false,removeNSPrefix:true,trimValues:true,stopNodes:['*.title','*.passage','*.headline']});
+const inlineXml=new XMLParser({preserveOrder:true,ignoreAttributes:true,removeNSPrefix:true,trimValues:false,parseTagValue:false});
+const orderedText=nodes=>nodes.map(node=>Object.entries(node).map(([key,value])=>key==='#text'?String(value):Array.isArray(value)?orderedText(value):'').join('')).join('');
+const searchText=value=>asArray(value).map(part=>orderedText(inlineXml.parse(`<fragment>${String(part??'')}</fragment>`))).join(' ').replace(/\s+/g,' ').trim();
 const analysisSchema=z.object({
   relevance:z.enum(['relevant','uncertain','irrelevant']),
   sourceType:z.enum(['media','corporate','blog','aggregator','reference','ugc','unknown']),
@@ -57,7 +62,6 @@ async function requestText(fetchImpl,url,{timeout=20000}={}) {
   return response.text();
 }
 const asArray=value=>value===undefined?[]:Array.isArray(value)?value:[value];
-const plain=value=>typeof value==='string'?value:Array.isArray(value)?value.map(plain).join(' '):value&&typeof value==='object'?Object.values(value).map(plain).join(' '):'';
 const cacheKey=(provider,input)=>createHash('sha256').update(`${provider}:${JSON.stringify(input)}`).digest('hex');
 async function cached(cache,provider,input,ttlSeconds,load) {
   if(!cache)return load();
@@ -84,7 +88,7 @@ export function parseYandexResults(rawData,maxResults=100) {
   if(root.response?.error)throw new Error('Яндекс отклонил поисковый запрос');
   const groups=asArray(root.response?.results?.grouping?.group);
   return groups.flatMap(group=>asArray(group?.doc)).slice(0,maxResults).map((doc,index)=>({
-    url:normalizeUrl(doc.url),title:plain(doc.title).trim(),snippet:plain(doc.passages?.passage??doc.headline).trim(),
+    url:normalizeUrl(doc.url),title:searchText(doc.title),snippet:searchText(doc.passages?.passage??doc.headline),
     position:index+1,date:doc.modtime??null,
   })).filter(item=>item.url);
 }
@@ -149,11 +153,15 @@ async function googleAiMode(subject,connection,fetchImpl,provider='serpapi') {
   if(!markdown)throw new Error('Google AI не вернул ответ');
   return {query:subject.queries.join('; '),markdown,source:'SerpApi AI Mode'};
 }
-async function googleOrganic(query,region,connection,fetchImpl,provider='serpapi') {
-  if(provider==='searchapi')return searchApiGoogle(query,region,connection,fetchImpl);
+async function googleOrganic(query,region,connection,fetchImpl,provider='serpapi',periodDays) {
+  if(provider==='searchapi')return searchApiGoogle(query,region,connection,fetchImpl,{periodDays});
   const params=new URLSearchParams({engine:'google',q:googlePhrase(query),location:serpLocation[region]??region,hl:'ru',gl:'ru',api_key:connection.apiKey,output:'json'});
+  if(periodDays===14) {
+    const date=value=>`${value.getUTCMonth()+1}/${value.getUTCDate()}/${value.getUTCFullYear()}`;
+    params.set('tbs',`cdr:1,cd_min:${date(new Date(Date.now()-14*86400000))},cd_max:${date(new Date())}`);
+  } else if(periodDays)params.set('tbs',periodDays===7?'qdr:w':'qdr:m');
   const items=[];const rawItems=[];const markdown=[];const markdownErrors=[];const seen=new Set();let searchId=null;
-  for(let start=0;start<50;start+=10) {
+  for(let start=0;start<100;start+=10) {
     params.set('start',String(start));
     const raw=await requestJson(fetchImpl,`https://serpapi.com/search.json?${params}`);
     if(raw.error||!Array.isArray(raw.organic_results))throw new Error('SerpApi не вернул органическую выдачу');
@@ -177,7 +185,7 @@ function evidencePack(subject,searches,materials,wordstat,alice,googleAi,openaiA
   return {
     object:{name:canonicalPersonName(subject),type:subject.type,region:subject.region,profile:subject.profile},queries:subject.queries,periodDays:subject.periodDays,
     availability,coverage,
-    serp:searches.map(search=>({engine:search.engine,query:search.query,top10:search.items.slice(0,10).map(item=>({position:item.position,url:item.url,title:item.title,snippet:item.snippet})),markdown:search.engine==='Google'?search.markdown?.slice(0,3000):undefined})),
+    serp:searches.map(search=>({engine:search.engine,query:search.query,results:search.items.map(item=>({position:item.position,url:item.url,title:item.title,snippet:item.snippet})),top10:search.items.slice(0,10).map(item=>({position:item.position,url:item.url,title:item.title,snippet:item.snippet}))})),
     materials:materials.filter(item=>item.significant).map(item=>({url:item.url,title:item.title,domain:item.domain,discoveries:item.discoveries,analysis:{sentiment:item.analysis.sentiment,topics:item.analysis.topics,claims:item.analysis.claims,risk:item.analysis.risk,confidence:item.analysis.confidence,summary:item.analysis.summary}})),
     wordstat:wordstat?.queries.map(item=>({query:item.query,totalCount:item.totalCount}))??[],
     ai:{alice:alice?.text??null,google:googleAi.map(item=>({query:item.query,markdown:item.markdown?.slice(0,2000)})),chatgpt:openaiAnswer?.text??null},
@@ -265,22 +273,14 @@ export async function collectReputationScan(parameters,{integrations,fetchImpl=g
     if(googleConnection) {
       try {
         if(googleProvider==='searchapi') {
-          const search=await searchApiGoogle(query,subject.region,googleConnection,fetchImpl,{pages:1,periodDays:subject.periodDays});
+          const search=await searchApiGoogle(query,subject.region,googleConnection,fetchImpl,{periodDays:subject.periodDays});
           addFindings(findings,'Google',query,search.items,sources,'publication');
           publicationSearches.push({engine:'Google',query,periodDays:subject.periodDays,...search});
           continue;
         }
-        const params=new URLSearchParams({engine:'google',q:googlePhrase(query),location:serpLocation[subject.region]??subject.region,hl:'ru',gl:'ru',num:'10',api_key:integrations.serpapi.apiKey,output:'json'});
-        if(subject.periodDays===14) {
-          const start=new Date(Date.now()-14*86400000);const end=new Date();
-          const date=value=>`${value.getUTCMonth()+1}/${value.getUTCDate()}/${value.getUTCFullYear()}`;
-          params.set('tbs',`cdr:1,cd_min:${date(start)},cd_max:${date(end)}`);
-        } else params.set('tbs',subject.periodDays===7?'qdr:w':'qdr:m');
-        const raw=await requestJson(fetchImpl,`https://serpapi.com/search.json?${params}`);
-        if(raw.error||!Array.isArray(raw.organic_results))throw new Error('SerpApi не вернул публикации');
-        const items=raw.organic_results.slice(0,10).map((item,index)=>({url:item.link,title:item.title,snippet:item.snippet,position:item.position??index+1,date:item.date??null}));
-        addFindings(findings,'Google',query,items,sources,'publication');
-        publicationSearches.push({engine:'Google',query,periodDays:subject.periodDays,items,searchId:raw.search_metadata?.id??null,raw:raw.organic_results.slice(0,10)});
+        const search=await googleOrganic(query,subject.region,googleConnection,fetchImpl,googleProvider,subject.periodDays);
+        addFindings(findings,'Google',query,search.items,sources,'publication');
+        publicationSearches.push({engine:'Google',query,periodDays:subject.periodDays,...search});
       } catch(error){errors.push({source:'Публикации Google',query,message:error.message});}
     }
   }
@@ -306,20 +306,33 @@ export async function collectReputationScan(parameters,{integrations,fetchImpl=g
     wordstat={queries:counts};availability.wordstat=counts.length===queries.length?'success':counts.length?'partial':'failed';
   }
   const items=[...findings.values()];
-  const candidates=items.filter(item=>{
+  let candidates=items.filter(item=>{
     if(!isReferenceResult(item))return true;
     item.selection='reference';return false;
   }).sort((a,b)=>Math.min(...a.discoveries.map(found=>found.position))-Math.min(...b.discoveries.map(found=>found.position)));
-  const limit=100;
-  const coverage={discovered:items.length,referenceExcluded:items.length-candidates.length,candidates:candidates.length,processed:0,limit,significant:0,skipped:Math.max(0,candidates.length-limit)};
+  const referenceExcluded=items.length-candidates.length;
+  let preselectionExcluded=0,preselectionFailures=0;
+  if(integrations.openrouter&&integrations.firecrawl) {
+    for(let start=0;start<candidates.length;start+=25) {
+      const batch=candidates.slice(start,start+25);
+      try {
+        const subjectContext={...subject,name:canonicalPersonName(subject)};
+        const decisions=await cached(cache,'openrouter-preselection',{subject:subjectContext,items:batch.map(item=>({url:item.url,title:item.title,snippet:item.snippet})),model:integrations.openrouter.settings.model,version:1},86400,()=>preselectMaterials(subjectContext,batch,integrations.openrouter,{fetchImpl,appOrigin}));
+        const byUrl=new Map(decisions.map(row=>[row.url,row]));
+        for(const item of batch)item.preselection=byUrl.get(item.url);
+      } catch(error){preselectionFailures++;errors.push({source:'Предварительный отбор',message:error.message});for(const item of batch)item.preselection={decision:'uncertain',reason:'Отбор недоступен; требуется полный текст'};}
+    }
+    candidates=candidates.filter(item=>{if(item.preselection?.decision!=='exclude')return true;item.selection='preselection_excluded';preselectionExcluded++;return false;});
+  }
+  const coverage={discovered:items.length,referenceExcluded,preselectionExcluded,preselectionFailures,candidates:candidates.length,processed:0,extracted:0,analyzed:0,scrapeFailed:0,analysisFailed:0,significant:0,skipped:0};
   if(integrations.firecrawl&&integrations.openrouter) {
     let scraped=0,analyzed=0;
-    for(const item of candidates.slice(0,limit)) {
+    for(const item of candidates) {
       coverage.processed++;
       try {
         const page=await cached(cache,'firecrawl',{url:item.url},7*86400,()=>scrape(item,integrations.firecrawl,fetchImpl));
         item.fullText=page.text;item.metadata=page.metadata;item.contentStatus='full';scraped++;
-      } catch(error){item.contentStatus='scrape_failed';item.scrapeError=error.message;errors.push({source:'Firecrawl',url:item.url,message:error.message});continue;}
+      } catch(error){coverage.scrapeFailed++;item.contentStatus='scrape_failed';item.scrapeError=error.message;errors.push({source:'Firecrawl',url:item.url,message:error.message});continue;}
       try {
         const model=integrations.openrouter.settings.model||'openai/gpt-5.6-terra';
         const identity={name:canonicalPersonName(subject),type:subject.type,aliases:subject.profile?.aliases??[],relation:subject.profile?.relation??'',url:item.url,title:item.title};
@@ -329,13 +342,28 @@ export async function collectReputationScan(parameters,{integrations,fetchImpl=g
         item.selection=item.significant?'significant':'excluded';
         if(item.significant)coverage.significant++;
         analyzed++;
-      } catch(error){item.analysisError=error.message;errors.push({source:'OpenRouter',url:item.url,message:error.message});}
+      } catch(error){coverage.analysisFailed++;item.analysisError=error.message;errors.push({source:'OpenRouter',url:item.url,message:error.message});}
     }
+    coverage.extracted=scraped;coverage.analyzed=analyzed;
     availability.firecrawl=coverage.processed?(scraped===coverage.processed?'success':scraped?'partial':'failed'):'empty';
     availability.llm=coverage.processed?(analyzed===coverage.processed&&!coverage.skipped?'success':analyzed?'partial':'failed'):'empty';
   } else {
     if(integrations.firecrawl)availability.firecrawl='empty';
     if(integrations.openrouter)availability.llm='empty';
+  }
+  let materialTopicAnalysis={status:'unavailable',topics:[],materialCount:items.filter(item=>item.significant).length};
+  if(integrations.openrouter) {
+    try {
+      const subjectContext={name:canonicalPersonName(subject),profile:subject.profile};
+      materialTopicAnalysis=await cached(cache,'openrouter-material-topics',{subject:subjectContext,materials:items.filter(item=>item.significant).map(item=>({url:item.url,title:item.title,fullText:item.fullText,claims:item.analysis?.claims})),model:integrations.openrouter.settings.model,version:1},86400,()=>analyzeMaterialTopics(subjectContext,items,integrations.openrouter,{fetchImpl,appOrigin}));
+    } catch(error){materialTopicAnalysis.status='failed';errors.push({source:'Темы материалов',message:error.message});}
+  }
+  let negativeTopicAnalysis={status:'unavailable',topics:[],materialCount:negativeMaterials(items).length};
+  if(integrations.openrouter) {
+    try {
+      const input={subject:{name:canonicalPersonName(subject),profile:subject.profile},materials:negativeMaterials(items).map(item=>({url:item.url,title:item.title,fullText:item.fullText,significant:item.significant,analysis:{sentiment:item.analysis.sentiment}})),model:integrations.openrouter.settings.model,version:1};
+      negativeTopicAnalysis=await cached(cache,'openrouter-negative-topics',input,86400,()=>analyzeNegativeTopics(input.subject,items,integrations.openrouter,{fetchImpl,appOrigin}));
+    } catch(error){negativeTopicAnalysis.status='failed';errors.push({source:'Тематики негатива',message:error.message});}
   }
   let openaiAnswer=null;
   if(integrations.openrouter) {
@@ -347,12 +375,14 @@ export async function collectReputationScan(parameters,{integrations,fetchImpl=g
     catch(error){availability.chatgpt='failed';errors.push({source:'ChatGPT',message:error.message});}
   }
   const evidence=evidencePack(subject,searches,items,wordstat,alice,googleAi,openaiAnswer,availability,coverage);
+  evidence.materialTopicAnalysis=materialTopicAnalysis;
+  evidence.negativeTopicAnalysis=negativeTopicAnalysis;
   let assessment=null;
   if(integrations.openrouter) {
     try {assessment=await cached(cache,'openrouter-assessment',{model:integrations.openrouter.settings.model,evidence,version:4},86400,()=>synthesize(evidence,integrations.openrouter,fetchImpl,appOrigin));availability.assessment='success';}
     catch(error){availability.assessment='failed';errors.push({source:'Общая оценка',message:error.message});}
   }
-  return {version:2,capturedAt:new Date().toISOString(),parameters:subject,availability,searches,publicationSearches,materials:items,coverage,alice,googleAi,openaiAnswer,wordstat,assessment,evidence,errors};
+  return {version:2,capturedAt:new Date().toISOString(),parameters:subject,availability,searches,publicationSearches,materials:items,coverage,materialTopicAnalysis,negativeTopicAnalysis,alice,googleAi,openaiAnswer,wordstat,assessment,evidence,errors};
 }
 
 export async function processNextReputationScan(db,{integrationSecret='local-development-key-change-before-production',fetchImpl=globalThis.fetch,appOrigin}={}) {
@@ -390,11 +420,27 @@ export async function reassessStoredMaterial(db,scanId,url,{integrationSecret='l
   item.significant=item.analysis.significant&&item.analysis.relevance==='relevant'&&!['reference','aggregator','unknown'].includes(item.analysis.sourceType)&&item.analysis.confidence>=0.55;
   item.selection=item.significant?'significant':'excluded';
   result.coverage.significant=result.materials.filter(material=>material.significant).length;
+  result.negativeTopicAnalysis=await analyzeNegativeTopics({name:canonicalPersonName(row.parameters),profile:row.parameters.profile},result.materials,connection,{fetchImpl,appOrigin});
+  result.materialTopicAnalysis=await analyzeMaterialTopics({name:canonicalPersonName(row.parameters),profile:row.parameters.profile},result.materials,connection,{fetchImpl,appOrigin});
   result.evidence=evidencePack(row.parameters,result.searches,result.materials,result.wordstat,result.alice,result.googleAi,result.openaiAnswer,result.availability,result.coverage);
+  Object.assign(result.evidence,{materialTopicAnalysis:result.materialTopicAnalysis,negativeTopicAnalysis:result.negativeTopicAnalysis});
   result.assessment=await synthesize(result.evidence,connection,fetchImpl,appOrigin);
   result.availability.assessment='success';
   await db.query("UPDATE reputation_scans SET result=$2 WHERE id=$1 AND status='completed'",[scanId,JSON.stringify(result)]);
   return {significant:item.significant,relevance:item.analysis.relevance,sentiment:item.analysis.sentiment,coverage:result.coverage.significant};
+}
+
+export async function refreshStoredTopics(db,scanId,{integrationSecret='local-development-key-change-before-production',fetchImpl=globalThis.fetch,appOrigin}={}) {
+  const row=(await db.query("SELECT parameters,result FROM reputation_scans WHERE id=$1 AND status='completed'",[scanId])).rows[0];
+  if(!row?.result)throw new Error('Завершенное сканирование не найдено');
+  const connection=await reputationIntegration(db,'openrouter',integrationSecret);
+  if(!connection)throw new Error('OpenRouter не подключен');
+  const subject={name:canonicalPersonName(row.parameters),profile:row.parameters.profile};
+  const materialTopicAnalysis=await analyzeMaterialTopics(subject,row.result.materials,connection,{fetchImpl,appOrigin});
+  const negativeTopicAnalysis=await analyzeNegativeTopics(subject,row.result.materials,connection,{fetchImpl,appOrigin});
+  const result={...row.result,materialTopicAnalysis,negativeTopicAnalysis,evidence:{...row.result.evidence,materialTopicAnalysis,negativeTopicAnalysis}};
+  await db.query("UPDATE reputation_scans SET result=$2 WHERE id=$1 AND status='completed'",[scanId,JSON.stringify(result)]);
+  return {materialTopics:materialTopicAnalysis.topics,negativeTopics:negativeTopicAnalysis.topics,materialCount:materialTopicAnalysis.materialCount,negativeCount:negativeTopicAnalysis.materialCount};
 }
 
 export async function refreshStoredGoogleAi(db,scanId,{integrationSecret='local-development-key-change-before-production',fetchImpl=globalThis.fetch,appOrigin}={}) {
@@ -412,6 +458,7 @@ export async function refreshStoredGoogleAi(db,scanId,{integrationSecret='local-
   result.errors=[...(result.errors??[]).filter(error=>error.source!=='Google AI'&&error.source!=='Google AI Overview'),...errors];
   result.availability.googleAi=answers.length?'success':'failed';
   result.evidence=evidencePack(row.parameters,result.searches,result.materials,result.wordstat,result.alice,answers,result.openaiAnswer,result.availability,result.coverage);
+  Object.assign(result.evidence,{materialTopicAnalysis:result.materialTopicAnalysis,negativeTopicAnalysis:result.negativeTopicAnalysis});
   if(answers.length) {
     const llm=await reputationIntegration(db,'openrouter',integrationSecret);
     if(llm) {

@@ -6,8 +6,20 @@ const xml='<yandexsearch><response><results><grouping><group><doc><url>https://e
 test('Yandex XML is decoded and normalized without losing the source URL',()=>{
   assert.deepEqual(parseYandexResults(Buffer.from(xml).toString('base64')),[{url:'https://example.org/story',title:'Заголовок',snippet:'Сниппет',position:1,date:null}]);
 });
+test('Yandex highlight tags preserve word order, punctuation and entities',()=>{
+  const raw='<yandexsearch><response><results><grouping><group><doc><url>https://example.org/story</url><title><hlword>Станислав Николаев</hlword>: «<hlword>Меркатор</hlword>» пришел на рынок &amp; развился</title><passages><passage>Компания <hlword>Меркатор</hlword> и <hlword>Николаев</hlword> — в статье.</passage></passages></doc></group></grouping></results></response></yandexsearch>';
+  const [row]=parseYandexResults(raw);
+  assert.equal(row.title,'Станислав Николаев: «Меркатор» пришел на рынок & развился');
+  assert.equal(row.snippet,'Компания Меркатор и Николаев — в статье.');
+});
 const analysis={relevance:'relevant',sourceType:'media',significant:true,sentiment:'neutral',topics:['Бренд'],claims:[],risk:'low',confidence:0.8,summary:'Краткий вывод'};
 const synthesis={assessment:'Оценка на основе собранных материалов.',risk:'low',mainTopic:'Бренд',mainChange:'Нет предыдущего снимка',riskSource:'Не выявлен',nextStep:'Проверить источники',topics:[{name:'Бренд',importance:90,tone:'neutral',description:'Упоминания бренда в публикациях'}],recommendations:[]};
+const auxiliary=request=>{
+  const format=request.response_format?.json_schema?.name;
+  if(format==='reputation_preselection')return {results:JSON.parse(request.messages[1].content).items.map(item=>({url:item.url,decision:'include',confidence:0.9,reason:'Текстовый материал'}))};
+  if(format==='reputation_material_topics')return {topics:[{name:'Развитие бренда',description:'Сведения в публикации',importance:60,tone:'neutral',materialUrls:JSON.parse(request.messages[1].content).articles.map(item=>item.url)}]};
+  return null;
+};
 test('scan uses configured APIs, deduplicates URLs and never synthesizes unavailable sources',async()=>{
   const calls=[];
   let analysisPrompt='',synthesisPrompt='';
@@ -21,6 +33,7 @@ test('scan uses configured APIs, deduplicates URLs and never synthesizes unavail
     if(String(url).endsWith('/scrape'))return Response.json({success:true,data:{markdown:'Полный текст публикации',metadata:{}}});
     if(String(url).endsWith('/chat/completions')){
       const request=JSON.parse(options.body);
+      const extra=auxiliary(request);if(extra)return Response.json({model:'model-test',choices:[{message:{content:JSON.stringify(extra)}}]});
       const name=request.response_format?.json_schema?.name;
       if(name==='reputation_analysis')analysisPrompt=request.messages[0].content;
       if(name==='reputation_synthesis')synthesisPrompt=request.messages[0].content;
@@ -43,7 +56,7 @@ test('scan uses configured APIs, deduplicates URLs and never synthesizes unavail
   assert.equal(result.availability.googleAi,'success');
   assert.equal(result.availability.telegram,'unavailable');
   assert.equal(result.availability.ahrefs,'unavailable');
-  assert.equal(calls.filter(url=>url.endsWith('/chat/completions')).length,3);
+  assert.equal(calls.filter(url=>url.endsWith('/chat/completions')).length,5);
   assert.match(analysisPrompt,/первое claims должно быть главным негативным утверждением автора/);
   assert.match(analysisPrompt,/ФИО, должность и связь с организацией используются только для идентификации/);
   assert.match(synthesisPrompt,/В topics\[\]\.name называй предмет обсуждения/);
@@ -75,7 +88,7 @@ test('Google AI Mode receives one synthesis prompt with all saved queries and no
   assert.deepEqual(result.searches.map(item=>item.query),queries);
   assert.equal(result.availability.googleAi,'success');
 });
-test('Google organic search paginates to 50 distinct results while retaining the saved query',async()=>{
+test('Google organic search paginates to 100 distinct results while retaining the saved query',async()=>{
   const pages=[];
   const fetchImpl=async url=>{
     const request=new URL(url);
@@ -86,13 +99,40 @@ test('Google organic search paginates to 50 distinct results while retaining the
     assert.equal(request.searchParams.get('q'),'Тестовый бренд');
     return Response.json({organic_results:Array.from({length:10},(_,index)=>({link:`https://example.org/story-${start+index+1}`,title:`Публикация ${start+index+1}`,snippet:'Текст',position:start+index+1}))});
   };
-  const result=await collectReputationScan({name:'Тестовый бренд',type:'brand',region:'Москва',queries:['Тестовый бренд'],profile:{},officialSources:[]},{integrations:{yandex_search:null,serpapi:{apiKey:'s'},openrouter:null,firecrawl:null},fetchImpl});
-  assert.deepEqual(pages,[0,10,20,30,40]);
-  assert.equal(result.searches[0].items.length,50);
-  assert.equal(result.searches[0].items[49].position,50);
-  assert.equal(result.materials.length,50);
+  const result=await collectReputationScan({name:'Тестовый бренд',type:'brand',region:'Москва',periodDays:30,queries:['Тестовый бренд'],profile:{},officialSources:[]},{integrations:{yandex_search:null,serpapi:{apiKey:'s'},openrouter:null,firecrawl:null},fetchImpl});
+  assert.deepEqual(pages,[0,10,20,30,40,50,60,70,80,90]);
+  assert.equal(result.searches[0].items.length,100);
+  assert.equal(result.searches[0].items[99].position,100);
+  assert.equal(result.materials.length,100);
+  assert.equal(result.evidence.serp[0].results.length,100);
   assert.equal(result.evidence.serp[0].top10.length,10);
   assert.equal(result.searches[0].query,'Тестовый бренд');
+});
+test('all 200 distinct Yandex and Google results reach extraction, analysis and the summary',async()=>{
+  let scraped=0,analyzed=0,summaryPack;
+  const docs=Array.from({length:100},(_,i)=>`<group><doc><url>https://yandex-example.org/${i}</url><title>Материал ${i}</title><passages><passage>Текст</passage></passages></doc></group>`).join('');
+  const rawData=Buffer.from(`<yandexsearch><response><results><grouping>${docs}</grouping></results></response></yandexsearch>`).toString('base64');
+  const result=await collectReputationScan({name:'Бренд',type:'brand',region:'Москва',periodDays:30,queries:['Бренд'],profile:{},officialSources:[]},{integrations:{yandex_search:{apiKey:'y',settings:{folderId:'f'}},searchapi:{apiKey:'s'},openrouter:{apiKey:'o',settings:{model:'test'}},firecrawl:{apiKey:'f'}},fetchImpl:async(url,options={})=>{
+    if(String(url).endsWith('/web/search'))return Response.json({rawData});
+    if(String(url).endsWith('/gen/search'))return Response.json({message:{content:'Ответ'}});
+    if(String(url).endsWith('/wordstat/topRequests'))return Response.json({totalCount:0});
+    if(String(url).includes('searchapi.io')){
+      const params=new URL(url).searchParams;
+      if(params.get('engine')==='google_ai_mode')return Response.json({markdown:'Ответ Google'});
+      const page=Number(params.get('page'));
+      return Response.json({organic_results:Array.from({length:10},(_,i)=>({link:`https://google-example.org/${(page-1)*10+i}`,title:'Материал',snippet:'Текст',position:i+1}))});
+    }
+    if(String(url).endsWith('/scrape')){scraped++;return Response.json({success:true,data:{markdown:'Полный текст статьи',metadata:{}}});}
+    const request=JSON.parse(options.body),extra=auxiliary(request),name=request.response_format?.json_schema?.name;
+    if(name==='reputation_analysis')analyzed++;
+    if(name==='reputation_synthesis')summaryPack=JSON.parse(request.messages[1].content);
+    return Response.json({model:'test',choices:[{message:{content:extra?JSON.stringify(extra):name==='reputation_analysis'?JSON.stringify(analysis):name==='reputation_synthesis'?JSON.stringify(synthesis):'Ответ ChatGPT'}}]});
+  }});
+  assert.equal(scraped,200);assert.equal(analyzed,200);
+  assert.equal(result.coverage.processed,200);assert.equal(result.coverage.skipped,0);
+  assert.deepEqual(summaryPack.serp.map(x=>x.results.length),[100,100]);
+  assert.equal(summaryPack.materials.length,200);
+  assert.equal(summaryPack.materialTopicAnalysis.materialCount,200);
 });
 test('source failure is reported while other sources still complete',async()=>{
   const result=await collectReputationScan({name:'Бренд',region:'Москва',queries:['Бренд'],officialSources:[]},{integrations:{yandex_search:{apiKey:'y',settings:{folderId:'f'}},serpapi:{apiKey:'s'},openrouter:null,firecrawl:null},fetchImpl:async url=>String(url).includes('yandex')?Response.json({}, {status:503}):Response.json({organic_results:[]})});
@@ -129,6 +169,7 @@ test('cache reuses extracted text and model output but refreshes search snapshot
     if(String(url).endsWith('/scrape'))return Response.json({success:true,data:{markdown:'Полный текст',metadata:{}}});
     if(String(url).endsWith('/chat/completions')){
       const name=JSON.parse(options.body).response_format?.json_schema?.name;
+      const extra=auxiliary(JSON.parse(options.body));if(extra)return Response.json({model:'model-test',choices:[{message:{content:JSON.stringify(extra)}}]});
       return Response.json({model:'model-test',choices:[{message:{content:name==='reputation_analysis'?JSON.stringify(analysis):name==='reputation_synthesis'?JSON.stringify(synthesis):'Ответ ChatGPT'}}]});
     }
     throw new Error('Unexpected request');
@@ -139,7 +180,7 @@ test('cache reuses extracted text and model output but refreshes search snapshot
   await collectReputationScan(input,options);
   assert.equal(calls.filter(url=>url.startsWith('https://serpapi.com/search.json')).length,4);
   assert.equal(calls.filter(url=>url.endsWith('/scrape')).length,1);
-  assert.equal(calls.filter(url=>url.endsWith('/chat/completions')).length,3);
+  assert.equal(calls.filter(url=>url.endsWith('/chat/completions')).length,5);
 });
 test('person prompt keeps every saved query and excludes namesakes',()=>{
   const prompt=buildYandexPrompt({name:'Иван Иванов',type:'person',queries:['Иванов Иван Иванович'],profile:{relation:'Компания А'}},['Иванов Иван Иванович','Иван Иван Иванович отзывы']);

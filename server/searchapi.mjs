@@ -14,7 +14,7 @@ async function request(engine,params,connection,fetchImpl) {
   return data;
 }
 
-export async function searchApiGoogle(query,region,connection,fetchImpl=globalThis.fetch,{pages=5,periodDays}={}) {
+export async function searchApiGoogle(query,region,connection,fetchImpl=globalThis.fetch,{pages=10,periodDays}={}) {
   const params={q:phrase(query),location:locations[region]??region,link:'resolved'};
   if(periodDays===14) {
     const date=value=>`${value.getUTCMonth()+1}/${value.getUTCDate()}/${value.getUTCFullYear()}`;

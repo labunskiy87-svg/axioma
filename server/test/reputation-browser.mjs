@@ -17,11 +17,19 @@ try {
   const user=await db.transaction(tx=>createUser(tx,`customer-${randomUUID()}@example.test`,'browser-test-password','customer'));
   const admin=await db.transaction(tx=>createUser(tx,`admin-${randomUUID()}@example.test`,'browser-test-password','admin'));
   const fetchImpl=async(url,options={})=>{
+    if(String(url).endsWith('/web/search'))return Response.json({rawData:Buffer.from(`<yandexsearch><response><results><grouping><group><doc><url>${longUrl}</url><title>Крестный отец теневого российского бизнеса — председатель совета директоров</title></doc></group></grouping></results></response></yandexsearch>`).toString('base64')});
+    if(String(url).endsWith('/gen/search'))return Response.json({message:{content:'Ответ Алисы'}});
+    if(String(url).endsWith('/wordstat/topRequests'))return Response.json({totalCount:0});
     if(String(url).startsWith('https://serpapi.com/search.md'))return new Response(new URL(url).searchParams.get('engine')==='google_ai_mode'?'---\nstatus: Success\n---\nGoogle AI: ответ о тестовой марке. [0]\n\nЕсли нужны подробности, дайте знать.\n\n## References\n\n[0] [Источник](https://example.org/story) — описание источника.':'# Google results');
     if(String(url).startsWith('https://serpapi.com/search.json'))return Response.json({search_metadata:{id:'search-1'},organic_results:[{link:longUrl,title:'Крестный отец теневого российского бизнеса — председатель совета директоров',snippet:'Текст публикации',position:1,date:'20240611T054603'},...[2,3,4,5,6].map(position=>({link:`https://example.org/article-${position}`,title:`Проверенный материал ${position}`,snippet:'Текст публикации',position})),{link:'https://zachestnyibiznes.ru/fl/123',title:'Справочная карточка',snippet:'Сведения реестра',position:8}]});
     if(String(url).endsWith('/scrape'))return Response.json({success:true,data:{markdown:'Текст публикации о тестовой марке',metadata:{}}});
     if(String(url).endsWith('/chat/completions')){
       const format=JSON.parse(options.body).response_format?.json_schema?.name;
+      if(format==='reputation_preselection')return Response.json({model:'model-test',choices:[{message:{content:JSON.stringify({results:JSON.parse(JSON.parse(options.body).messages[1].content).items.map(item=>({url:item.url,decision:'include',confidence:0.9,reason:'Релевантный текст'}))})}}]});
+      if(['reputation_negative_topics','reputation_material_topics'].includes(format)) {
+        const articles=JSON.parse(JSON.parse(options.body).messages[1].content).articles;
+        return Response.json({model:'model-test',choices:[{message:{content:JSON.stringify({topics:[{name:'Обвинения по контрактам',description:'Содержательный сюжет из текстов',materialUrls:articles.map(item=>item.url),...(format==='reputation_material_topics'?{importance:90,tone:'negative'}:{})}]})}}]});
+      }
       const content=format==='reputation_analysis'?JSON.stringify({relevance:'relevant',sourceType:'media',significant:true,sentiment:'negative',topics:['Тестовая марка'],claims:[],risk:'high',confidence:0.9,summary:'Содержательный материал'}):format==='reputation_synthesis'?JSON.stringify({assessment:'Репутация тестовой марки в найденном материале нейтральная.',risk:'low',mainTopic:'Тестовая марка',mainChange:'Подтвержденного изменения репутационного фона за выбранный период не установлено; найденные публикации требуют проверки в сравнении с предыдущим снимком.',riskSource:'Публикации с атрибутированными утверждениями о тестовой марке, которые следует проверять по первичным источникам.',nextStep:'Проверить первоисточники утверждений, сопоставить их с прошлыми результатами и продолжить наблюдение за поисковой выдачей.',topics:[{name:'Тестовая марка',importance:90,tone:'neutral',description:'Сведения о тестовой марке в найденной публикации'}],recommendations:[]}):'Краткий ответ о тестовой марке';
       return Response.json({model:'model-test',choices:[{message:{content}}]});
     }
@@ -38,6 +46,7 @@ try {
     assert.ok(response.statusCode<300,response.body);return response.json();
   };
   await inject('PUT','/api/admin/reputation/integrations/serpapi',{apiKey:'browser-serpapi-key',enabled:true,settings:{}},adminCookie);
+  await inject('PUT','/api/admin/reputation/integrations/yandex_search',{apiKey:'browser-yandex-key',enabled:true,settings:{folderId:'folder'}},adminCookie);
   await inject('PUT','/api/admin/reputation/integrations/firecrawl',{apiKey:'browser-firecrawl-key',enabled:true,settings:{}},adminCookie);
   await inject('PUT','/api/admin/reputation/integrations/openrouter',{apiKey:'browser-openrouter-key',enabled:true,settings:{model:'model-test'}},adminCookie);
   const subject=await inject('POST','/api/reputation/subjects',{name:'Тестовая марка',type:'Бренд',queries:['Тестовая марка'],region:'Москва',periodDays:30,officialSources:[]});
@@ -73,6 +82,9 @@ try {
     await page.getByText('Крестный отец теневого российского бизнеса — председатель совета директоров',{exact:true}).first().waitFor();
     const materialButton=page.getByText('Крестный отец теневого российского бизнеса — председатель совета директоров',{exact:true}).first().locator('xpath=ancestor::button[1]');
     assert.doesNotMatch(await materialButton.innerText(),/#1|20240611T054603/);
+    assert.equal(await materialButton.getByText('Яндекс',{exact:true}).count(),1);
+    assert.equal(await materialButton.getByText('Google',{exact:true}).count(),1);
+    await page.getByText('6 значимых текстовых материалов из Top-100 поисковой выдачи',{exact:true}).waitFor();
     const materialBox=await materialButton.boundingBox();
     const badgeBox=await materialButton.getByText('Негативная',{exact:true}).boundingBox();
     assert.ok(badgeBox.x>materialBox.x+materialBox.width/2);
@@ -87,6 +99,10 @@ try {
     await page.screenshot({path:`/tmp/pr-market-reputation-detail-${width}.png`});
     await page.getByRole('button',{name:'Следующая страница'}).click();
     await page.getByText('Проверенный материал 6',{exact:true}).first().waitFor();
+    assert.equal(await page.getByRole('button').filter({hasText:'Справочная карточка'}).count(),0);
+    await page.getByRole('button',{name:'Темы',exact:true}).click();
+    await page.getByRole('heading',{name:'Обвинения по контрактам',exact:true}).waitFor();
+    assert.equal(await page.getByText('90',{exact:true}).count(),1);
     await page.getByRole('button',{name:'Поисковая выдача',exact:true}).click();
     await page.getByRole('tab',{name:'Google AI'}).click();
     await page.getByText('Google AI: ответ о тестовой марке.').waitFor();
@@ -104,8 +120,10 @@ try {
     assert.match(await referenceRow.innerText(),/Нейтральный/);
     await page.screenshot({path:`/tmp/pr-market-reputation-serp-${width}.png`,fullPage:true});
     await page.getByRole('button',{name:'Негатив',exact:true}).click();
+    await page.getByText('Влияющие на цифровой портрет',{exact:true}).waitFor();
     await page.getByRole('heading',{name:'Тематики негатива'}).waitFor();
-    assert.match(await page.getByRole('img',{name:/Тестовая марка: 100%/}).getAttribute('style'),/conic-gradient/);
+    assert.match(await page.getByRole('img',{name:/Обвинения по контрактам: 100%/}).getAttribute('style'),/conic-gradient/);
+    assert.equal(await page.getByText('Прочие',{exact:true}).count(),0);
     const chartBox=await page.getByRole('heading',{name:'Тематики негатива'}).locator('..').boundingBox();
     const publicationsBox=await page.getByRole('heading',{name:'Негативные публикации'}).locator('..').locator('..').boundingBox();
     if(width>=1024) {

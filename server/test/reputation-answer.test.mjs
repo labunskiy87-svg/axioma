@@ -23,3 +23,10 @@ test('AI formatting preserves existing Markdown links and matches explicit sourc
   assert.deepEqual(tree.children[0].children[0],link);
   assert.equal(tree.children[0].children[2].url,'https://example.org/source');
 });
+test('Google answer removes reference footer without a heading and generic continuation suggestions',()=>{
+  const tree={type:'root',children:[paragraph(text('Содержательный ответ.')),
+    {type:'list',children:[{type:'listItem',children:[paragraph(text('Информация о производственных мощностях.'))]},{type:'listItem',children:[paragraph(text('Подробный перечень проектов.'))]}]},
+    paragraph(text('[0] - '),{type:'link',url:'https://example.org/source',children:[text('Дублирующий источник')]})]};
+  formatAnswer([{index:0,url:'https://example.org/source'}])()(tree);
+  assert.equal(tree.children.length,1);assert.equal(tree.children[0].children[0].value,'Содержательный ответ.');
+});
