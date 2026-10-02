@@ -1445,35 +1445,37 @@ const MaterialRightsDisclaimer = () => (
   </div>
 );
 
-const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply = (_body: string) => {}, onBusyChange = (_busy: boolean) => {} }) => {
+const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply = (_body: string) => {}, onImage = (_result: any) => {}, onBusyChange = (_busy: boolean) => {} }) => {
   const backend=useBackend();
   const [prompt,setPrompt]=useState('Переписать материал в деловом стиле, сохранить факты, сделать текст короче и яснее.');
   const [imagePrompt,setImagePrompt]=useState('Сгенерировать деловую иллюстрацию для материала о платформе аналитики.');
   const [busy,setBusy]=useState(false);
+  const [generatedImage,setGeneratedImage]=useState(null);
   const request=useRef(null);
   const close=()=>{if(!busy)onClose();};
   const rewrite=async()=>{
     if(busy||backend.busy)return;
-    const payload={body,prompt},signature=JSON.stringify(payload);
+    const payload=type==='image'?{prompt:imagePrompt}:{body,prompt},endpoint=type==='image'?'ai-image':'ai-rewrite',signature=JSON.stringify({endpoint,payload});
     if(request.current?.signature!==signature)request.current={signature,key:crypto.randomUUID()};
     setBusy(true);onBusyChange(true);
     try {
       const ok=await backend.perform(async()=>{
-        let result=await api('/materials/ai-rewrite','POST',payload,request.current.key);
+        let result=await api(`/materials/${endpoint}`,'POST',payload,request.current.key);
         while(['queued','running'].includes(result.status)) {
           await new Promise(resolve=>setTimeout(resolve,1500));
-          result=await api(`/materials/ai-rewrite/${result.id}`);
+          result=await api(`/materials/${endpoint}/${result.id}`);
         }
         request.current=null;
-        if(result.status!=='completed')throw new Error(result.error||'Не удалось выполнить рерайт');
-        onApply(result.body);
+        if(result.status!=='completed')throw new Error(result.error||'Не удалось выполнить генерацию');
+        if(type==='image'){onImage(result);setGeneratedImage(result);}else onApply(result.body);
         await backend.refresh().catch(error=>backend.setError(error.message));
       });
-      if(ok)onClose();
+      if(ok&&type!=='image')onClose();
     } finally {setBusy(false);onBusyChange(false);}
   };
   return <Modal isOpen={isOpen} onClose={close} title={type === 'image' ? 'Генерация изображения с помощью ИИ' : 'Рерайт с помощью ИИ'} className="max-w-2xl">
     <div className="space-y-5">
+      {type==='image'&&generatedImage&&<img src={generatedImage.url} alt="Сгенерированное изображение" className="block aspect-video w-full rounded-lg object-contain" />}
       <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
         <div className="text-sm font-semibold text-[#0b3558]">{type === 'image' ? 'Стоимость генерации: 50 ₽' : 'Стоимость рерайта: 30 ₽'}</div>
         <p className="text-sm text-[#476788] mt-1">Сумма будет списана с баланса после запуска операции.</p>
@@ -1488,8 +1490,8 @@ const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply =
         />
       </label>
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <Button variant="secondary" disabled={busy} onClick={close}>Отмена</Button>
-        <Button variant="primary" disabled={busy||(type==='rewrite'&&(!prompt.trim()||!richTextLength(body)))} onClick={type==='image'?onClose:rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}{type === 'image' ? 'Сгенерировать за 50 ₽' : 'Запустить рерайт за 30 ₽'}</Button>
+        <Button variant="secondary" disabled={busy} onClick={close}>{type==='image'&&generatedImage?'Закрыть':'Отмена'}</Button>
+        <Button variant="primary" disabled={busy||(type==='image'?!imagePrompt.trim():(!prompt.trim()||!richTextLength(body)))} onClick={rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}{type === 'image' ? (generatedImage?'Сгенерировать ещё за 50 ₽':'Сгенерировать за 50 ₽') : 'Запустить рерайт за 30 ₽'}</Button>
       </div>
     </div>
   </Modal>
@@ -4037,7 +4039,7 @@ const richTextLength = (html = '') => {
   const node=document.createElement('div');node.innerHTML=html;return (node.textContent||'').length;
 };
 
-const RichTextEditor = ({ value, onChange }) => {
+const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImageStored }) => {
   const [rewriteOpen,setRewriteOpen]=useState(false);
   const imageInput=useRef(null);
   const [assetPanel,setAssetPanel]=useState(null);
@@ -4105,11 +4107,12 @@ const RichTextEditor = ({ value, onChange }) => {
       <Button variant="primary" size="sm" className="ml-auto w-full sm:w-auto" onClick={()=>setRewriteOpen(true)}><Sparkles className="h-4 w-4 shrink-0"/>Рерайт с помощью ИИ · 30 ₽</Button>
     </div>
     {assetPanel==='image'&&<div className="border-b border-[#d4e0ed] bg-white p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес изображения</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com/image.jpg" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label>
         <Button variant="secondary" size="sm" disabled={!assetUrl.trim()} onClick={()=>insertImage(assetUrl.trim())}>Вставить по URL</Button>
         <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={uploadImage} />
         <Button variant="primary" size="sm" disabled={uploading} onClick={()=>imageInput.current?.click()}><UploadCloud className="h-4 w-4" />{uploading?'Загрузка…':'Загрузить файл'}</Button>
+        <Button variant="primary" size="sm" onClick={()=>onImageOpenChange(true)}><Sparkles className="h-4 w-4"/>Сгенерировать · 50 ₽</Button>
       </div>
       {editor.isActive('image')&&<div className="mt-3 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-medium text-[#476788]">Ширина:</span>{['25%','50%','75%','100%'].map(width=><button key={width} type="button" className="rounded-lg border border-[#d4e0ed] px-3 py-1.5 text-xs font-semibold text-[#0b3558] hover:border-[#006bff]" onClick={()=>editor.chain().focus().updateAttributes('image',{width}).run()}>{width}</button>)}</div>}
       {assetError&&<p role="alert" className="mt-2 text-xs text-red-700">{assetError}</p>}
@@ -4117,11 +4120,15 @@ const RichTextEditor = ({ value, onChange }) => {
     {assetPanel==='link'&&<div className="flex flex-col gap-3 border-b border-[#d4e0ed] bg-white p-4 sm:flex-row sm:items-end"><label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес ссылки</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label><Button variant="primary" size="sm" onClick={setLink}>{assetUrl.trim()?'Применить':'Удалить ссылку'}</Button></div>}
     <EditorContent editor={editor} />
     <AiAssistModal isOpen={rewriteOpen} onClose={()=>setRewriteOpen(false)} body={value} onApply={body=>editor.commands.setContent(body)} onBusyChange={busy=>editor.setEditable(!busy)} />
+    <AiAssistModal isOpen={imageOpen} onClose={()=>onImageOpenChange(false)} type="image" onImage={result=>{insertImage(result.url);onImageStored(result.file.id);}} onBusyChange={busy=>editor.setEditable(!busy)} />
   </div>;
 };
 
 const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemove, onOpenAi, mode = 'create' }) => {
   const backend = useBackend();
+  const [imageTarget,setImageTarget]=useState(null);
+  const currentDraft=useRef(draft);currentDraft.current=draft;
+  const attachImage=id=>onChange({metadata:{...currentDraft.current.metadata,attachments:[...new Set([...(currentDraft.current.metadata?.attachments||[]),id])]}});
   return (
   <Card id={`material-form-${draft.id}`} className="scroll-mt-6 p-6">
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#d4e0ed] pb-4">
@@ -4168,7 +4175,7 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
       <div>
         <span className="text-sm font-medium text-[#476788]">Изображения</span>
         <FileUploadField accept="image/png,image/jpeg,image/webp" prompt="Выберите изображения или перетащите их сюда" hint="PNG, JPG или WEBP · до 20 МБ" storedIds={draft.metadata?.attachments || []} onStoredChange={ids=>onChange({metadata:{...draft.metadata,attachments:ids}})} imagesOnly />
-        <div className="mt-2 text-sm text-[#476788]">Или <button type="button" className="font-semibold text-[#006bff]" onClick={() => onOpenAi('image')}>сгенерируйте изображение с помощью ИИ за 50 ₽</button></div>
+        <div className="mt-2 text-sm text-[#476788]">Или <button type="button" className="font-semibold text-[#006bff]" onClick={() => setImageTarget('attachments')}>сгенерируйте изображение с помощью ИИ за 50 ₽</button></div>
       </div>
       <label className="block md:col-span-2">
         <span className="text-sm font-medium text-[#476788]">Примечание и ТЗ</span>
@@ -4181,7 +4188,7 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
             <span className="text-xs text-[#476788]">{richTextLength(draft.body)} знаков</span>
           </div>
         </div>
-        <RichTextEditor value={draft.body||''} onChange={body=>onChange({body})} />
+        <RichTextEditor value={draft.body||''} onChange={body=>onChange({body})} imageOpen={imageTarget==='editor'} onImageOpenChange={open=>setImageTarget(open?'editor':null)} onImageStored={attachImage} />
       </div>
     </div>
     <details className="mt-6 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
@@ -4190,6 +4197,7 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
         {Object.entries({tags:'Тэги',title:'Title',description:'Description',desiredUrl:'Желаемый URL'}).map(([key,label]) => <label key={key}><span className="text-sm font-medium text-[#476788]">{label}</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" value={draft.metadata?.[key] || ''} onChange={e => onChange({metadata:{...draft.metadata,[key]:e.target.value}})} /></label>)}
       </div>
     </details>
+    <AiAssistModal isOpen={imageTarget==='attachments'} onClose={()=>setImageTarget(null)} type="image" onImage={result=>attachImage(result.file.id)} />
   </Card>
 ); };
 

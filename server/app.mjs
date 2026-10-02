@@ -5,6 +5,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { z, ZodError } from 'zod';
 import {sanitizeMaterialBody} from './material-content.mjs';
 import {registerAiRewrite} from './ai-rewrite.mjs';
+import {registerAiImage} from './ai-image.mjs';
 import { digest, hashPassword, verifyPassword, fail, role } from './security.mjs';
 import { credentials, materialInput, outletInput, uuid, url } from './validation.mjs';
 import { audit, once, quote, transfer } from './finance.mjs';
@@ -546,5 +547,6 @@ export async function buildApp({ db, origin = 'http://127.0.0.1:5173', secure = 
   registerClosingDocuments(app,db,{sellerConfig,storageRoot});
   registerReputation(app,db,{integrationSecret,fetchImpl,appOrigin:origin});
   registerAiRewrite(app,db,{integrationSecret,fetchImpl,appOrigin:origin});
+  registerAiImage(app,db,{integrationSecret,fetchImpl,appOrigin:origin,storageRoot});
   return app;
 }
