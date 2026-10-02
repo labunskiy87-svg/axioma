@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
+const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {})});
+const page = await browser.newPage({viewport:{width:1440,height:1000}});
+const errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+try {
+  await page.goto('http://127.0.0.1:5173/workspace');
+  await page.getByRole('button',{name:'Создать аккаунт'}).click();
+  await page.getByLabel('Электронная почта').fill(`qa-${randomUUID()}@example.test`);
+  await page.getByLabel('Пароль',{exact:true}).fill(randomUUID());
+  await page.getByRole('button',{name:'Зарегистрироваться',exact:true}).click();
+  await page.getByRole('navigation').waitFor();
+  await page.getByRole('button',{name:'Проекты',exact:true}).click();
+  await page.getByRole('textbox',{name:'Название',exact:true}).fill('QA project');
+  await page.getByRole('button',{name:'Добавить',exact:true}).click();
+  await page.getByText('QA project',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Рекламодатели',exact:true}).click();
+  await page.getByRole('textbox',{name:'Название',exact:true}).fill('QA advertiser');
+  await page.getByRole('textbox',{name:'ИНН',exact:true}).fill('7700000000');
+  await page.getByRole('button',{name:'Добавить',exact:true}).click();
+  await page.getByText('Ожидает проверки',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Материалы',exact:true}).click();
+  await page.getByRole('button',{name:'Добавить материал',exact:true}).click();
+  await page.getByLabel('Заголовок',{exact:true}).fill('QA persistent material');
+  await page.getByLabel('Текст',{exact:true}).fill('Saved text');
+  await page.getByRole('combobox',{name:/^Рекламодатель/}).selectOption({label:'QA advertiser'});
+  await page.getByRole('combobox',{name:/^Проект/}).selectOption({label:'QA project'});
+  await page.getByRole('button',{name:'Сохранить и добавить еще материал',exact:true}).click();
+  await page.getByText('Материал 2',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Заголовок',{exact:true}).first().inputValue(),'QA persistent material');
+  await page.reload();
+  await page.getByText('QA persistent material',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Редактировать',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Сохранить и добавить еще материал',exact:true}).count(),0);
+  assert.equal(await page.getByLabel('Текст',{exact:true}).inputValue(),'Saved text');
+  await page.screenshot({path:'/tmp/axioma-api-desktop.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:'/tmp/axioma-api-mobile.png',fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);
+  assert.deepEqual(errors,[]);
+  console.log('Browser smoke passed: auth, advertiser, project, persistence, batch, single edit, mobile');
+} catch(error) {
+  console.error(await page.locator('body').innerText());
+  await page.screenshot({path:'/tmp/axioma-api-failure.png',fullPage:true});
+  throw error;
+} finally {await browser.close();}

@@ -1,5 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import {MaterialImage,setMaterialImageDragPreview} from './src/material-image';
+import Link from '@tiptap/extension-link';
+import UnderlineExtension from '@tiptap/extension-underline';
+import FontFamily from '@tiptap/extension-font-family';
+import { FontSize, TextStyle } from '@tiptap/extension-text-style';
+import { useBackend, materialPayload, formatLabels, normalizeAdvertiser } from './src/prototype-backend';
+import { api, uploadFile } from './src/api';
+import { AdminLogin, useCabinetView } from './src/cabinet-routing';
+import { outletFormValues } from './src/outlet-form';
+import {AdminRecords,OrderConversation,SupportDesk,DisputeList} from './src/operations-ui';
+import {AdminActs,AdminBankReview} from './src/pilot-admin-ui';
+import {ReputationIntelligenceView} from './src/reputation-ui';
+import {AdminReputationIntegrationsView} from './src/admin-reputation-integrations';
+const orderNumber = (order: {id: string | number; number?: number}) => order.number ?? (typeof order.id==='number' ? order.id : '—');
+const materialNumber = (material: {id: string | number; number?: number}) => material.number ?? (typeof material.id==='number' ? material.id : '—');
+const downloadFromApi = (path: string) => {
+  const link=document.createElement('a');link.href=`/api${path}`;link.download='';document.body.appendChild(link);link.click();link.remove();
+};
 import { 
   LayoutDashboard, 
   FileText, 
@@ -52,12 +72,14 @@ import {
   Tag,
   BookOpen,
   Sparkles,
+  LoaderCircle,
   Users,
   TrendingUp,
   Link2,
   Zap,
   Pencil,
-  Eye
+  Eye,
+  Underline
 } from 'lucide-react';
 
 
@@ -203,10 +225,28 @@ const getMaterialCommercialFormat = (material, platform) => {
   if (['ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене'].includes(platform?.type)) return 'Пост';
   return material?.type === 'Новость' ? 'Новость' : 'Статья';
 };
-const getPlatformPriceForMaterial = (platform, material) => {
-  const format = getMaterialCommercialFormat(material, platform);
+const apiFormatByLabel = { 'Статья':'article', 'Новость':'news', 'Пост':'post', 'Лонгрид':'longread' };
+const getPlatformPriceForFormat = (platform, format) => {
+  if (platform.prices) {
+    const key = apiFormatByLabel[format];
+    if (!key) return 0;
+    const today=new Date().toISOString().slice(0,10);
+    const seasonal=(!platform.season_start||String(platform.season_start).slice(0,10)<=today)&&(!platform.discount_until||String(platform.discount_until).slice(0,10)>=today);
+    return Math.round(platform.prices[key] * (seasonal?platform.coefficient_bps:10000) * (10000 - (seasonal&&platform.discount_until?platform.discount_bps:0)) / 100000000) / 100;
+  }
   return platform.formatPrices?.[format] ?? platformFormatPrices[platform.id]?.[format] ?? platform.price;
 };
+const getPlatformBasePriceForFormat = (platform, format) => {
+  if (platform.prices) {
+    const key = apiFormatByLabel[format];
+    if (!key || !platform.prices[key]) return 0;
+    const today=new Date().toISOString().slice(0,10);
+    const seasonal=(!platform.season_start||String(platform.season_start).slice(0,10)<=today)&&(!platform.discount_until||String(platform.discount_until).slice(0,10)>=today);
+    return Math.round(platform.prices[key] * (seasonal?platform.coefficient_bps:10000) / 10000) / 100;
+  }
+  return platform.formatPrices?.[format] ?? platformFormatPrices[platform.id]?.[format] ?? platform.price;
+};
+const getPlatformPriceForMaterial = (platform, material) => getPlatformPriceForFormat(platform,getMaterialCommercialFormat(material,platform));
 
 const mockOrdersClient = [
   { id: 1045, material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', price: 150000, frozen: 150000, status: 'Ожидает приемки', statusColor: 'indigo', date: '15.10.2023', action: 'Проверить публикацию', projectId: 1 },
@@ -235,19 +275,54 @@ const mockTransactions = [
   { id: 'TR-979', type: 'Пополнение', desc: 'Входящий банковский перевод', amount: 500000, date: '01.10.2023 11:20', status: 'Доступно' },
 ];
 
+const financialTransactions = (rows = [], userId, orders = [], materials = []) => rows.map((row) => {
+  const reference = String(row.reference || '');
+  const orderId = reference.match(/^(?:demo:)?order:([^:]+)/)?.[1];
+  const order = orders.find((item) => item.id === orderId);
+  const orderLabel = order ? `№${orderNumber(order)}` : '';
+  const materialId = reference.match(/^(?:demo:)?moderation(?:-refund)?:([^:]+)/)?.[1];
+  const material = materials.find((item) => item.id === materialId);
+  const materialLabel = material ? ` материала №${materialNumber(material)}` : '';
+  const availableAccount = `${userId}:available`;
+  const reservedAccount = `${userId}:reserved`;
+  const amount = Number(row.amount) / 100;
+  const signedAmount = row.credit_account === availableAccount
+    ? amount
+    : row.debit_account === availableAccount || row.debit_account === reservedAccount
+      ? -amount
+      : amount;
+  const kind = reference.startsWith('moderation-refund:') || reference.includes(':refund') || (reference.includes(':dispute:') && reference.endsWith(':customer')) ? 'Возврат'
+    : reference.includes(':reserve') ? 'Заморозка'
+      : reference.includes(':payout') || (reference.includes(':dispute:') && reference.endsWith(':publisher')) ? row.credit_account === availableAccount ? 'Начисление' : 'Списание'
+        : reference.includes(':commission') ? 'Комиссия'
+          : row.credit_account === availableAccount ? 'Пополнение' : 'Списание';
+  const orderSuffix = orderLabel ? ` · заказ ${orderLabel}` : ' · заказ';
+  const description = materialId
+    ? `${reference.includes('moderation-refund:') ? 'Возврат оплаты ускоренной модерации' : 'Оплата ускоренной модерации'}${materialLabel}`
+    : orderId
+      ? `${reference.endsWith(':reserve') ? 'Средства зарезервированы' : reference.endsWith(':refund') ? 'Средства возвращены' : reference.includes(':dispute:') ? reference.endsWith(':customer') ? 'Возврат по решению спора' : reference.endsWith(':publisher') ? 'Выплата паблишеру по спору' : 'Комиссия по решению спора' : reference.endsWith(':payout') ? 'Оплата размещения' : reference.endsWith(':commission') ? 'Комиссия платформы' : 'Операция'}${orderSuffix}`
+      : reference === 'demo:opening-balance' ? 'Начальный баланс'
+        : reference.startsWith('topup-reversal:') ? 'Возврат ранее зачисленного пополнения'
+          : reference.startsWith('topup-debt:') ? 'Погашение задолженности по пополнению'
+            : reference.startsWith('topup:') ? 'Пополнение баланса по счету'
+              : reference.startsWith('payout:') ? reference.endsWith(':reserve') ? 'Средства зарезервированы для выплаты' : reference.endsWith(':transferred') ? 'Выплата перечислена' : 'Средства по заявке на выплату возвращены'
+                : reference.startsWith('adjustment:') ? 'Ручная корректировка баланса'
+                  : reference.endsWith(':funding') || reference === 'test-only' ? 'Пополнение внутреннего баланса'
+                    : 'Операция по балансу';
+  return {
+    id: String(row.id).slice(0, 8).toUpperCase(),
+    type: kind,
+    desc: description,
+    amount: signedAmount,
+    date: new Date(row.created_at).toLocaleString('ru-RU'),
+    status: 'Проведено',
+  };
+});
+
 const mockAdvertisers = [
   { id: 1, code: 'A-842', name: 'ООО "Финтех Решения"', type: 'Юридическое лицо', inn: '7700000000', ogrn: '1237700000000', status: 'Проверен', color: 'green' },
   { id: 2, code: 'A-901', name: 'АО "Урбан Групп"', type: 'Юридическое лицо', inn: '7709000000', ogrn: '1237709000000', status: 'Проверка запрошена', color: 'amber' },
   { id: 3, code: 'A-112', name: 'ИП Смирнова Анна', type: 'Индивидуальный предприниматель', inn: '771100000000', ogrn: '323770000000000', status: 'Не проверялся', color: 'gray' },
-];
-
-const mockReports = [
-  { order: '#1045', materialId: 1, material: 'Пресс-релиз: Запуск новой платформы', platform: 'РБК Инвестиции', date: '18.10.2023', link: 'https://invest.rbc.ru/news/652a9f', price: 150000, status: 'Ожидает приемки', color: 'indigo', projectId: 1 },
-  { order: '#1046', materialId: 1, material: 'Пресс-релиз: Запуск новой платформы', platform: 'investor.ru', date: '17.10.2023', link: 'https://investor.ru/news/axioma-analytics', price: 85000, status: 'Завершено', color: 'gray', projectId: 1 },
-  { order: '#1047', materialId: 3, material: 'Интервью с генеральным директором', platform: 'Код Дурова', date: '16.10.2023', link: 'https://kod.ru/axioma-interview', price: 60000, status: 'Завершено', color: 'gray', projectId: 1 },
-  { order: '#1048', materialId: 1, material: 'Пресс-релиз: Запуск новой платформы', platform: 'Технологии сегодня', date: null, link: null, price: 45000, status: 'В работе', color: 'blue', projectId: 1 },
-  { order: '#1052', materialId: 4, material: 'Кейс внедрения системы управления клиентами', platform: 'VC.ru', date: '10.10.2023', link: 'https://vc.ru/services/1052', price: 80000, status: 'Завершено', color: 'gray', projectId: 3 },
-  { order: '#1056', materialId: 2, material: 'Обзор рынка недвижимости за третий квартал', platform: 'Бизнес Среда', date: '05.10.2023', link: 'https://business-sreda.ru/research/q3', price: 146000, status: 'Завершено', color: 'gray', projectId: 2 },
 ];
 
 const initialPublisherApplications = [
@@ -318,9 +393,9 @@ const initialPublisherApplications = [
 
 const getInformerFormat = (item) => item.format || (item.category === 'Полезное' ? 'Внешняя ссылка' : 'Подборка площадок');
 
-const getInformerSelectionOptions = (format) => (
+const getInformerSelectionOptions = (format, platforms = []) => (
   format === 'Подборка площадок'
-    ? mockCatalog.map((platform) => ({
+    ? platforms.map((platform) => ({
       value: String(platform.id),
       label: platform.name,
       description: `${platform.type} · ${platform.theme} · ${formatMoney(platform.price)}`,
@@ -405,27 +480,27 @@ const initialInformerItems = [
 ];
 
 const mockAdminQueue = [
-  { id: '#M-1052', object: 'Новость компании', type: 'Материал', risk: 'Ссылки', status: 'На модерации', color: 'amber' },
+  { id: '№1052', object: 'Новость компании', type: 'Материал', risk: 'Ссылки', status: 'На модерации', color: 'amber' },
   { id: '#P-044', object: 'Новая площадка', type: 'Площадка', risk: 'Метрики', status: 'Проверить', color: 'blue' },
   { id: '#C-019', object: 'Жалоба по заказу #1045', type: 'Спор', risk: 'Маркировка', status: 'Решить', color: 'red' },
 ];
 
 const mockExpeditedModeration = [
   {
-    id: '#M-1052',
+    id: '№1052',
     title: 'Новость компании',
     customer: 'Заказчик #842',
     submittedAt: 'сегодня, 12:40',
     deadline: 'проверить до 13:10',
-    row: ['#M-1052', 'Новость компании', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
+    row: ['№1052', 'Новость компании', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
   },
   {
-    id: '#M-1061',
+    id: '№1061',
     title: 'Исследование рынка корпоративных сервисов',
     customer: 'Заказчик #916',
     submittedAt: 'сегодня, 12:51',
     deadline: 'проверить до 13:21',
-    row: ['#M-1061', 'Исследование рынка корпоративных сервисов', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
+    row: ['№1061', 'Исследование рынка корпоративных сервисов', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
   },
 ];
 
@@ -464,8 +539,8 @@ const mockAdminSections = {
   admin_moderation: {
     title: 'Материалы на модерации',
     rows: [
-      ['#M-1052', 'Новость компании', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
-      ['#M-1054', 'Интервью с генеральным директором', 'Материал', 'Риск/нарушение', 'Запросить правки'],
+      ['№1052', 'Новость компании', 'Материал', 'Ожидает проверки', 'Принять / правки / отклонить'],
+      ['№1054', 'Интервью с генеральным директором', 'Материал', 'Риск/нарушение', 'Запросить правки'],
       ['#P-044', 'Новая площадка', 'Площадка', 'Ожидает проверки', 'Проверить метрики'],
     ],
   },
@@ -548,7 +623,7 @@ const mockAdminSections = {
   admin_audit: {
     title: 'Журнал действий',
     rows: [
-      ['LOG-8841', 'moderator@axioma.ru', 'Изменен статус материала', '#M-1052 · 13:42', 'Открыть событие'],
+      ['LOG-8841', 'moderator@axioma.ru', 'Изменен статус материала', '№1052 · 13:42', 'Открыть событие'],
       ['LOG-8840', 'finance@axioma.ru', 'Подтверждена выплата', 'W-108 · 13:18', 'Открыть событие'],
     ],
   },
@@ -648,14 +723,33 @@ const FileUploadField = ({
   prompt = 'Выберите файлы или перетащите их сюда',
   hint = 'Максимальный размер одного файла — 20 МБ',
   compact = false,
+  storedIds = undefined,
+  onStoredChange = undefined,
+  imagesOnly = false,
 }) => {
+  const backend = useBackend();
   const inputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  useEffect(() => {
+    if(!storedIds) return;
+    let active=true;
+    Promise.all(storedIds.map(id=>api(`/files/${id}/meta`))).then(items=>{if(active)setFiles(items.filter(f=>imagesOnly ? f.mime.startsWith('image/') : !f.mime.startsWith('image/')));}).catch(e=>backend.setError(e.message));
+    return ()=>{active=false;};
+  },[JSON.stringify(storedIds),imagesOnly]);
 
   const addFiles = (incomingFiles) => {
     const nextFiles = Array.from(incomingFiles || []);
     if (!nextFiles.length) return;
+    if(onStoredChange) {
+      backend.perform(async () => {
+        const ids=[...(storedIds||[])];
+        for(const file of nextFiles as File[]) {
+          const uploaded=await uploadFile(file);ids.push(uploaded.id);
+          onStoredChange([...ids]);
+        }
+      });return;
+    }
 
     setFiles((currentFiles) => {
       const sourceFiles = multiple ? [...currentFiles, ...nextFiles] : nextFiles.slice(0, 1);
@@ -671,6 +765,7 @@ const FileUploadField = ({
 
   const openFilePicker = () => inputRef.current?.click();
   const removeFile = (fileToRemove) => {
+    if(onStoredChange) {onStoredChange(storedIds.filter(id=>id!==fileToRemove.id));return;}
     setFiles((currentFiles) => currentFiles.filter((file) => file !== fileToRemove));
   };
 
@@ -793,10 +888,8 @@ const useSelectMenuPosition = (isOpen, triggerRef, optionCount) => {
 
     updateMenuPosition();
     window.addEventListener('resize', updateMenuPosition);
-    window.addEventListener('scroll', updateMenuPosition, true);
     return () => {
       window.removeEventListener('resize', updateMenuPosition);
-      window.removeEventListener('scroll', updateMenuPosition, true);
     };
   }, [isOpen, optionCount, triggerRef]);
 
@@ -840,14 +933,21 @@ const CustomSelect = ({ options, defaultValue = undefined, value: controlledValu
         setIsOpen(false);
       }
     };
+    const closeOnPageScroll = (event) => {
+      if (!menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
 
     document.addEventListener('pointerdown', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
     window.addEventListener('axioma-select-open', closeOnOtherSelectOpen);
+    window.addEventListener('wheel', closeOnPageScroll, true);
+    window.addEventListener('touchmove', closeOnPageScroll, true);
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsideClick);
       document.removeEventListener('keydown', closeOnEscape);
       window.removeEventListener('axioma-select-open', closeOnOtherSelectOpen);
+      window.removeEventListener('wheel', closeOnPageScroll, true);
+      window.removeEventListener('touchmove', closeOnPageScroll, true);
     };
   }, [isOpen]);
 
@@ -914,12 +1014,51 @@ const CustomSelect = ({ options, defaultValue = undefined, value: controlledValu
   );
 };
 
+const AddressInput = ({value,onChange,className,placeholder='',ariaInvalid=false}) => {
+  const [suggestions,setSuggestions]=useState([]);
+  const [open,setOpen]=useState(false);
+  const [unavailable,setUnavailable]=useState(false);
+  const triggerRef=useRef(null);
+  const menuRef=useRef(null);
+  const menuPosition=useSelectMenuPosition(open,triggerRef,suggestions.length);
+  useEffect(()=>{
+    if(!open||value.trim().length<3){setSuggestions([]);return;}
+    let active=true;
+    const timer=setTimeout(()=>{
+      api(`/reference/addresses?query=${encodeURIComponent(value.trim())}`)
+        .then(items=>{if(active){setSuggestions(items);setUnavailable(false);}})
+        .catch(()=>{if(active){setSuggestions([]);setUnavailable(true);}});
+    },300);
+    return()=>{active=false;clearTimeout(timer);};
+  },[value,open]);
+  useEffect(()=>{
+    if(!open)return;
+    const closeOnOutside=event=>{if(!triggerRef.current?.contains(event.target)&&!menuRef.current?.contains(event.target))setOpen(false);};
+    const closeOnScroll=event=>{if(!menuRef.current?.contains(event.target))setOpen(false);};
+    const closeOnEscape=event=>{if(event.key==='Escape')setOpen(false);};
+    document.addEventListener('pointerdown',closeOnOutside);
+    document.addEventListener('keydown',closeOnEscape);
+    window.addEventListener('wheel',closeOnScroll,true);
+    window.addEventListener('touchmove',closeOnScroll,true);
+    return()=>{document.removeEventListener('pointerdown',closeOnOutside);document.removeEventListener('keydown',closeOnEscape);window.removeEventListener('wheel',closeOnScroll,true);window.removeEventListener('touchmove',closeOnScroll,true);};
+  },[open]);
+  const choose=item=>{onChange(item.value);setOpen(false);setSuggestions([]);};
+  return <>
+    <input ref={triggerRef} className={className} placeholder={placeholder} value={value} aria-invalid={ariaInvalid} onChange={event=>{onChange(event.target.value);setOpen(true);}} onFocus={()=>{if(value.trim().length>=3)setOpen(true);}} role="combobox" aria-autocomplete="list" aria-expanded={open&&suggestions.length>0} />
+    {open&&suggestions.length>0&&menuPosition&&createPortal(<div ref={menuRef} role="listbox" className="fixed z-[220] overflow-y-auto rounded-2xl border border-[#d4e0ed] bg-white p-1.5 shadow-[rgba(11,53,88,0.08)_0px_10px_24px,rgba(11,53,88,0.10)_0px_24px_60px]" style={menuPosition}>
+      {suggestions.map((item,index)=><button key={`${item.value}-${index}`} type="button" role="option" aria-selected="false" className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-[#0b3558] hover:bg-[#f8f9fb]" onPointerDown={event=>{event.preventDefault();choose(item);}} onClick={()=>choose(item)}>{item.label}</button>)}
+    </div>,document.body)}
+    {unavailable&&open&&<span className="mt-1 block text-xs text-[#476788]">Подсказки недоступны. Адрес можно ввести вручную.</span>}
+  </>;
+};
+
 const CheckboxMultiSelect = ({
   options,
   value,
   onChange,
   placeholder = 'Выберите значения',
   selectedNoun = 'значений',
+  emptyPlaceholder = 'Нет доступных вариантов',
   className = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -947,17 +1086,25 @@ const CheckboxMultiSelect = ({
     const closeOnOtherSelectOpen = (event) => {
       if (event.detail !== selectIdRef.current) setIsOpen(false);
     };
+    const closeOnPageScroll = (event) => {
+      if (!menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
     document.addEventListener('pointerdown', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
     window.addEventListener('axioma-select-open', closeOnOtherSelectOpen);
+    window.addEventListener('wheel', closeOnPageScroll, true);
+    window.addEventListener('touchmove', closeOnPageScroll, true);
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsideClick);
       document.removeEventListener('keydown', closeOnEscape);
       window.removeEventListener('axioma-select-open', closeOnOtherSelectOpen);
+      window.removeEventListener('wheel', closeOnPageScroll, true);
+      window.removeEventListener('touchmove', closeOnPageScroll, true);
     };
   }, [isOpen]);
 
   const toggleOpen = () => {
+    if (!options.length) return;
     if (!isOpen) window.dispatchEvent(new CustomEvent('axioma-select-open', { detail: selectIdRef.current }));
     setIsOpen((current) => !current);
   };
@@ -971,7 +1118,8 @@ const CheckboxMultiSelect = ({
     <div ref={selectRef} className={`relative ${className}`}>
       <button
         type="button"
-        className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-lg border border-[#476788] bg-white px-4 py-2.5 text-left text-sm text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]"
+        className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-lg border border-[#476788] bg-white px-4 py-2.5 text-left text-sm text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff] disabled:cursor-default disabled:border-[#d4e0ed] disabled:bg-[#f8f9fb]"
+        disabled={!options.length}
         onClick={toggleOpen}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
@@ -982,11 +1130,11 @@ const CheckboxMultiSelect = ({
             ? selectedOptions.length === 1
               ? selectedOptions[0].label
               : `Выбрано ${selectedNoun}: ${selectedOptions.length}`
-            : placeholder}
+            : options.length ? placeholder : emptyPlaceholder}
         </span>
-        <ChevronRight className={`h-4 w-4 flex-none text-[#476788] transition-transform ${isOpen ? '-rotate-90' : 'rotate-90'}`} />
+        {!!options.length && <ChevronRight className={`h-4 w-4 flex-none text-[#476788] transition-transform ${isOpen ? '-rotate-90' : 'rotate-90'}`} />}
       </button>
-      {isOpen && menuPosition && createPortal(
+      {isOpen && !!options.length && menuPosition && createPortal(
         <div
           ref={menuRef}
           id={listboxId}
@@ -1170,7 +1318,52 @@ const orderMaterialSettings = [
   ['Желаемый URL', '/news/fintech-analytics-platform'],
 ];
 
-const OrderMaterialContent = ({ context = 'client', showCopyActions = false }) => (
+const MaterialAttachments = ({ ids, showEmpty = false }) => {
+  const [files,setFiles]=useState([]);
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    let active=true;
+    Promise.all(ids.map(id=>api(`/files/${id}/meta`))).then(items=>{if(active)setFiles(items);}).catch(e=>{if(active)setError(e.message);});
+    return ()=>{active=false;};
+  },[JSON.stringify(ids)]);
+  if(!ids.length&&!showEmpty) return null;
+  return <Card className="p-6"><div className="mb-5"><h3 className="font-display text-lg font-bold text-[#0b3558]">Прикрепленные файлы</h3><p className="mt-1 text-sm text-[#476788]">Изображения и документы, переданные вместе с материалом</p></div>{error && <p role="alert" className="text-red-600">{error}</p>}{ids.length?<div className="grid gap-3 md:grid-cols-2">{files.map(file=><a key={file.id} href={`/api/files/${file.id}`} className="flex min-w-0 items-center gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3" download><FileText className="h-5 w-5 shrink-0 text-[#006bff]" /><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{file.name}</span><span className="text-xs text-[#476788]">{formatFileSize(file.size)}</span></span><Download className="h-4 w-4 shrink-0" /></a>)}</div>:<div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3 text-sm text-[#476788]">Файлы к материалу не прикреплены</div>}</Card>;
+};
+
+const materialBodyLinks = (body) => {
+  const document = new DOMParser().parseFromString(String(body || ''), 'text/html');
+  const anchors = Array.from(document.querySelectorAll('a[href]')).map(link => link.getAttribute('href'));
+  const plain = document.body.textContent?.match(/https?:\/\/[^\s<>"']+/g) || [];
+  return Array.from(new Set([...anchors, ...plain].filter(link => link && /^https?:\/\//i.test(link)).map(link => link.replace(/[.,;!?]+$/, ''))));
+};
+
+const PlacementParameters = ({ links, settings, copy = false, showEmpty = false }) => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  if (!showEmpty && !links.length && !settings.length) return null;
+  return <Card className="p-6">
+    <h2 className="font-display text-lg font-bold text-[#0b3558]">Параметры размещения</h2>
+    {(links.length > 0 || showEmpty) && <div className="mt-5 overflow-hidden rounded-lg border border-[#d4e0ed]">
+      <div className="border-b border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3 text-sm font-semibold text-[#0b3558]">Ссылки в тексте материала</div>
+      {links.length ? links.map(link => <div key={link} className="flex items-center justify-between gap-3 border-b border-[#d4e0ed] px-4 py-3 last:border-b-0"><a href={link} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-sm text-[#006bff] hover:underline">{link}</a><CopyButton value={link} label="Скопировать ссылку" /></div>) : <div className="px-4 py-3 text-sm text-[#476788]">Ссылки в тексте не указаны</div>}
+    </div>}
+    {(settings.length > 0 || showEmpty) && <div className="mt-5 overflow-hidden rounded-lg border border-[#d4e0ed]">
+      <button type="button" className="flex w-full items-center justify-between gap-3 bg-[#f8f9fb] px-4 py-3 text-left text-sm font-semibold text-[#0b3558]" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}>Дополнительные настройки материала<ChevronRight className={`h-4 w-4 shrink-0 text-[#476788] transition-transform ${settingsOpen ? 'rotate-90' : ''}`} /></button>
+      <CollapsiblePanel open={settingsOpen}>{settings.length ? settings.map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 border-t border-[#d4e0ed] px-4 py-3"><div className="min-w-0"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-[#0b3558]">{value}</div></div>{copy && <CopyButton value={value} label={`Скопировать ${label}`} />}</div>) : <div className="border-t border-[#d4e0ed] px-4 py-3 text-sm text-[#476788]">Дополнительные настройки не заданы</div>}</CollapsiblePanel>
+    </div>}
+  </Card>;
+};
+
+const LiveMaterialContent = ({ material, copy = false, showAttachments = true, preserveOrderLayout = false }) => {
+  const links=materialBodyLinks(material?.body);
+  const settings=Object.entries({tags:'Тэги',title:'Title',description:'Description',desiredUrl:'Желаемый URL',notes:'Примечание и ТЗ'}).filter(([key])=>material?.metadata?.[key]).map(([key,label])=>[label,material.metadata[key]]);
+  return <div className="space-y-6">
+    <Card className="p-6">{material?.body?<div className="material-content" dangerouslySetInnerHTML={{__html:material.body}} />:<div className="text-base leading-7 text-[#476788]">Текст отсутствует</div>}</Card>
+    {showAttachments && <MaterialAttachments ids={material?.metadata?.attachments || []} showEmpty={preserveOrderLayout} />}
+    <PlacementParameters links={links} settings={settings} copy={copy} showEmpty={preserveOrderLayout} />
+  </div>;
+};
+
+const OrderMaterialContent = ({ context = 'client', showCopyActions = false, showAttachments = true }) => (
   <div className="space-y-6">
     <Card className="p-6">
       <FullMaterialPreview
@@ -1180,7 +1373,7 @@ const OrderMaterialContent = ({ context = 'client', showCopyActions = false }) =
       />
     </Card>
 
-    <Card className="p-6">
+    {showAttachments && <Card className="p-6">
       <div className="mb-5">
         <h3 className="font-display text-lg font-bold text-[#0b3558]">Прикрепленные файлы</h3>
         <p className="mt-1 text-sm text-[#476788]">Изображения и документы, переданные вместе с материалом</p>
@@ -1203,7 +1396,7 @@ const OrderMaterialContent = ({ context = 'client', showCopyActions = false }) =
           </button>
         ))}
       </div>
-    </Card>
+    </Card>}
 
     <Card className="p-6">
       <div className="mb-5">
@@ -1252,8 +1445,41 @@ const MaterialRightsDisclaimer = () => (
   </div>
 );
 
-const AiAssistModal = ({ isOpen, onClose, type = 'rewrite' }) => (
-  <Modal isOpen={isOpen} onClose={onClose} title={type === 'image' ? 'Генерация изображения с помощью ИИ' : 'Рерайт с помощью ИИ'} className="max-w-2xl">
+const AiAssistModal = ({ isOpen, onClose, type = 'rewrite', body = '', onApply = (_body: string) => {}, onImage = (_result: any) => {}, onInsertImage = (_result: any) => {}, onBusyChange = (_busy: boolean) => {} }) => {
+  const backend=useBackend();
+  const [prompt,setPrompt]=useState('Переписать материал в деловом стиле, сохранить факты, сделать текст короче и яснее.');
+  const [imagePrompt,setImagePrompt]=useState('Сгенерировать деловую иллюстрацию для материала о платформе аналитики.');
+  const [busy,setBusy]=useState(false);
+  const [generatedImage,setGeneratedImage]=useState(null);
+  const request=useRef(null);
+  const close=()=>{if(!busy)onClose();};
+  const rewrite=async()=>{
+    if(busy||backend.busy)return;
+    const payload=type==='image'?{prompt:imagePrompt}:{body,prompt},endpoint=type==='image'?'ai-image':'ai-rewrite',signature=JSON.stringify({endpoint,payload});
+    if(request.current?.signature!==signature)request.current={signature,key:crypto.randomUUID()};
+    setBusy(true);onBusyChange(true);
+    try {
+      const ok=await backend.perform(async()=>{
+        let result=await api(`/materials/${endpoint}`,'POST',payload,request.current.key);
+        while(['queued','running'].includes(result.status)) {
+          await new Promise(resolve=>setTimeout(resolve,1500));
+          result=await api(`/materials/${endpoint}/${result.id}`);
+        }
+        request.current=null;
+        if(result.status!=='completed')throw new Error(result.error||'Не удалось выполнить генерацию');
+        if(type==='image'){onImage(result);setGeneratedImage(result);}else onApply(result.body);
+        await backend.refresh().catch(error=>backend.setError(error.message));
+      });
+      if(ok&&type!=='image')onClose();
+    } finally {setBusy(false);onBusyChange(false);}
+  };
+  const imageResult=type==='image'&&generatedImage;
+  const resultActions=imageResult?<div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+    <Button variant="secondary" disabled={busy} onClick={rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}Сгенерировать повторно · 50 ₽</Button>
+    <Button variant="primary" disabled={busy} onClick={()=>{onInsertImage(generatedImage);onClose();}}><ImageIcon className="h-4 w-4 shrink-0"/>Вставить в текст</Button>
+  </div>:null;
+  return <Modal isOpen={isOpen} onClose={close} title={type === 'image' ? 'Генерация изображения с помощью ИИ' : 'Рерайт с помощью ИИ'} className="max-w-2xl" footer={resultActions}>
+    {imageResult?<img src={generatedImage.url} alt="Сгенерированное изображение" className="block aspect-video max-h-[55dvh] w-full rounded-lg object-contain" />:
     <div className="space-y-5">
       <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
         <div className="text-sm font-semibold text-[#0b3558]">{type === 'image' ? 'Стоимость генерации: 50 ₽' : 'Стоимость рерайта: 30 ₽'}</div>
@@ -1263,55 +1489,95 @@ const AiAssistModal = ({ isOpen, onClose, type = 'rewrite' }) => (
         <span className="text-sm font-medium text-[#476788]">Промт / ТЗ</span>
         <textarea
           className="mt-2 w-full min-h-[180px] border border-[#476788] rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
-          defaultValue={type === 'image' ? 'Сгенерировать деловую иллюстрацию для материала о платформе аналитики.' : 'Переписать материал в деловом стиле, сохранить факты, сделать текст короче и яснее.'}
+          value={type === 'image' ? imagePrompt : prompt}
+          disabled={busy}
+          onChange={event=>type==='image'?setImagePrompt(event.target.value):setPrompt(event.target.value)}
         />
       </label>
-      <div className="flex justify-end gap-3">
-        <Button variant="secondary" onClick={onClose}>Отмена</Button>
-        <Button variant="primary" onClick={onClose}>{type === 'image' ? 'Сгенерировать за 50 ₽' : 'Запустить рерайт за 30 ₽'}</Button>
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <Button variant="secondary" disabled={busy} onClick={close}>Отмена</Button>
+        <Button variant="primary" disabled={busy||(type==='image'?!imagePrompt.trim():(!prompt.trim()||!richTextLength(body)))} onClick={rewrite}>{busy?<LoaderCircle className="h-4 w-4 animate-spin"/>:null}{type === 'image' ? 'Сгенерировать за 50 ₽' : 'Запустить рерайт за 30 ₽'}</Button>
       </div>
-    </div>
+    </div>}
   </Modal>
-);
+};
 
-const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = [], materials = mockMaterials, projects = [], onCreateOrders }) => {
+const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = [], materials = mockMaterials, projects = [], onCreateOrders, informer = null }) => {
+  const backend = useBackend();
+  const requestKeys = useRef(new Map());
   const initialPlatforms = platforms.length ? platforms : platform ? [platform] : [];
   const [removedPlatformIds, setRemovedPlatformIds] = useState([]);
+  const [autoAccept,setAutoAccept]=useState(false);
+  const [limitConfirmationOpen,setLimitConfirmationOpen]=useState(false);
   const availableMaterials = materials.filter((material) => ['Принят в систему', 'Используется в заказах'].includes(material.status));
   const [selectedMaterialName, setSelectedMaterialName] = useState(availableMaterials[0]?.name);
   const selectedPlatforms = initialPlatforms.filter((item) => !removedPlatformIds.includes(item.id));
   const selectedMaterial = availableMaterials.find((material) => material.name === selectedMaterialName);
   const selectedProject = projects.find((project) => project.id === selectedMaterial?.projectId);
-  const pricedPlatforms = selectedPlatforms.map((item) => ({
-    ...item,
-    format: getMaterialCommercialFormat(selectedMaterial, item),
-    price: getPlatformPriceForMaterial(item, selectedMaterial),
-  }));
-  const totalPrice = pricedPlatforms.reduce((sum, item) => sum + item.price, 0);
+  const pricedPlatforms = selectedPlatforms.map((item) => {
+    const cheapestFormat = item.formats?.reduce((cheapest,current) => getPlatformPriceForFormat(item,current) < getPlatformPriceForFormat(item,cheapest) ? current : cheapest,item.formats[0]);
+    const format = platform && item.format && item.formats?.includes(item.format)
+      ? item.format
+      : item.formats?.includes(item.format) ? item.format : cheapestFormat;
+    return { ...item,format,price:getPlatformPriceForFormat(item,format),basePrice:getPlatformBasePriceForFormat(item,format) };
+  });
+  const standardTotalPrice = pricedPlatforms.reduce((sum, item) => sum + item.price, 0);
+  const packagePrice = Number(informer?.packagePrice || 0);
+  const packagePlatformIds = (informer?.selectionIds || []).map(String).sort();
+  const selectedPlatformIdSet = pricedPlatforms.map((item) => String(item.id)).sort();
+  const packageApplies = packagePrice > 0
+    && packagePlatformIds.length === selectedPlatformIdSet.length
+    && packagePlatformIds.every((id, index) => id === selectedPlatformIdSet[index]);
+  const totalPrice = packageApplies ? packagePrice : standardTotalPrice;
+  const limit = backend.data.limits.orderLimit;
+  const exceedsLimit = limit !== null && Math.round(totalPrice * 100) > limit;
   const isBulk = pricedPlatforms.length > 1;
+  const count = pricedPlatforms.length;
+  const platformLabel = count % 10 === 1 && count % 100 !== 11 ? 'площадка' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'площадки' : 'площадок';
+  const createOrders = async (limitConfirmed = false) => {
+    const fingerprint = JSON.stringify([selectedMaterial.id,pricedPlatforms.map(p=>p.id),packageApplies ? informer.id : null]);
+    if(!requestKeys.current.has(fingerprint)) requestKeys.current.set(fingerprint,crypto.randomUUID());
+    const ok = await onCreateOrders?.(selectedMaterial, pricedPlatforms,requestKeys.current.get(fingerprint),limitConfirmed,autoAccept,packageApplies ? { informerId: informer.id,expectedAmount:Math.round(totalPrice * 100) } : null);
+    if(ok) {setLimitConfirmationOpen(false);onClose();}
+  };
   return (
-  <Modal isOpen={isOpen} onClose={onClose} title={isBulk ? 'Массовое размещение материала' : 'Выбор материала для размещения'} className="max-w-5xl">
-    <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
-      <div className="rounded-2xl bg-[#f8f9fb] border border-[#d4e0ed] p-4">
+  <>
+  <Modal isOpen={isOpen} onClose={onClose} title="Подтверждение заказа" className="max-w-3xl" footer={
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><div className="text-xs text-[#476788]">К резервированию</div><div className="text-lg font-semibold tabular-nums text-[#0b3558]">{formatMoney(totalPrice)}</div></div>
+      <div className="flex gap-3">
+        <Button variant="secondary" onClick={onClose}>Отмена</Button>
+        <Button variant="primary" disabled={backend.busy || !selectedMaterial || !count} onClick={() => {
+          if(autoAccept && exceedsLimit) setLimitConfirmationOpen(true);
+          else createOrders();
+        }}>{backend.busy ? 'Создание…' : isBulk ? 'Создать заказы' : 'Создать заказ'}</Button>
+      </div>
+    </div>
+  }>
+    <div className="space-y-5">
+      <div>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xs text-[#476788] uppercase">{isBulk ? 'Выбрано площадок' : 'Площадка'}</div>
-            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{pricedPlatforms.length ? `${pricedPlatforms.length} площадки` : 'Нет выбранных площадок'}</div>
+            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{count ? `${count} ${platformLabel}` : 'Нет выбранных площадок'}</div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-[#476788] uppercase">Бюджет</div>
+            <div className="text-xs text-[#476788] uppercase">{packageApplies ? 'Единая цена подборки' : 'Бюджет'}</div>
             <div className="mt-1 text-sm font-semibold text-[#0b3558] tabular-nums">{formatMoney(totalPrice)}</div>
           </div>
         </div>
-        <div className="mt-4 space-y-2 max-h-[360px] overflow-y-auto">
+        <div className="mt-3 divide-y divide-[#d4e0ed] border-y border-[#d4e0ed]">
           {pricedPlatforms.map((item) => (
-            <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2">
+            <div key={item.id} className="flex items-center justify-between gap-3 py-3">
               <div className="min-w-0">
-                <div className="text-sm font-medium text-[#0b3558] truncate">{item.name}</div>
+                <div className="text-sm font-medium text-[#0b3558] break-words">{item.name}</div>
                 <div className="text-xs text-[#476788]">{item.type} · {item.format}</div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-[#0b3558] tabular-nums whitespace-nowrap">{formatMoney(item.price)}</div>
+                <div className="text-right whitespace-nowrap">
+                  <div className="text-sm font-semibold text-[#0b3558] tabular-nums">{formatMoney(item.price)}</div>
+                  {item.basePrice > item.price && <div className="mt-0.5 text-xs tabular-nums text-[#7890aa] line-through">{formatMoney(item.basePrice)}</div>}
+                </div>
                 <button className="p-2 rounded-lg text-[#476788] hover:text-red-600 hover:bg-red-50" onClick={() => setRemovedPlatformIds((ids) => [...ids, item.id])} title="Удалить площадку из размещения">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -1325,54 +1591,47 @@ const MaterialSelectionModal = ({ isOpen, onClose, platform = null, platforms = 
           <span className="text-sm font-medium text-[#476788]">Материал</span>
           <CustomSelect className="mt-2" value={selectedMaterialName} onChange={setSelectedMaterialName} options={availableMaterials.map((material) => material.name)} />
         </label>
-        <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-          <div className="text-xs text-[#476788]">Проект новых заказов</div>
-          <div className="mt-2"><ProjectLink project={selectedProject} muted /></div>
-          <p className="mt-2 text-xs leading-5 text-[#476788]">Каждый созданный заказ унаследует проект материала. Позже заказ можно перенести отдельно.</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="text-sm text-[#476788]">Проект</div>
+          <ProjectLink project={selectedProject} muted />
         </div>
-        <label className="flex items-start gap-3 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 cursor-pointer">
-          <input type="checkbox" className="mt-1" />
-          <span className="text-sm text-[#476788]"><span className="font-semibold text-[#0b3558]">Автоприемка</span><br />Автоматически принять размещение, если жалоба не открыта в течение 72 часов после загрузки ссылки.</span>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" className="mt-1 shrink-0" checked={autoAccept} onChange={event=>setAutoAccept(event.target.checked)} />
+          <span className="text-sm text-[#476788]"><span className="font-semibold text-[#0b3558]">Автоприёмка</span><br />Автоматически принять размещение, если жалоба не открыта в течение 72 часов после загрузки ссылки.</span>
         </label>
-        <MaterialRightsDisclaimer />
-        <div className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
-          После подтверждения система создаст отдельный заказ на каждую выбранную площадку. Общая сумма размещений заморозится на балансе рекламодателя.
-        </div>
-        <div className="flex flex-col sm:flex-row justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button
-            variant="primary"
-            disabled={!selectedMaterial || !pricedPlatforms.length}
-            onClick={() => {
-              onCreateOrders?.(selectedMaterial, pricedPlatforms);
-              onClose();
-            }}
-          >
-            Создать заказ
-          </Button>
-        </div>
+        <p className="text-xs leading-5 text-[#476788]">{isBulk ? 'Для каждой площадки будет создан отдельный заказ. ' : ''}Сумма заказа будет зарезервирована на вашем балансе. Подтверждая заказ, вы подтверждаете наличие прав на текст, изображения и другие материалы.</p>
       </div>
     </div>
   </Modal>
+  <Modal isOpen={isOpen && limitConfirmationOpen} onClose={() => setLimitConfirmationOpen(false)} title="Превышен лимит автоприёмки" className="max-w-md" footer={
+    <div className="flex justify-end gap-3">
+      <Button variant="secondary" onClick={() => setLimitConfirmationOpen(false)}>Отмена</Button>
+      <Button variant="primary" disabled={backend.busy} onClick={() => createOrders(true)}>{backend.busy ? 'Создание…' : 'Продолжить'}</Button>
+    </div>
+  }>
+    <p className="text-sm leading-6 text-[#476788]">Сумма заказа превышает лимит автоприёмки {formatMoney(limit/100)}. Продолжить?</p>
+  </Modal>
+  </>
   );
 };
 
-const Modal = ({ isOpen, onClose, title, children, className = 'max-w-md' }) => {
+const Modal = ({ isOpen, onClose, title, children, className = 'max-w-md', footer = null }) => {
   if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0b3558]/10 backdrop-blur-sm" onClick={onClose}>
-      <div className={`bg-white rounded-2xl border border-[#d4e0ed] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.08)_0px_30px_50px_0px] w-full ${className} overflow-hidden flex flex-col max-h-[90vh]`} onClick={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-[#0b3558]/20 backdrop-blur-sm" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={title} className={`bg-white rounded-2xl border border-[#d4e0ed] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_8px_15px_0px,rgba(71,103,136,0.08)_0px_30px_50px_0px] w-full ${className} overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)]`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-[#d4e0ed] flex-shrink-0">
           <h3 className="text-lg font-semibold text-[#0b3558]">{title}</h3>
-          <button onClick={onClose} className="text-[#476788] hover:text-[#0b3558] transition-colors p-1.5 rounded-lg hover:bg-[#f0f3f8]">
+          <button onClick={onClose} aria-label="Закрыть окно" className="shrink-0 text-[#476788] hover:text-[#0b3558] transition-colors p-1.5 rounded-lg hover:bg-[#f0f3f8]">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 overflow-y-auto">
+        <div className="min-h-0 p-4 sm:p-6 overflow-y-auto overscroll-contain">
           {children}
         </div>
+        {footer && <div className="shrink-0 border-t border-[#d4e0ed] bg-white p-4 sm:px-6">{footer}</div>}
       </div>
-    </div>
+    </div>, document.body
   );
 };
 
@@ -1401,6 +1660,10 @@ const EmptyState = ({ title, text, action = null, onAction = undefined }) => (
 // --- 1. LANDING PAGE ---
 
 const LandingView = ({ setGlobalMode }) => {
+  const backend = useBackend();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authCode,setAuthCode]=useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -1409,11 +1672,14 @@ const LandingView = ({ setGlobalMode }) => {
   const [recoverySent, setRecoverySent] = useState(false);
   const [publisherApplicationOpen, setPublisherApplicationOpen] = useState(false);
   const [publisherApplicationSubmitted, setPublisherApplicationSubmitted] = useState(false);
+  const [applicationPlatformType,setApplicationPlatformType]=useState('Онлайн-СМИ');
+  const [applicationRelation,setApplicationRelation]=useState('Владелец');
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
-  const handleLogin = (role) => {
-    setLoginModalOpen(false);
-    setGlobalMode(role);
+  const handleLogin = async (role) => {
+    const ok = await backend.authenticate(email, password, authMode === 'registration', role==='client'?'customer':role);
+    if (ok==='two-factor')setAuthStep('2fa');
+    else if (ok) setLoginModalOpen(false);
   };
   const openLoginModal = () => {
     setAuthMode('login');
@@ -1434,9 +1700,13 @@ const LandingView = ({ setGlobalMode }) => {
     setLoginRole('publisher');
     openLoginModal();
   };
-  const submitPublisherApplication = (event) => {
+  const submitPublisherApplication = async (event) => {
     event.preventDefault();
-    setPublisherApplicationSubmitted(true);
+    const values=Object.fromEntries(new FormData(event.currentTarget).entries());
+    const ok=await backend.perform(()=>api('/publisher-applications','POST',{
+      ...values,platformType:applicationPlatformType,relation:applicationRelation,
+    }));
+    if(ok)setPublisherApplicationSubmitted(true);
   };
 
   useEffect(() => {
@@ -1487,12 +1757,12 @@ const LandingView = ({ setGlobalMode }) => {
   ];
 
   return (
-    <div className="min-h-screen scroll-smooth bg-[#f4f6f8] font-sans text-[#102f4f] selection:bg-[#b8ffcf] selection:text-[#102f4f] text-[90%]">
+    <div id="top" className="min-h-screen scroll-smooth bg-[#f4f6f8] font-sans text-[#102f4f] selection:bg-[#b8ffcf] selection:text-[#102f4f] text-[90%]">
       <header className="sticky top-0 z-50 border-b border-[#dce3eb] bg-white shadow-[0_4px_18px_rgba(11,53,88,0.08)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-[72px]">
             <div className="flex items-center">
-              <span className="landing-heading text-[24px] font-bold text-[#004cca]">Аксиома</span>
+              <a href="#top" className="landing-heading text-[24px] font-bold text-[#004cca]">Аксиома</a>
             </div>
             
             <nav className="hidden md:flex items-center gap-1 text-sm font-semibold text-[#526d86]">
@@ -1503,7 +1773,7 @@ const LandingView = ({ setGlobalMode }) => {
             </nav>
 
             <div className="hidden md:flex items-center gap-3">
-              <button className="px-3 py-2 text-sm font-bold text-[#102f4f] hover:text-[#004cca]" onClick={openLoginModal}>Вход</button>
+              <button className="px-3 py-2 text-sm font-bold text-[#102f4f] hover:text-[#004cca]" onClick={()=>backend.user?location.assign(`/${backend.user.role}`):openLoginModal()}>{backend.user?'В кабинет':'Вход'}</button>
               <button className="rounded-xl bg-[#004cca] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(0,76,202,0.18)] transition-colors hover:bg-[#003798]" onClick={openRegistrationModal}>Зарегистрироваться</button>
             </div>
 
@@ -1716,7 +1986,7 @@ const LandingView = ({ setGlobalMode }) => {
                 ))}
               <div className="sm:col-span-2 grid grid-cols-1 overflow-hidden rounded-3xl border border-[#c3c6d6]/40 bg-white sm:grid-cols-3">
                 {[
-                  ['15%', 'Комиссия на вывод'],
+                  ['15%', 'Комиссия платформы с заказа'],
                   ['2 года', 'Минимальный срок хранения размещенных материалов'],
                   ['1 кабинет', 'Заявки, чат и выплаты'],
                 ].map(([value, label]) => (
@@ -1793,7 +2063,7 @@ const LandingView = ({ setGlobalMode }) => {
       <footer className="border-t border-[#24415f] bg-[#102f4f] py-14 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-10">
            <div>
-              <span className="landing-heading text-lg font-bold text-white">Аксиома</span>
+              <a href="#top" className="landing-heading text-lg font-bold text-white">Аксиома</a>
               <p className="mt-4 max-w-[220px] text-sm leading-6 text-[#b8c7d8]">Управляемые медийные размещения для команд, которым важен контроль результата.</p>
               <div className="mt-6 text-xs text-[#8da4ba]">© «Аксиома», 2026</div>
             </div>
@@ -1811,7 +2081,6 @@ const LandingView = ({ setGlobalMode }) => {
                 <div>Почта</div>
                 <div>Телеграм</div>
                 <div>Юридическая информация</div>
-                <button className="text-left font-semibold text-[#68a1ff] hover:text-white" onClick={() => handleLogin('admin')}>Вход для администратора</button>
               </div>
             </div>
         </div>
@@ -1839,15 +2108,15 @@ const LandingView = ({ setGlobalMode }) => {
           ) : authStep === '2fa' ? (
             <div className="space-y-6">
               <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm text-[#476788]">
-                Код подтверждения отправлен на почту.
+                Введите код из приложения-аутентификатора или резервный код.
               </div>
               <label className="block">
                 <span className="text-sm font-medium text-[#476788]">Код 2FA</span>
-                <input inputMode="numeric" maxLength={6} className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-lg tracking-[0.35em] font-semibold text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="123456" />
+                <input autoComplete="one-time-code" maxLength={100} className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-lg font-semibold text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={authCode} onChange={event=>setAuthCode(event.target.value)} />
               </label>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <button className="text-sm font-semibold text-[#006bff]" onClick={() => setAuthStep('credentials')}>Изменить email или пароль</button>
-                <Button variant="primary" onClick={() => handleLogin(loginRole)}>Подтвердить и войти</Button>
+                <Button variant="primary" disabled={backend.busy||!authCode.trim()} onClick={async () => {if(await backend.verifySecondFactor(authCode)){setAuthCode('');setLoginModalOpen(false);}}}>Подтвердить и войти</Button>
               </div>
             </div>
           ) : (
@@ -1861,6 +2130,7 @@ const LandingView = ({ setGlobalMode }) => {
                   <button
                     key={role}
                     type="button"
+                    aria-pressed={loginRole === role}
                     onClick={() => setLoginRole(role)}
                     className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${loginRole === role ? 'bg-white text-[#0b3558] shadow-[rgba(71,103,136,0.04)_0px_4px_5px_0px,rgba(71,103,136,0.03)_0px_4px_10px_0px,rgba(71,103,136,0.05)_0px_10px_20px_0px]' : 'text-[#476788] hover:text-[#0b3558]'}`}
                   >
@@ -1872,11 +2142,11 @@ const LandingView = ({ setGlobalMode }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <label className="block md:col-span-2">
                   <span className="text-sm font-medium text-[#476788]">Email</span>
-                  <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue={loginRole === 'client' ? 'owner@fintech.ru' : 'editor@publisher.ru'} />
+                  <input type="email" autoComplete="username" className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={email} onChange={e => setEmail(e.target.value)} />
                 </label>
                 <label className="block md:col-span-2">
                   <span className="text-sm font-medium text-[#476788]">Пароль</span>
-                  <input type="password" className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="password" />
+                  <input type="password" autoComplete="current-password" className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={password} onChange={e => setPassword(e.target.value)} />
                 </label>
               </div>
               <label className="flex items-start gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
@@ -1888,7 +2158,7 @@ const LandingView = ({ setGlobalMode }) => {
                   <button className="font-semibold text-[#006bff]" onClick={() => { setAuthStep('recovery'); setRecoverySent(false); }}>Забыли пароль?</button>
                   <button className="font-semibold text-[#006bff]" onClick={openRegistrationModal}>Зарегистрироваться</button>
                 </div>
-                <Button variant="primary" onClick={() => setAuthStep('2fa')}>Продолжить</Button>
+                <Button variant="primary" disabled={backend.busy} onClick={() => handleLogin(loginRole)}>Войти</Button>
               </div>
             </div>
           )
@@ -1907,7 +2177,7 @@ const LandingView = ({ setGlobalMode }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <label className="block">
                 <span className="text-sm font-medium text-[#476788]">Email</span>
-                <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="client@example.ru" />
+                <input type="email" autoComplete="username" className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" value={email} onChange={e => setEmail(e.target.value)} />
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-[#476788]">Телефон</span>
@@ -1915,7 +2185,7 @@ const LandingView = ({ setGlobalMode }) => {
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-[#476788]">Пароль</span>
-                <input type="password" className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="password" />
+                <input type="password" autoComplete="new-password" minLength={12} className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" value={password} onChange={e => setPassword(e.target.value)} />
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-[#476788]">Статус плательщика</span>
@@ -1968,7 +2238,7 @@ const LandingView = ({ setGlobalMode }) => {
                 <div>
                   <h4 className="text-lg font-semibold text-[#0b3558]">Анкета принята на ручную проверку</h4>
                   <p className="mt-2 text-sm leading-6 text-[#476788]">
-                    Кабинет паблишера пока не создан. Мы проверим площадку, принадлежность ресурса и контактные данные, после чего сообщим о решении на рабочую почту.
+                    Кабинет паблишера пока не создан. Команда проверит площадку, принадлежность ресурса и контактные данные, затем свяжется с заявителем по указанным контактам.
                   </p>
                 </div>
               </div>
@@ -1977,7 +2247,7 @@ const LandingView = ({ setGlobalMode }) => {
               {[
                 ['1', 'Проверим площадку', 'Убедимся, что ресурс существует и соответствует данным анкеты.'],
                 ['2', 'Подтвердим представителя', 'Свяжемся с редакцией или владельцем по официальным контактам.'],
-                ['3', 'Откроем доступ', 'После одобрения отправим отдельное приглашение для создания кабинета.'],
+                ['3', 'Откроем доступ', 'После одобрения администратор создаст ссылку для входа и передаст ее заявителю.'],
               ].map(([step, title, text]) => (
                 <div key={step} className="rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-5">
                   <div className="text-xs font-bold text-[#006bff]">Шаг {step}</div>
@@ -2009,19 +2279,19 @@ const LandingView = ({ setGlobalMode }) => {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Имя и фамилия</span>
-                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Анна Смирнова" />
+                  <input required name="applicant" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Должность</span>
-                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Коммерческий директор" />
+                  <input required name="position" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Рабочая почта</span>
-                  <input required type="email" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="partner@publisher.ru" />
+                  <input required name="email" type="email" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Телефон</span>
-                  <input required type="tel" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="+7 999 000-00-00" />
+                  <input required name="phone" type="tel" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
               </div>
             </fieldset>
@@ -2031,27 +2301,27 @@ const LandingView = ({ setGlobalMode }) => {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Название площадки</span>
-                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Investor.ru" />
+                  <input required name="platform" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Тип площадки</span>
-                  <CustomSelect className="mt-2" placeholder="Выберите тип" options={['Онлайн-СМИ', 'Сайт', 'Telegram-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
+                  <CustomSelect className="mt-2" value={applicationPlatformType} onChange={setApplicationPlatformType} options={['Онлайн-СМИ', 'Сайт', 'Telegram-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
                 </label>
                 <label className="block md:col-span-2">
                   <span className="text-sm font-medium text-[#476788]">Ссылка на площадку</span>
-                  <input required type="url" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="https://investor.ru" />
+                  <input required name="platformUrl" type="url" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Юридическое лицо / ИП</span>
-                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="ООО «Редакция»" />
+                  <input required name="legalName" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">ИНН</span>
-                  <input required inputMode="numeric" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="7701000000" />
+                  <input required name="inn" inputMode="numeric" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block md:col-span-2">
                   <span className="text-sm font-medium text-[#476788]">Ваша связь с площадкой</span>
-                  <CustomSelect className="mt-2" placeholder="Выберите роль" options={['Владелец', 'Сотрудник редакции', 'Официальный представитель по договору']} />
+                  <CustomSelect className="mt-2" value={applicationRelation} onChange={setApplicationRelation} options={['Владелец', 'Сотрудник редакции', 'Официальный представитель по договору']} />
                 </label>
               </div>
             </fieldset>
@@ -2061,15 +2331,15 @@ const LandingView = ({ setGlobalMode }) => {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Тематика</span>
-                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="Финансы, инвестиции, бизнес" />
+                  <input required name="theme" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Посещаемость / охват</span>
-                  <input required className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="2,5 млн посещений в месяц" />
+                  <input required name="reach" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
                 </label>
                 <label className="block md:col-span-2">
                   <span className="text-sm font-medium text-[#476788]">Комментарий</span>
-                  <textarea className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="Укажите дополнительные данные или официальный контакт редакции для проверки." />
+                  <textarea name="comment" className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="Укажите дополнительные данные или официальный контакт редакции для проверки." />
                 </label>
               </div>
             </fieldset>
@@ -2095,7 +2365,10 @@ const LandingView = ({ setGlobalMode }) => {
 
 // --- 2. CLIENT PORTAL ---
 
-const ClientDashboardView = ({ navigate, informerItems = initialInformerItems }) => {
+const ClientDashboardView = ({ navigate, onOpenOrder, informerItems = initialInformerItems }) => {
+  const backend = useBackend();
+  const activeOrders = backend.data.orders.filter(o => !['completed','refunded','rejected'].includes(o.apiStatus));
+  const mockOrdersClient = activeOrders;
   const [selectedPromo, setSelectedPromo] = useState(0);
   const iconMap = informerIconMap;
   const accentMap = informerAccentMap;
@@ -2106,7 +2379,7 @@ const ClientDashboardView = ({ navigate, informerItems = initialInformerItems })
       format: getInformerFormat(item),
       label: getInformerFormat(item),
       targetView: ['Каталог', 'Карточка площадки'].includes(item.target) ? 'catalog' : null,
-      selectedContent: getInformerSelectionOptions(getInformerFormat(item)).filter((option) => (item.selectionIds || []).includes(option.value)),
+      selectedContent: getInformerSelectionOptions(getInformerFormat(item), backend.data.outlets).filter((option) => (item.selectionIds || []).includes(option.value)),
       Icon: iconMap[item.icon] || FileText,
       accentClass: accentMap[item.accent] || accentMap.blue,
     }));
@@ -2139,10 +2412,10 @@ const ClientDashboardView = ({ navigate, informerItems = initialInformerItems })
           </div>
           <div className="grid flex-1 grid-cols-1 sm:grid-cols-2">
             {[
-              ['Доступный баланс', formatMoney(1250000), 'Пополнить баланс', 'balance'],
-              ['Заморожено в заказах', formatMoney(345000), '4 активных заказа', 'orders'],
-              ['Активные заказы', '4', 'Открыть заказы', 'orders'],
-              ['Завершено в июле', '12', 'Открыть отчеты', 'reports'],
+              ['Доступный баланс', formatMoney(backend.data.balance.available / 100), 'Пополнить баланс', 'balance'],
+              ['Заморожено в заказах', formatMoney(backend.data.balance.reserved / 100), `${activeOrders.length} активных заказов`, 'orders'],
+              ['Активные заказы', String(activeOrders.length), 'Открыть заказы', 'orders'],
+              ['Завершено', String(backend.data.orders.filter(o => o.apiStatus === 'completed').length), 'Открыть отчеты', 'reports'],
             ].map(([label, value, note, target], index) => (
               <button
                 key={label}
@@ -2205,9 +2478,10 @@ const ClientDashboardView = ({ navigate, informerItems = initialInformerItems })
                 <Button
                   variant="primary"
                   className="w-full"
-                  onClick={() => promo.targetUrl
-                    ? window.open(promo.targetUrl, '_blank', 'noopener,noreferrer')
-                    : navigate(promo.targetView)}
+                  onClick={() => {
+                    if(promo.targetUrl)window.open(promo.targetUrl, '_blank', 'noopener,noreferrer');
+                    else location.assign(`/customer/catalog?informer=${encodeURIComponent(promo.id)}`);
+                  }}
                 >
                   {promo.action}<ArrowRight className="h-4 w-4" />
                 </Button>
@@ -2239,8 +2513,8 @@ const ClientDashboardView = ({ navigate, informerItems = initialInformerItems })
             </thead>
             <tbody className="bg-white divide-y divide-[#d4e0ed]">
               {mockOrdersClient.slice(0, 2).map(order => (
-                <tr key={order.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('order_detail')}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-[#0b3558] font-medium">#{order.id}</td>
+                <tr key={order.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => onOpenOrder(order)}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-[#0b3558] font-medium">№{orderNumber(order)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#476788]">{order.platform}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-[#0b3558] tabular-nums">{formatMoney(order.price)}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -2341,6 +2615,7 @@ const MaterialContentCard = ({ subtitle = 'Полная версия матер�
 };
 
 const ProjectChangeModal = ({ isOpen, onClose, currentProject, projects, entityLabel, onConfirm }) => {
+  const backend = useBackend();
   const [selectedProject, setSelectedProject] = useState(currentProject);
 
   useEffect(() => {
@@ -2380,10 +2655,9 @@ const ProjectChangeModal = ({ isOpen, onClose, currentProject, projects, entityL
           <Button variant="secondary" onClick={onClose}>Отмена</Button>
           <Button
             variant="primary"
-            disabled={selectedProject === currentProject}
-            onClick={() => {
-              onConfirm(selectedProject);
-              onClose();
+            disabled={backend.busy || selectedProject === currentProject}
+            onClick={async () => {
+              if(await onConfirm(selectedProject)) onClose();
             }}
           >
             Изменить проект
@@ -2394,120 +2668,36 @@ const ProjectChangeModal = ({ isOpen, onClose, currentProject, projects, entityL
   );
 };
 
-const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045, sourceOrder = null, projects = [], openProject, onChangeProject }) => {
-  const [currentState, setCurrentState] = useState(state);
-  const [projectName, setProjectName] = useState(projects.find((project) => project.id === sourceOrder?.projectId)?.name || 'Без проекта');
+const ClientOrderDetailView = ({ navigate, sourceOrder = null, projects = [], openProject, onChangeProject, onOpenReport }) => {
+  const backend = useBackend();
   const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const isPendingState = currentState === 'pending';
-  const isRejectedState = currentState === 'rejected';
-  const isCompletedState = currentState === 'completed';
-  const fallbackOrder = isPendingState
-    ? {
-        id: 1048,
-        status: 'Площадка рассматривает',
-        color: 'blue',
-        subtitle: 'отправлен 16.10.2023 · ответ до 18.10.2023',
-        amount: 45000,
-        platform: 'Технологии сегодня',
-        title: 'Пресс-релиз: Запуск новой платформы',
-        format: 'Новость',
-      }
-    : isRejectedState
-      ? {
-          id: 1055,
-          status: 'Площадка отказала',
-          color: 'red',
-          subtitle: 'отказ получен 19.10.2023',
-          amount: 146000,
-          platform: 'Бизнес Среда',
-          title: 'Обзор рынка недвижимости за третий квартал',
-          format: 'Новость',
-        }
-      : isCompletedState
-        ? orderId === 1052
-          ? {
-              id: 1052,
-              status: 'Завершено',
-              color: 'green',
-              subtitle: 'принят и оплачен 18.10.2023',
-              amount: 80000,
-              platform: 'VC.ru',
-              title: 'Кейс внедрения системы управления клиентами',
-              format: 'Лонгрид',
-              publicationUrl: 'https://vc.ru/services/1052',
-              publicationDate: '18.10.2023',
-            }
-          : {
-              id: 1045,
-              status: 'Завершено',
-              color: 'green',
-              subtitle: 'принят и оплачен 20.10.2023',
-              amount: 150000,
-              platform: 'РБК Инвестиции',
-              title: 'Пресс-релиз: Запуск новой платформы',
-              format: 'Статья',
-              publicationUrl: 'https://invest.rbc.ru/news/652a9f',
-              publicationDate: '18.10.2023',
-            }
-      : {
-          id: 1045,
-          status: 'Ожидает приемки',
-          color: 'indigo',
-          subtitle: 'ссылка отправлена 18.10.2023',
-          amount: 150000,
-          platform: 'РБК Инвестиции',
-          title: 'Пресс-релиз: Запуск новой платформы',
-          format: 'Статья',
-          publicationUrl: 'https://invest.rbc.ru/news/652a9f',
-          publicationDate: '18.10.2023',
-        };
-  const order = sourceOrder
-    ? {
-        ...fallbackOrder,
-        id: sourceOrder.id,
-        status: currentState === 'completed' ? 'Завершено' : sourceOrder.status,
-        color: currentState === 'completed' ? 'green' : sourceOrder.statusColor,
-        amount: sourceOrder.price,
-        platform: sourceOrder.platform,
-        title: sourceOrder.material,
-        projectId: sourceOrder.projectId,
-      }
-    : fallbackOrder;
-  const changeProject = (nextName) => {
-    setProjectName(nextName);
-    onChangeProject?.(order.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
+  if (!sourceOrder) return <Card className="p-6"><p className="mb-4 text-sm text-[#476788]">Заказ не найден или недоступен.</p><Button variant="secondary" onClick={() => navigate('orders')}>К списку заказов</Button></Card>;
+  const projectName = projects.find(project => project.id === sourceOrder.projectId)?.name || 'Без проекта';
+  const status = sourceOrder.apiStatus;
+  const isPendingState = status === 'pending';
+  const isAcceptedState = status === 'accepted';
+  const isSubmittedState = status === 'submitted';
+  const isCompletedState = status === 'completed';
+  const isRejectedState = status === 'rejected';
+  const isDisputedState = status === 'disputed';
+  const isRefundedState = status === 'refunded';
+  const updatedDate=new Date(sourceOrder.updated_at).toLocaleDateString('ru-RU');
+  const order = {
+    id: sourceOrder.id, number: sourceOrder.number, status: sourceOrder.status,
+    color: sourceOrder.statusColor, amount: sourceOrder.price,
+    platform: sourceOrder.platform, title: sourceOrder.material,
+    publicationUrl: sourceOrder.publication_url, publicationDate: sourceOrder.publication_url ? updatedDate : null,
   };
-  const timelineItems = [
-    ['Заказ создан', '15.10, 10:15', 'done'],
-    ...(isCompletedState
-      ? [
-          ['Площадка приняла заказ', '16.10, 11:40', 'done'],
-          ['Ссылка отправлена', '18.10, 12:30', 'done'],
-          ['Публикация принята', '20.10, 12:03', 'done'],
-          ['Заказ оплачен', '20.10, 12:03', 'done'],
-        ]
-      : isRejectedState
-        ? [
-            ['Заказ отправлен', '16.10, 11:40', 'done'],
-            ['Площадка отказала', '19.10, 14:20', 'current'],
-            ['Средства доступны', 'списания не было', 'next'],
-          ]
-        : isPendingState
-          ? [
-              ['Заказ отправлен', '16.10, 11:40', 'done'],
-              ['Решение площадки', 'до 18.10', 'current'],
-              ['Публикация', 'после принятия', 'next'],
-            ]
-          : [
-              ['Площадка приняла заказ', '16.10, 11:40', 'done'],
-              ['Ссылка отправлена', '18.10, 12:30', 'done'],
-              ['Приемка публикации', 'ожидает решения', 'current'],
-              ['Оплата заказа', 'после приемки', 'next'],
-            ]),
-  ];
-
+  const statusCopy = isCompletedState ? ['Заказ завершен', 'Публикация принята заказчиком, средства списаны с замороженного баланса, заказ закрыт. Ссылка и итоговый отчет остаются доступны в карточке.']
+    : isRejectedState ? ['Площадка отказалась от заказа', 'Площадка рассмотрела заказ и отказалась от размещения. Средства по заказу не будут списаны и останутся доступны на балансе.']
+    : isPendingState ? ['Площадка рассматривает заказ', 'Площадка получила заказ и должна принять или отклонить его до указанного срока. До решения площадки редактирование условий заказа недоступно.']
+    : isAcceptedState ? ['Заказ принят в работу', 'Площадка приняла заказ. После публикации здесь появится ссылка для проверки.']
+    : isSubmittedState ? ['Публикация загружена', 'Площадка загрузила ссылку на опубликованный материал. Проверьте корректность размещения. Нажимая «Принять и оплатить», вы подтверждаете отсутствие претензий.']
+    : isDisputedState ? ['По заказу открыт спор', 'До решения модератора средства остаются на холде, а доказательства и переписка доступны в карточке спора.']
+    : ['Средства возвращены', 'Спор завершен возвратом. Средства по заказу возвращены на баланс.'];
+  const changeProject = async (nextName) => onChangeProject?.(sourceOrder.id, nextName === 'Без проекта' ? null : projects.find(project => project.name === nextName)?.id ?? null);
   return (
-  <div className="space-y-6 max-w-6xl mx-auto">
+  <div className="space-y-6 max-w-6xl mx-auto" data-order-state={status}>
     <div className="flex items-center gap-2 text-sm text-[#476788] cursor-pointer hover:text-[#0b3558]" onClick={() => navigate('orders')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> Назад к списку
     </div>
@@ -2516,7 +2706,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <Badge color={order.color}>{order.status}</Badge>
-          <span className="text-sm text-[#476788]">Заказ #{order.id}</span>
+          <span className="text-sm text-[#476788]">Заказ №{orderNumber(order)}</span>
         </div>
         <div className="shrink-0 lg:text-right">
           <div className="text-xs font-medium uppercase text-[#476788]">
@@ -2530,9 +2720,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
       </h1>
       <div className="mt-2 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-2 text-sm text-[#476788]">
         <span>
-          {order.publicationDate
-            ? `Размещено на ${order.platform} · ${order.publicationDate}, 12:30`
-            : `Площадка: ${order.platform}`}
+          {order.publicationDate ? `Размещено на ${order.platform} · ${order.publicationDate}` : `Площадка: ${order.platform}`}
         </span>
         <span aria-hidden="true">·</span>
         <button
@@ -2545,88 +2733,55 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
           <Pencil className="h-3.5 w-3.5 shrink-0" />
         </button>
       </div>
-      <div className="mt-5 grid gap-3 border-t border-[#d4e0ed] pt-4 sm:grid-cols-2 lg:grid-cols-5">
-        {timelineItems.map(([label, time, status]) => (
-          <div key={`${label}-${time}`} className="flex min-w-0 items-start gap-2.5">
-            {status === 'done'
-              ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-500" />
-              : status === 'current'
-                ? <Clock className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
-                : <div className="mt-0.5 h-4 w-4 flex-none rounded-full border-2 border-[#d4e0ed]" />}
-            <div className="min-w-0">
-              <div className="text-xs font-semibold leading-5 text-[#0b3558]">{label}</div>
-              <div className="text-xs leading-5 text-[#476788]">{time}</div>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
 
     <div className="rounded-xl border border-[#d4e0ed] bg-white p-5">
       <div className="flex flex-col items-start gap-4 md:flex-row">
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-[#d4e0ed] bg-[#f8f9fb]">
-           {isCompletedState
+           {isCompletedState || isRefundedState
              ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-             : isRejectedState
+             : isRejectedState || isDisputedState
              ? <AlertCircle className="h-5 w-5 text-red-500" />
              : isPendingState
                ? <Clock className="h-5 w-5 text-[#006bff]" />
                : <CheckCircle2 className="h-5 w-5 text-[#006bff]" />}
           </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-[#0b3558]">
-            {isCompletedState
-              ? 'Заказ завершен'
-              : isRejectedState
-                ? 'Площадка отказалась от заказа'
-                : isPendingState
-                  ? 'Площадка рассматривает заказ'
-                  : 'Публикация загружена'}
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-[#476788]">
-            {isCompletedState
-              ? 'Публикация принята заказчиком, средства списаны с замороженного баланса, заказ закрыт. Ссылка и итоговый отчет остаются доступны в карточке.'
-              : isRejectedState
-              ? 'Площадка рассмотрела заказ и отказалась от размещения. Средства по заказу не будут списаны и останутся доступны на балансе.'
-              : isPendingState
-                ? 'Площадка получила заказ и должна принять или отклонить его до указанного срока. До решения площадки редактирование условий заказа недоступно.'
-                : 'Площадка загрузила ссылку на опубликованный материал. Проверьте корректность размещения. Нажимая «Принять и оплатить», вы подтверждаете отсутствие претензий, средства будут списаны с замороженного баланса.'}
-          </p>
-          {!isPendingState && !isRejectedState && (
+          <h2 className="text-base font-semibold text-[#0b3558]">{statusCopy[0]}</h2>
+          <p className="mt-1 text-sm leading-6 text-[#476788]">{statusCopy[1]}</p>
+          {order.publicationUrl && (
             <div className="mt-4 flex flex-col justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2 truncate">
                 <ExternalLink className="w-4 h-4 text-[#a6bbd1] flex-shrink-0" />
                 <a href={order.publicationUrl} target="_blank" rel="noreferrer" className="text-sm text-[#006bff] hover:underline truncate">{order.publicationUrl}</a>
               </div>
-              <span className="text-xs text-[#476788] whitespace-nowrap bg-[#f8f9fb] px-2 py-1 rounded">Опубликовано {order.publicationDate}</span>
+              <span className="whitespace-nowrap rounded bg-[#f8f9fb] px-2 py-1 text-xs text-[#476788]">Опубликовано {order.publicationDate}</span>
             </div>
           )}
-          {isRejectedState && (
+          {(isRejectedState || isRefundedState) && (
             <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-              <div className="text-xs font-medium text-[#476788]">Причина отказа</div>
-              <div className="mt-1 text-sm font-semibold text-[#0b3558]">Нет свободного редакционного слота в срок заказа</div>
-              <p className="mt-3 text-sm leading-6 text-[#476788]">
-                Редакция не сможет подготовить и выпустить материал до указанного дедлайна. Предлагаем создать новый заказ с датой публикации после 25.10.
-              </p>
-              <div className="mt-3 text-xs text-[#476788]">РБК Инвестиции · редакция · 19.10.2023, 14:20</div>
+              <div className="text-xs font-medium text-[#476788]">{isRejectedState ? 'Причина отказа' : 'Основание возврата'}</div>
+              <div className="mt-1 text-sm font-semibold text-[#0b3558]">{sourceOrder.reason || 'Комментарий не указан'}</div>
+              <div className="mt-3 text-xs text-[#476788]">{order.platform} · редакция · {updatedDate}</div>
             </div>
           )}
           
           <div className="mt-4 flex flex-wrap gap-3">
             {isCompletedState ? (
               <>
-                <Button variant="primary" onClick={() => navigate('report_detail')}>Открыть отчет</Button>
+                <Button variant="primary" onClick={() => onOpenReport(sourceOrder)}>Открыть отчет</Button>
                 <Button variant="secondary" onClick={() => navigate('order_chat')}>Чат заказа</Button>
               </>
             ) : (
               <>
-                {!isPendingState && !isRejectedState && (
+                {isSubmittedState && (
                   <>
-                    <Button variant="primary" onClick={() => setCurrentState('completed')}>Принять и оплатить</Button>
+                    <Button variant="primary" disabled={backend.busy} onClick={() => backend.perform(async () => { await api(`/orders/${sourceOrder.id}/action`,'POST',{action:'complete'},crypto.randomUUID()); await backend.refresh(); })}>Принять и оплатить</Button>
                     <Button variant="secondary" onClick={() => navigate('complaint')}>Открыть жалобу</Button>
                   </>
                 )}
-                {isRejectedState && <Button variant="primary" onClick={() => navigate('catalog')}>Выбрать другую площадку</Button>}
+                {isDisputedState && <Button variant="primary" onClick={() => navigate('dispute_detail')}>Открыть спор</Button>}
+                {(isRejectedState || isRefundedState) && <Button variant="primary" onClick={() => navigate('catalog')}>Выбрать другую площадку</Button>}
                 <Button variant="secondary" onClick={() => navigate('order_chat')}>Чат заказа</Button>
               </>
             )}
@@ -2635,7 +2790,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
       </div>
     </div>
 
-    <OrderMaterialContent context="client" />
+    <LiveMaterialContent material={sourceOrder?.snapshot} preserveOrderLayout />
     <ProjectChangeModal
       isOpen={projectModalOpen}
       onClose={() => setProjectModalOpen(false)}
@@ -2648,7 +2803,7 @@ const ClientOrderDetailView = ({ navigate, state = 'acceptance', orderId = 1045,
   );
 };
 
-const ProjectLink = ({ project, onOpen, muted = false }) => {
+const ProjectLink = ({ project, onOpen = undefined, muted = false }) => {
   if (!project) {
     return <span className="text-xs text-[#a6bbd1]">Без проекта</span>;
   }
@@ -2668,13 +2823,15 @@ const ProjectLink = ({ project, onOpen, muted = false }) => {
 };
 
 const ClientProjectsView = ({ projects, materials, orders, navigate, openProject, onCreateProject }) => {
+  const backend = useBackend();
+  const mockAdvertisers = backend.data.advertisers;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Все статусы');
   const [advertiserFilter, setAdvertiserFilter] = useState('Все рекламодатели');
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedAdvertisers, setSelectedAdvertisers] = useState([mockAdvertisers[0].name]);
+  const [selectedAdvertisers, setSelectedAdvertisers] = useState([]);
   const advertiserOptions = ['Все рекламодатели', ...Array.from(new Set(projects.flatMap((project) => project.advertisers)))];
   const visibleProjects = projects.filter((project) => {
     const query = search.trim().toLowerCase();
@@ -2684,16 +2841,17 @@ const ClientProjectsView = ({ projects, materials, orders, navigate, openProject
     return matchesSearch && matchesStatus && matchesAdvertiser;
   });
 
-  const submitProject = () => {
+  const submitProject = async () => {
     if (!name.trim()) return;
-    onCreateProject({
+    const ok = await onCreateProject({
       name: name.trim(),
       description: description.trim() || 'Описание проекта пока не добавлено.',
       advertisers: selectedAdvertisers,
     });
+    if (!ok) return;
     setName('');
     setDescription('');
-    setSelectedAdvertisers([mockAdvertisers[0].name]);
+    setSelectedAdvertisers([]);
     setCreateOpen(false);
   };
 
@@ -2781,13 +2939,13 @@ const ClientProjectsView = ({ projects, materials, orders, navigate, openProject
             <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, запуск нового продукта" className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
           </label>
           <fieldset>
-            <legend className="text-sm font-medium text-[#476788]">Рекламодатели</legend>
-            <p className="mt-1 text-xs text-[#7d96af]">Выберите одного или нескольких рекламодателей проекта.</p>
+            <legend className="text-sm font-medium text-[#476788]">Рекламодатели <span className="font-normal text-[#7d96af]">· необязательно</span></legend>
             <CheckboxMultiSelect
               className="mt-3"
               value={selectedAdvertisers}
               onChange={setSelectedAdvertisers}
               placeholder="Выберите рекламодателей"
+              emptyPlaceholder="Рекламодателей пока нет"
               options={mockAdvertisers.map((item) => ({
                 value: item.name,
                 label: item.name,
@@ -2804,7 +2962,7 @@ const ClientProjectsView = ({ projects, materials, orders, navigate, openProject
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setCreateOpen(false)}>Отмена</Button>
-            <Button variant="primary" disabled={!name.trim() || !selectedAdvertisers.length} onClick={submitProject}>Создать проект</Button>
+            <Button variant="primary" disabled={!name.trim() || backend.busy} onClick={submitProject}>Создать проект</Button>
           </div>
         </div>
       </Modal>
@@ -2812,7 +2970,7 @@ const ClientProjectsView = ({ projects, materials, orders, navigate, openProject
   );
 };
 
-const ClientProjectDetailView = ({ project, materials, orders, navigate, openMaterial, openOrder, onAddMaterial, onToggleStatus, onDelete }) => {
+const ClientProjectDetailView = ({ project, materials, orders, navigate, openMaterial, openOrder, onAddMaterial, onToggleStatus, onDelete, onCreateProjectReport }) => {
   const [tab, setTab] = useState('Обзор');
   if (!project) return <EmptyState title="Проект не найден" text="Вернитесь к списку проектов и выберите другой проект." action="К проектам" onAction={() => navigate('projects')} />;
   const projectMaterials = materials.filter((material) => material.projectId === project.id);
@@ -2820,6 +2978,8 @@ const ClientProjectDetailView = ({ project, materials, orders, navigate, openMat
   const frozen = projectOrders.reduce((sum, order) => sum + order.frozen, 0);
   const charged = projectOrders.filter((order) => order.status === 'Завершено').reduce((sum, order) => sum + order.price, 0);
   const returned = projectOrders.filter((order) => order.status === 'Площадка отказала').reduce((sum, order) => sum + order.price, 0);
+  const reportOrders = projectOrders.filter((order) => order.publication_url);
+  const reportDates = reportOrders.map((order) => new Date(order.updated_at).toISOString().slice(0,10)).sort();
   const isEmpty = !projectMaterials.length && !projectOrders.length;
 
   return (
@@ -2837,6 +2997,14 @@ const ClientProjectDetailView = ({ project, materials, orders, navigate, openMat
         </div>
         <div className="flex flex-wrap gap-3">
           {isEmpty && <Button variant="danger" onClick={() => { onDelete(project.id); navigate('projects'); }}>Удалить проект</Button>}
+          <Button
+            variant="secondary"
+            disabled={!reportOrders.length}
+            title={reportOrders.length ? 'Сформировать полный отчет по проекту' : 'Отчет станет доступен после первой публикации'}
+            onClick={() => onCreateProjectReport({projectId:project.id,from:reportDates[0],to:new Date().toISOString().slice(0,10),label:'За все время'})}
+          >
+            <Download className="h-4 w-4" /> Отчет
+          </Button>
           <Button variant="secondary" onClick={() => onToggleStatus(project.id)}>
             {project.status === 'Активный' ? 'Завершить проект' : 'Вернуть в активные'}
           </Button>
@@ -2904,7 +3072,7 @@ const ClientProjectDetailView = ({ project, materials, orders, navigate, openMat
             <div className="divide-y divide-[#d4e0ed]">
               {projectOrders.map((order) => (
                 <button key={order.id} className="grid w-full gap-3 px-6 py-4 text-left hover:bg-[#f8f9fb] sm:grid-cols-[90px_minmax(0,1fr)_150px_minmax(220px,auto)] sm:items-center" onClick={() => openOrder(order)}>
-                  <div className="text-sm font-semibold text-[#006bff]">#{order.id}</div>
+                  <div className="text-sm font-semibold text-[#006bff]">№{orderNumber(order)}</div>
                   <div className="min-w-0"><div className="truncate text-sm font-medium text-[#0b3558]">{order.material}</div><div className="mt-1 text-xs text-[#476788]">{order.platform}</div></div>
                   <div className="text-sm font-semibold tabular-nums text-[#0b3558]">{formatMoney(order.price)}</div>
                   <Badge color={order.statusColor} className="w-full max-w-[220px] justify-center justify-self-start">{order.status}</Badge>
@@ -2919,6 +3087,7 @@ const ClientProjectDetailView = ({ project, materials, orders, navigate, openMat
 };
 
 const ClientOrdersView = ({ navigate, projects, orders, openProject, openOrder, onMoveOrders }) => {
+  const [query,setQuery]=useState('');
   const [projectFilter, setProjectFilter] = useState('Все проекты');
   const [statusFilter, setStatusFilter] = useState('Все статусы');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -2929,7 +3098,7 @@ const ClientOrdersView = ({ navigate, projects, orders, openProject, openOrder, 
     const matchesProject = projectFilter === 'Все проекты'
       || (projectFilter === 'Без проекта' ? !order.projectId : projectNameById(order.projectId) === projectFilter);
     const matchesStatus = statusFilter === 'Все статусы' || order.status === statusFilter;
-    return matchesProject && matchesStatus;
+    return matchesProject && matchesStatus && `${order.number} ${order.material} ${order.platform}`.toLowerCase().includes(query.trim().replace(/^[№#]\s*/,'').toLowerCase());
   });
   const allVisibleSelected = visibleOrders.length > 0 && visibleOrders.every((order) => selectedIds.includes(order.id));
   const moveSelected = () => {
@@ -2949,6 +3118,7 @@ const ClientOrdersView = ({ navigate, projects, orders, openProject, openOrder, 
       <Button variant="secondary" onClick={() => navigate('catalog')}>Открыть каталог</Button>
     </div>
     <Card className="p-4">
+      <input aria-label="Поиск заказа" placeholder="Номер заказа, материал или площадка" className="mb-3 w-full rounded-lg border border-[#476788] p-3 text-sm" value={query} onChange={e=>setQuery(e.target.value)} />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[260px_260px_minmax(0,1fr)]">
         <CustomSelect value={projectFilter} onChange={setProjectFilter} placeholder="Проект" options={['Все проекты', ...projects.map((project) => project.name), 'Без проекта']} />
         <CustomSelect value={statusFilter} onChange={setStatusFilter} placeholder="Статус заказа" options={['Все статусы', ...Array.from(new Set(orders.map((order) => order.status)))]} />
@@ -2983,9 +3153,9 @@ const ClientOrdersView = ({ navigate, projects, orders, openProject, openOrder, 
                 onClick={() => openOrder(order)}
               >
                 <td className="px-5 py-4" onClick={(event) => event.stopPropagation()}>
-                  <input type="checkbox" checked={selectedIds.includes(order.id)} onChange={() => setSelectedIds((ids) => ids.includes(order.id) ? ids.filter((id) => id !== order.id) : [...ids, order.id])} aria-label={`Выбрать заказ ${order.id}`} />
+                  <input type="checkbox" checked={selectedIds.includes(order.id)} onChange={() => setSelectedIds((ids) => ids.includes(order.id) ? ids.filter((id) => id !== order.id) : [...ids, order.id])} aria-label={`Выбрать заказ ${orderNumber(order)}`} />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0b3558]">#{order.id}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0b3558]">№{orderNumber(order)}</td>
                 <td className="px-6 py-4">
                   <div className="text-sm text-[#476788]">{order.material}</div>
                   <div className="mt-1"><ProjectLink project={projects.find((project) => project.id === order.projectId)} onOpen={openProject} /></div>
@@ -3064,16 +3234,17 @@ const ClientComplaintView = ({ navigate }) => {
             <h1 className="font-display text-2xl font-bold text-[#0b3558]">Открытие жалобы</h1>
             <p className="text-sm text-[#476788] mt-1">На время рассмотрения средства по заказу останутся заморожены.</p>
           </div>
-          <Card className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <label className="block"><span className="text-sm font-medium text-[#476788]">Заказ</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="#1045 · РБК Инвестиции" /></label>
+          <Card className="p-6 sm:p-8">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+              <label className="block"><span className="text-sm font-medium text-[#476788]">Заказ</span><input readOnly className="mt-2 w-full rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-2.5 text-sm font-medium text-[#0b3558]" defaultValue="№1045 · РБК Инвестиции" /></label>
               <label className="block"><span className="text-sm font-medium text-[#476788]">Причина</span><CustomSelect className="mt-2" options={['Некорректная маркировка', 'Материал изменен', 'Ссылка недоступна', 'Нарушен формат']} /></label>
               <label className="block"><span className="text-sm font-medium text-[#476788]">Ссылка</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="https://invest.rbc.ru/news/652a9f" /></label>
               <label className="block"><span className="text-sm font-medium text-[#476788]">Дата обнаружения</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="19.10.2023" /></label>
-              <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Описание</span><textarea className="mt-2 w-full min-h-[150px] border border-[#476788] rounded-lg px-4 py-3 text-sm" defaultValue="Опишите, что именно нарушено: ссылка, фрагмент публикации, отличие от согласованного материала." /></label>
+              <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Описание</span><textarea className="mt-2 min-h-[132px] w-full resize-y rounded-lg border border-[#476788] px-4 py-3 text-sm leading-6" placeholder="Опишите, что именно нарушено: ссылка, фрагмент публикации, отличие от согласованного материала." /></label>
               <div className="block md:col-span-2">
                 <span className="text-sm font-medium text-[#476788]">Доказательства</span>
                 <FileUploadField
+                  compact
                   accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp"
                   prompt="Выберите файлы с доказательствами или перетащите их сюда"
                   hint="PDF, DOCX, TXT, PNG, JPG или WEBP · до 20 МБ"
@@ -3209,26 +3380,6 @@ const DisputeDetailView = ({ navigate, role = 'client' }) => (
       </Card>
     </div>
 
-	    <Card className="p-6">
-	      <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Ход рассмотрения</h2>
-	      <div className="space-y-4">
-	        {[
-	          ['19.10 10:12', 'Заказчик открыл спор', 'done'],
-	          ['19.10 11:00', 'Оплата и выплата заблокированы до решения', 'done'],
-	          ['19.10 13:30', 'Админ запросил доказательства у паблишера', 'current'],
-	          ['20.10 18:00', 'Дедлайн ответа паблишера', 'next'],
-	          ['после ответа', 'Модератор проверит материал, ссылку и условия заказа', 'next'],
-	        ].map(([time, event, status]) => (
-          <div key={`${time}-${event}`} className="flex items-start gap-3">
-            {status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5" /> : status === 'current' ? <Clock className="w-4 h-4 text-amber-500 mt-0.5" /> : <div className="w-4 h-4 rounded-full border-2 border-[#d4e0ed] mt-0.5" />}
-            <div>
-              <div className="text-sm font-medium text-[#0b3558]">{event}</div>
-              <div className="text-xs text-[#476788] mt-1">{time}</div>
-            </div>
-          </div>
-	        ))}
-	      </div>
-	    </Card>
 	  </div>
 );
 
@@ -3281,7 +3432,15 @@ const OrderChatView = ({ navigate, role = 'client' }) => (
 );
 
 const ClientReportDetailView = ({ navigate, report, projects, openProject }) => {
-  const currentReport = report || mockReports[0];
+  if (!report) return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('reports')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К отчетам
+      </button>
+      <Card className="p-8 text-center text-sm text-[#476788]">Отчет не выбран или больше недоступен.</Card>
+    </div>
+  );
+  const currentReport = report;
   const project = projects.find((item) => item.id === currentReport.projectId);
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -3291,9 +3450,9 @@ const ClientReportDetailView = ({ navigate, report, projects, openProject }) => 
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-bold text-[#0b3558]">Отчет по размещению</h1>
-          <p className="mt-1 text-sm text-[#476788]">{currentReport.order} · сформирован 23.07.2026</p>
+          <p className="mt-1 text-sm text-[#476788]">{currentReport.order} · публикация {currentReport.date}</p>
         </div>
-        <Button variant="primary"><Download className="h-4 w-4" /> Скачать отчет</Button>
+        <Button variant="primary" onClick={() => downloadFromApi(`/orders/${currentReport.id}/report.pdf`)}><Download className="h-4 w-4" /> Скачать отчет</Button>
       </div>
 
       <Card className="p-6">
@@ -3327,24 +3486,28 @@ const ClientReportDetailView = ({ navigate, report, projects, openProject }) => 
         </div>
       </Card>
 
-      <Card className="overflow-hidden">
-        <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-display text-lg font-bold text-[#0b3558]">Текст и изображения материала</h2>
-            <p className="mt-1 text-sm text-[#476788]">Версия, переданная площадке для размещения</p>
-          </div>
-          <Badge color="blue"><ImageIcon className="mr-1.5 h-3.5 w-3.5" /> 3 изображения</Badge>
-        </div>
-        <div className="p-6">
-          <FullMaterialPreview />
-        </div>
-      </Card>
+      <LiveMaterialContent material={currentReport.snapshot} showAttachments={false} preserveOrderLayout />
     </div>
   );
 };
 
-const ClientProjectReportView = ({ navigate, config, projects, reports, onOpenPlacementReport }) => {
-  const project = projects.find((item) => item.id === config.projectId) || projects[0];
+const ClientProjectReportView = ({ navigate, config, projects, reports, onOpenPlacementReport, onChangePeriod }) => {
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [dateFrom, setDateFrom] = useState(config.from || '');
+  const [dateTo, setDateTo] = useState(config.to || '');
+  useEffect(() => {
+    setDateFrom(config.from || '');
+    setDateTo(config.to || '');
+  }, [config.from, config.to]);
+  const project = projects.find((item) => item.id === config.projectId);
+  if (!project) return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('reports')}>
+        <ChevronRight className="h-4 w-4 rotate-180" /> К отчетам
+      </button>
+      <Card className="p-8 text-center text-sm text-[#476788]">Проект для отчета не выбран или больше недоступен.</Card>
+    </div>
+  );
   const fromDate = config.from ? new Date(`${config.from}T00:00:00`) : null;
   const toDate = config.to ? new Date(`${config.to}T23:59:59`) : null;
   const publications = reports.filter((report) => {
@@ -3355,6 +3518,7 @@ const ClientProjectReportView = ({ navigate, config, projects, reports, onOpenPl
   const materialCount = new Set(publications.map((report) => report.materialId)).size;
   const platformCount = new Set(publications.map((report) => report.platform)).size;
   const total = publications.reduce((sum, report) => sum + report.price, 0);
+  const csvQuery = new URLSearchParams({projectId:project.id,dateFrom:config.from,dateTo:config.to}).toString();
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -3370,9 +3534,9 @@ const ClientProjectReportView = ({ navigate, config, projects, reports, onOpenPl
           <p className="mt-2 text-sm text-[#476788]">{project?.name} · {formatReportPeriod(config.from, config.to)}</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => navigate('reports')}><CalendarDays className="h-4 w-4" /> Изменить период</Button>
-          <Button variant="secondary"><Download className="h-4 w-4" /> Скачать таблицу</Button>
-          <Button variant="primary"><Download className="h-4 w-4" /> Скачать отчет</Button>
+          <Button variant="secondary" onClick={() => setPeriodOpen(true)}><CalendarDays className="h-4 w-4" /> Изменить период</Button>
+          <Button variant="secondary" onClick={() => downloadFromApi(`/reports/export.csv?${csvQuery}`)}><Download className="h-4 w-4" /> Скачать таблицу</Button>
+          <Button variant="primary" disabled={!config.reportId} onClick={() => downloadFromApi(`/reports/${config.reportId}/pdf`)}><Download className="h-4 w-4" /> Скачать отчет</Button>
         </div>
       </div>
 
@@ -3426,30 +3590,75 @@ const ClientProjectReportView = ({ navigate, config, projects, reports, onOpenPl
           </div>
         )}
       </Card>
+      <Modal isOpen={periodOpen} onClose={() => setPeriodOpen(false)} title="Изменить период отчета" className="max-w-2xl">
+        <div className="space-y-5">
+          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
+            <div className="text-xs text-[#476788]">Проект</div>
+            <div className="mt-1 text-sm font-semibold text-[#0b3558]">{project.name}</div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Дата начала</span>
+              <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-2 min-h-[44px] w-full rounded-lg border border-[#476788] bg-white px-4 py-2.5 text-sm text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-[#476788]">Дата окончания</span>
+              <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-2 min-h-[44px] w-full rounded-lg border border-[#476788] bg-white px-4 py-2.5 text-sm text-[#0b3558] focus:outline-none focus:ring-2 focus:ring-[#006bff]" />
+            </label>
+          </div>
+          {dateFrom && dateTo && dateFrom > dateTo && <ActionResult tone="error" text="Дата начала не может быть позже даты окончания." />}
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setPeriodOpen(false)}>Отмена</Button>
+            <Button
+              variant="primary"
+              disabled={!dateFrom || !dateTo || dateFrom > dateTo || (dateFrom === config.from && dateTo === config.to)}
+              onClick={async () => {
+                const ok=await onChangePeriod({...config, from:dateFrom, to:dateTo, label:'Произвольный период'});
+                if(ok)setPeriodOpen(false);
+              }}
+            >
+              Обновить отчет
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
 
-const ClientBalanceView = ({ navigate }) => (
+const ClientBalanceView = ({ navigate }) => {
+  const backend = useBackend();
+  const available = Number(backend.data.balance.available || 0) / 100;
+  const reserved = Number(backend.data.balance.reserved || 0) / 100;
+  const transactions = financialTransactions(backend.data.transactions, backend.user.id, backend.data.orders, backend.data.materials);
+  const reportOrders = backend.data.orders.filter((order) => order.publication_url);
+  const closingDocuments = backend.data.closingDocuments || [];
+  const periodActs = backend.data.acts || [];
+  const openClosingDocument = (document) => backend.perform(async()=>{
+    const issued=document.id||await api(`/closing-documents/${document.orderId}`,'POST',{},crypto.randomUUID());
+    await backend.refresh();
+    downloadFromApi(`/closing-documents/${issued.id}/pdf`);
+  });
+  return (
   <div className="space-y-8">
     <div className="flex items-center justify-between">
       <h1 className="font-display text-2xl font-bold text-[#0b3558]">Финансы и документы</h1>
     </div>
 
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div className="md:col-span-1 space-y-6">
+      <div className="min-w-0 md:sticky md:top-0 md:col-span-1 md:self-start">
         <div className="bg-white border border-[#d4e0ed] rounded-2xl p-6">
           <h3 className="text-sm font-medium text-[#476788] mb-2">Доступно для заявок</h3>
-          <div className="text-4xl font-semibold text-[#0b3558] tabular-nums mb-8 tracking-tight">{formatMoney(1250000)}</div>
+          <div className="text-4xl font-semibold text-[#0b3558] tabular-nums mb-8 tracking-tight">{formatMoney(available)}</div>
           
           <div className="space-y-4 text-sm mb-8 pb-6 border-b border-[#d4e0ed]">
              <div className="flex justify-between items-center">
                <span className="text-[#476788] flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Заморожено</span>
-               <span className="tabular-nums font-medium text-[#0b3558]">{formatMoney(345000)}</span>
+               <span className="tabular-nums font-medium text-[#0b3558]">{formatMoney(reserved)}</span>
              </div>
              <div className="flex justify-between items-center">
                <span className="text-[#476788] flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5" /> Всего средств</span>
-               <span className="tabular-nums font-medium text-[#0b3558]">{formatMoney(1595000)}</span>
+               <span className="tabular-nums font-medium text-[#0b3558]">{formatMoney(available + reserved)}</span>
              </div>
           </div>
 
@@ -3458,54 +3667,46 @@ const ClientBalanceView = ({ navigate }) => (
           </Button>
         </div>
 
-        <Card className="p-5 bg-[#f8f9fb] border-[#d4e0ed] border-dashed">
-           <h3 className="text-sm font-medium text-[#0b3558] mb-2 flex items-center gap-2">
-            <Info className="w-4 h-4 text-[#476788]" /> О комиссии
-           </h3>
-           <p className="text-xs text-[#476788] mb-3 leading-relaxed">
-             Комиссия платформы (15%) списывается в момент пополнения. В каталоге и при оплате заказов вы видите итоговые суммы без скрытых платежей.
-           </p>
-	           <button className="text-sm text-[#006bff] font-medium hover:underline flex items-center gap-1">Скачать отчет по операциям <Download className="w-3 h-3" /></button>
-        </Card>
       </div>
 
-      <div className="md:col-span-2">
-        <Card className="h-full">
-          <div className="px-6 py-5 border-b border-[#d4e0ed] flex justify-between items-center bg-[#f8f9fb]">
+      <div className="min-w-0 md:col-span-2">
+        <Card className="flex max-h-[calc(100dvh-12rem)] min-w-0 flex-col overflow-hidden rounded-[24px]">
+          <div className="flex shrink-0 flex-col gap-3 border-b border-[#d4e0ed] bg-[#f8f9fb] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-base font-semibold text-[#0b3558]">История операций</h3>
-            <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => navigate('operations')}>Все операции</Button>
-              <Button variant="secondary" size="sm"><Download className="h-3.5 w-3.5" /> Экспорт таблицы</Button>
+            <div className="grid grid-cols-1 gap-2 sm:flex">
+              <Button variant="secondary" size="sm" className="w-full sm:w-auto" onClick={() => navigate('operations')}>Все операции</Button>
+              <Button variant="secondary" size="sm" className="w-full sm:w-auto" onClick={() => location.assign('/api/transactions/export.csv')}><Download className="h-3.5 w-3.5" /> Экспорт таблицы</Button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[#d4e0ed]">
+          <div className="min-h-0 overflow-auto">
+            <table className="w-full min-w-[620px] table-fixed divide-y divide-[#d4e0ed]">
               <thead className="bg-white">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Дата / номер</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Тип</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Описание</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-[#476788] uppercase tracking-wider">Сумма</th>
+                  <th className="w-[27%] px-4 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Дата / номер</th>
+                  <th className="w-[18%] px-4 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Тип</th>
+                  <th className="w-[36%] px-4 py-4 text-left text-xs font-medium text-[#476788] uppercase tracking-wider">Описание</th>
+                  <th className="w-[19%] px-4 py-4 text-right text-xs font-medium text-[#476788] uppercase tracking-wider">Сумма</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-[#d4e0ed]">
-                {mockTransactions.map((tx) => (
+                {transactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-[#f8f9fb]">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-[#0b3558] tabular-nums">{tx.date}</div>
                       <div className="text-xs text-[#476788] mt-0.5">{tx.id}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <Badge color={tx.type === 'Пополнение' ? 'green' : tx.type === 'Удержание' ? 'red' : tx.type === 'Возврат' ? 'amber' : 'blue'}>{tx.type}</Badge>
                     </td>
-                    <td className="px-6 py-4 text-sm text-[#476788] max-w-[250px] truncate" title={tx.desc}>
+                    <td className="break-words px-4 py-4 text-sm text-[#476788]" title={tx.desc}>
                       {tx.desc}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-semibold tabular-nums ${tx.amount > 0 ? 'text-emerald-600' : 'text-[#0b3558]'}`}>
+                    <td className={`px-4 py-4 whitespace-nowrap text-right text-sm font-semibold tabular-nums ${tx.amount > 0 ? 'text-emerald-600' : 'text-[#0b3558]'}`}>
                       {tx.amount > 0 ? '+' : ''}{formatMoney(tx.amount)}
                     </td>
                   </tr>
                 ))}
+                {!transactions.length && <tr><td colSpan={4} className="px-6 py-10 text-center text-sm text-[#476788]">Операций пока нет.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -3518,7 +3719,7 @@ const ClientBalanceView = ({ navigate }) => (
           <h3 className="text-base font-semibold text-[#0b3558]">Закрывающие документы</h3>
           <p className="text-sm text-[#476788] mt-1">Акты, счета, отчеты и документы по завершенным размещениям.</p>
         </div>
-        <Button variant="secondary"><Download className="h-4 w-4" /> Скачать архив</Button>
+        <Button variant="secondary" onClick={() => downloadFromApi('/closing-documents/export.csv')}><Download className="h-4 w-4" /> Скачать таблицу</Button>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-[#d4e0ed]">
@@ -3532,53 +3733,80 @@ const ClientBalanceView = ({ navigate }) => (
             </tr>
           </thead>
           <tbody className="divide-y divide-[#d4e0ed]">
-            {[
-	              ['Отчет по размещению', '#1052 · VC.ru', '10.10.2023', 'готов'],
-	              ['Счет на пополнение', 'TR-979 · банковский перевод', '01.10.2023', 'оплачен'],
-	              ['Отчет по операциям', 'Сентябрь 2023', '30.09.2023', 'готов'],
-            ].map(([doc, order, date, status]) => (
-              <tr key={`${doc}-${order}`} className="hover:bg-[#f8f9fb]">
-                <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">{doc}</td>
-                <td className="px-6 py-4 text-sm text-[#476788]">{order}</td>
-                <td className="px-6 py-4 text-sm text-[#476788]">{date}</td>
-                <td className="px-6 py-4"><Badge color={status === 'готов' ? 'green' : 'blue'}>{status}</Badge></td>
-                <td className="px-6 py-4 text-right"><Button variant="ghost" size="sm"><Download className="h-3.5 w-3.5" /> Скачать</Button></td>
-              </tr>
-            ))}
+            {periodActs.map(act=><tr key={act.id} className="hover:bg-[#f8f9fb]"><td className="px-6 py-4 text-sm font-medium text-[#0b3558]">Акт №{act.number} · {formatMoney(Number(act.amount)/100)}</td><td className="px-6 py-4 text-sm text-[#476788]">{act.orders.map(order=>`№${order.number}`).join(', ')}</td><td className="px-6 py-4 text-sm text-[#476788]">{String(act.issued_on).slice(0,10)}</td><td className="px-6 py-4"><Badge color="green">Из 1С</Badge></td><td className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={()=>downloadFromApi(`/acts/${act.id}/pdf`)}><Download className="h-3.5 w-3.5"/> Скачать</Button></td></tr>)}
+            {closingDocuments.map(document=><tr key={`act-${document.orderId}`} className="hover:bg-[#f8f9fb]">
+              <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">Проект акта{document.number?` № АКС-${document.number}`:''}</td>
+              <td className="px-6 py-4 text-sm text-[#476788]">№{document.orderNumber} · {document.outlet} · {formatMoney(document.amount/100)}</td>
+              <td className="px-6 py-4 text-sm text-[#476788]">{new Date(document.date).toLocaleDateString('ru-RU')}</td>
+              <td className="px-6 py-4"><Badge color="amber">{document.status==='draft'?'Для подписания':'Не сформирован'}</Badge></td>
+              <td className="px-6 py-4 text-right"><Button variant="ghost" size="sm" disabled={backend.busy} onClick={()=>openClosingDocument(document)}>{document.id?<><Download className="h-3.5 w-3.5" /> Скачать</>:'Сформировать'}</Button></td>
+            </tr>)}
+            {reportOrders.map((order) => (
+	              <tr key={order.id} className="hover:bg-[#f8f9fb]">
+	                <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">Отчет по размещению</td>
+	                <td className="px-6 py-4 text-sm text-[#476788]">№{orderNumber(order)} · {order.platform}</td>
+	                <td className="px-6 py-4 text-sm text-[#476788]">{new Date(order.updated_at).toLocaleDateString('ru-RU')}</td>
+	                <td className="px-6 py-4"><Badge color="green">готов</Badge></td>
+	                <td className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => location.assign(`/api/orders/${order.id}/report.pdf`)}><Download className="h-3.5 w-3.5" /> Скачать</Button></td>
+	              </tr>
+	            ))}
+            {!reportOrders.length&&!closingDocuments.length&&!periodActs.length && <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-[#476788]">Отчеты появятся после публикации материалов.</td></tr>}
           </tbody>
         </table>
       </div>
     </Card>
   </div>
-);
+  );
+};
 
 const ClientTopUpView = ({ navigate }) => {
-  const payment = 500000;
-  const fee = payment * 0.15;
+  const backend=useBackend();
+  const [amount,setAmount]=useState('500000');
+  const [method,setMethod]=useState('Банковский перевод');
+  const [individual,setIndividual]=useState(false);
+  const [invoices,setInvoices]=useState<any[]>([]);
+  const invoiceRequests=useRef(new Map<number,string>());
+  const topupMoney=(value:number)=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2}).format(value);
+  useEffect(()=>{let active=true;api('/topups').then(rows=>{if(active)setInvoices(rows);}).catch(()=>{});return()=>{active=false;};},[]);
+  useEffect(()=>{let active=true;api('/settings/account').then(settings=>{if(active&&settings.requisites?.payerStatus==='Физическое лицо'&&settings.requisites?.taxStatus!=='ИП'){setIndividual(true);setMethod('СБП');}}).catch(()=>{});return()=>{active=false;};},[]);
+  const payment = Number(amount)||0;
+  const topupCommissionBps=backend.data.commission.commissionBps;
+  const fee = Math.round(payment*100*topupCommissionBps/10000)/100;
   const credited = payment - fee;
+  const createInvoice=()=>backend.perform(async()=>{
+    const amountKopeks=Math.round(payment*100);
+    if(!invoiceRequests.current.has(amountKopeks))invoiceRequests.current.set(amountKopeks,crypto.randomUUID());
+    const invoice=await api('/topups','POST',{amount:amountKopeks,method:'transfer'},invoiceRequests.current.get(amountKopeks));
+    setInvoices(current=>[invoice,...current.filter(item=>item.id!==invoice.id)]);
+    downloadFromApi(`/topups/${invoice.id}/invoice.pdf`);
+  });
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="w-full min-w-0 space-y-6">
       <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('balance')}>
         <ChevronRight className="w-4 h-4 rotate-180" /> К балансу
       </button>
       <h1 className="font-display text-2xl font-bold text-[#0b3558]">Пополнение баланса</h1>
-      <Card className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <label className="block"><span className="text-sm font-medium text-[#476788]">Сумма платежа</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="500 000 ₽" /></label>
-	          <label className="block"><span className="text-sm font-medium text-[#476788]">Способ оплаты</span><CustomSelect className="mt-2" options={['Банковский перевод', 'СБП для бизнеса', 'Карта']} /></label>
+      <Card className="min-w-0 overflow-hidden p-5 sm:p-6">
+        <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-2">
+          <label className="block min-w-0"><span className="text-sm font-medium text-[#476788]">Сумма платежа</span><div className="relative mt-2"><input inputMode="numeric" className="w-full rounded-lg border border-[#476788] px-4 py-2.5 pr-10 text-sm" value={amount} onChange={event=>setAmount(event.target.value.replace(/\D/g,'').slice(0,10))} /><span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-[#476788]">₽</span></div></label>
+	          <label className="block min-w-0"><span className="text-sm font-medium text-[#476788]">Способ оплаты</span><CustomSelect className="mt-2 min-w-0" value={method} onChange={setMethod} options={individual?['СБП','Карта']:['Банковский перевод','СБП для бизнеса','Карта']} /></label>
         </div>
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">Сумма платежа</div><div className="mt-1 text-xl font-semibold">{formatMoney(payment)}</div></Card>
-          <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">Комиссия 15%</div><div className="mt-1 text-xl font-semibold">{formatMoney(fee)}</div></Card>
-          <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">К зачислению</div><div className="mt-1 text-xl font-semibold text-[#0b3558]">{formatMoney(credited)}</div></Card>
+        <div className="mt-6 grid min-w-0 grid-cols-1 overflow-hidden rounded-lg border border-[#d4e0ed] sm:grid-cols-3">
+          <div className="min-w-0 bg-[#f8f9fb] p-4 sm:p-5"><div className="text-xs text-[#476788]">Сумма платежа</div><div className="mt-1 break-words text-lg font-semibold sm:text-xl">{topupMoney(payment)}</div></div>
+          <div className="min-w-0 border-t border-[#d4e0ed] bg-[#f8f9fb] p-4 sm:border-l sm:border-t-0 sm:p-5"><div className="text-xs text-[#476788]">Информационные услуги платформы, {topupCommissionBps/100}%</div><div className="mt-1 break-words text-lg font-semibold sm:text-xl">{topupMoney(fee)}</div><div className="mt-1 text-xs text-[#476788]">Не возвращаются</div></div>
+          <div className="min-w-0 border-t border-[#d4e0ed] bg-[#f8f9fb] p-4 sm:border-l sm:border-t-0 sm:p-5"><div className="text-xs text-[#476788]">К зачислению</div><div className="mt-1 break-words text-lg font-semibold text-[#0b3558] sm:text-xl">{topupMoney(credited)}</div></div>
         </div>
-        <div className="mt-6 flex justify-end"><Button variant="primary">Пополнить</Button></div>
+        <div className="mt-6 flex justify-stretch sm:justify-end"><Button variant="primary" className="w-full sm:w-auto" disabled={backend.busy||payment<1||payment*100>100000000000||method!=='Банковский перевод'} title={method!=='Банковский перевод'?'Будет доступно после подключения фискализации':undefined} onClick={createInvoice}>{method==='Банковский перевод'?'Скачать счет на оплату':'Пополнить'}</Button></div>
       </Card>
+      {invoices.length>0&&<Card className="min-w-0 overflow-hidden p-5 sm:p-6"><h2 className="font-display text-lg font-bold text-[#0b3558]">Счета на пополнение</h2><div className="mt-4 divide-y divide-[#d4e0ed]">{invoices.map(invoice=><div key={invoice.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div><span className="font-semibold">№ АКС-{invoice.number}</span><span className="ml-3 text-[#476788]">{topupMoney(invoice.amount/100)} · {{issued:'Ожидает оплаты',partial:'Оплачен частично',paid:'Оплачен',overpaid:'Переплата',partially_refunded:'Частичный возврат',refunded:'Возвращен остаток'}[invoice.status]??invoice.status}</span><div className="mt-1 text-xs text-[#476788]">Услуги платформы: {topupMoney(invoice.feeAmount/100)} · К зачислению: {topupMoney((invoice.amount-invoice.feeAmount)/100)}</div></div><Button variant="secondary" size="sm" onClick={()=>downloadFromApi(`/topups/${invoice.id}/invoice.pdf`)}><Download className="h-4 w-4" /> Скачать счет</Button></div>)}</div></Card>}
     </div>
   );
 };
 
-const ClientOperationsView = ({ navigate }) => (
+const ClientOperationsView = ({ navigate }) => {
+  const backend = useBackend();
+  const transactions = financialTransactions(backend.data.transactions, backend.user.id, backend.data.orders, backend.data.materials);
+  return (
   <div className="space-y-6">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('balance')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> К балансу
@@ -3588,13 +3816,13 @@ const ClientOperationsView = ({ navigate }) => (
         <h1 className="font-display text-2xl font-bold text-[#0b3558]">История операций</h1>
         <p className="text-sm text-[#476788] mt-1">Пополнения, комиссии, заморозки, списания, возвраты, выводы и удержания.</p>
       </div>
-      <Button variant="secondary"><Download className="h-4 w-4" /> Экспорт</Button>
+      <Button variant="secondary" onClick={() => location.assign('/api/transactions/export.csv')}><Download className="h-4 w-4" /> Экспорт</Button>
     </div>
     <Card className="overflow-hidden">
       <table className="min-w-full divide-y divide-[#d4e0ed]">
         <thead className="bg-[#f8f9fb]"><tr><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Номер / дата</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Тип</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Описание</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Состояние</th><th className="px-6 py-4 text-right text-xs font-medium text-[#476788] uppercase">Сумма</th></tr></thead>
         <tbody className="divide-y divide-[#d4e0ed]">
-          {mockTransactions.map(tx => (
+          {transactions.map(tx => (
             <tr key={tx.id} className="hover:bg-[#f8f9fb]">
               <td className="px-6 py-4"><div className="text-sm font-medium text-[#0b3558]">{tx.id}</div><div className="text-xs text-[#476788]">{tx.date}</div></td>
               <td className="px-6 py-4"><Badge color={tx.type === 'Удержание' ? 'red' : tx.type === 'Пополнение' ? 'green' : 'blue'}>{tx.type}</Badge></td>
@@ -3603,11 +3831,13 @@ const ClientOperationsView = ({ navigate }) => (
               <td className={`px-6 py-4 text-right text-sm font-semibold ${tx.amount > 0 ? 'text-emerald-600' : 'text-[#0b3558]'}`}>{tx.amount > 0 ? '+' : ''}{formatMoney(tx.amount)}</td>
             </tr>
           ))}
+          {!transactions.length && <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-[#476788]">Операций пока нет.</td></tr>}
         </tbody>
       </table>
     </Card>
   </div>
-);
+  );
+};
 
 const ClientMaterialsView = ({ navigate, projects, materials, openProject, openMaterial, startCreateMaterial }) => {
   const [search, setSearch] = useState('');
@@ -3700,12 +3930,23 @@ const ClientMaterialsView = ({ navigate, projects, materials, openProject, openM
 };
 
 const ClientMaterialDetailView = ({ navigate, material, projects, openProject, onChangeProject }) => {
+  const backend = useBackend();
+  const [expedited,setExpedited] = useState(false);
+  const submitKey = useRef(crypto.randomUUID());
+  const withdrawKey = useRef(crypto.randomUUID());
   const [projectName, setProjectName] = useState(projects.find((project) => project.id === material?.projectId)?.name || 'Без проекта');
   const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const currentMaterial = material || mockMaterials[0];
-  const changeProject = (nextName) => {
-    setProjectName(nextName);
-    onChangeProject(currentMaterial.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
+  const currentMaterial = material;
+  if(!currentMaterial) return <Card className="p-6">Выберите материал в списке.</Card>;
+  const canSubmit = ['draft','rejected'].includes(currentMaterial.apiStatus);
+  const submit = () => backend.perform(async()=>{
+    await api('/materials/submit','POST',{ids:[currentMaterial.id],expedited},submitKey.current);
+    submitKey.current=crypto.randomUUID();await backend.refresh();
+  });
+  const changeProject = async (nextName) => {
+    const saved=await onChangeProject(currentMaterial.id, nextName === 'Без проекта' ? null : projects.find((project) => project.name === nextName)?.id ?? null);
+    if(saved)setProjectName(nextName);
+    return saved;
   };
   const isMaterialAccepted = ['Принят в систему', 'Используется в заказах'].includes(currentMaterial.status);
   return (
@@ -3718,11 +3959,15 @@ const ClientMaterialDetailView = ({ navigate, material, projects, openProject, o
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <Badge color={currentMaterial.statusColor}>{currentMaterial.status}</Badge>
-          <span className="text-sm text-[#476788]">Материал #M-{1047 + currentMaterial.id}</span>
+          <span className="text-sm text-[#476788]">Материал №{materialNumber(currentMaterial)}</span>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
-          <Button variant="secondary" className="whitespace-nowrap" onClick={() => navigate('material_edit')}>Редактировать материал</Button>
-          <Button variant="primary" className="whitespace-nowrap" onClick={() => navigate('catalog')}>Выбрать площадки</Button>
+          {currentMaterial.apiStatus==='pending'&&<Button variant="secondary" disabled={backend.busy} onClick={()=>backend.perform(async()=>{
+            await api(`/materials/${currentMaterial.id}/withdraw`,'POST',{},withdrawKey.current);
+            withdrawKey.current=crypto.randomUUID();await backend.refresh();
+          })}>Отозвать с модерации</Button>}
+          <Button variant="secondary" disabled={currentMaterial.apiStatus==='pending'} className="whitespace-nowrap" onClick={() => navigate('material_edit')}>Редактировать материал</Button>
+          <Button variant="primary" disabled={!isMaterialAccepted} className="whitespace-nowrap" onClick={() => navigate('catalog')}>Выбрать площадки</Button>
         </div>
       </div>
       <h1 className="mt-4 w-full break-words font-display text-2xl font-bold leading-tight text-[#0b3558] sm:text-3xl">
@@ -3759,16 +4004,17 @@ const ClientMaterialDetailView = ({ navigate, material, projects, openProject, o
           <p className="mt-1 text-sm leading-6 text-[#476788]">
             {isMaterialAccepted
               ? 'Материал прошел проверку и доступен для создания заказов. Выберите одну или несколько площадок в каталоге.'
-              : 'Материал проходит проверку. После принятия станет доступен выбор площадок и создание заказов.'}
+              : canSubmit ? (currentMaterial.moderation_reason || 'Материал сохранен. Отправьте его на модерацию, когда закончите редактирование.') : 'Материал проходит проверку. После принятия станет доступен выбор площадок и создание заказов.'}
           </p>
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {canSubmit && <div className="mt-4 flex flex-wrap items-center gap-4"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={expedited} disabled={backend.busy} onChange={e=>{setExpedited(e.target.checked);submitKey.current=crypto.randomUUID();}} />Ускоренная модерация · 50 ₽</label><Button disabled={backend.busy} onClick={submit}>Отправить на модерацию</Button></div>}
+          {isMaterialAccepted && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             При редактировании материал вернется в черновики и станет недоступен для новых размещений до повторной модерации.
-          </div>
+          </div>}
         </div>
       </div>
     </div>
 
-    <MaterialContentCard subtitle="Актуальная версия материала" showDownload />
+    <LiveMaterialContent material={currentMaterial} />
     <ProjectChangeModal
       isOpen={projectModalOpen}
       onClose={() => setProjectModalOpen(false)}
@@ -3783,14 +4029,117 @@ const ClientMaterialDetailView = ({ navigate, material, projects, openProject, o
 
 const createMaterialDraft = (id, projectName, withExample = false) => ({
   id,
+  clientKey: crypto.randomUUID(),
   title: withExample ? 'Пресс-релиз: запуск аналитики' : '',
-  advertiser: 'ООО "Финтех Решения"',
+  advertiser: 'Без рекламодателя',
+  advertiserId: null,
   materialType: 'Статья',
   projectName,
   note: '',
+  body: '',
+  metadata: {},
 });
 
-const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemove, onOpenAi, mode = 'create' }) => (
+const richTextLength = (html = '') => {
+  const node=document.createElement('div');node.innerHTML=html;return (node.textContent||'').length;
+};
+
+const RichTextEditor = ({ value, onChange, imageOpen, onImageOpenChange, onImageStored }) => {
+  const [rewriteOpen,setRewriteOpen]=useState(false);
+  const imageInput=useRef(null);
+  const [assetPanel,setAssetPanel]=useState(null);
+  const [assetUrl,setAssetUrl]=useState('');
+  const [uploading,setUploading]=useState(false);
+  const [assetError,setAssetError]=useState('');
+  const editor=useEditor({
+    immediatelyRender:false,
+    shouldRerenderOnTransaction:true,
+    extensions:[
+      StarterKit.configure({link:false,underline:false}),
+      UnderlineExtension,
+      TextStyle,
+      FontSize,
+      FontFamily.configure({types:['textStyle']}),
+      Link.configure({openOnClick:false,autolink:true,HTMLAttributes:{rel:'noopener noreferrer',target:'_blank'}}),
+      MaterialImage.configure({
+        allowBase64:false,
+        minWidth:80,maxWidth:4096,minHeight:40,maxHeight:4096,withCaption:true,
+        captionProps:{role:'textbox','aria-label':'Подпись изображения'},
+        HTMLAttributes:{class:'max-w-full rounded-lg'},
+      }),
+    ],
+    content:value||'',
+    editorProps:{attributes:{role:'textbox','aria-label':'Текст материала','aria-multiline':'true',class:'material-content min-h-[320px] w-full p-6 outline-none'},handleDOMEvents:{dragstart:(view,event)=>{
+      const target=event.target as HTMLElement;
+      const image=target.closest('.material-image-node')?.querySelector('img')||(target.classList?.contains('react-renderer')?target.querySelector('img'):null);
+      if(image)setMaterialImageDragPreview(event,image);
+      return false;
+    }}},
+    onUpdate:({editor:instance})=>onChange(instance.getHTML()),
+  },[MaterialImage]);
+  useEffect(()=>{
+    if(editor && !editor.isFocused && editor.getHTML()!==(value||''))editor.commands.setContent(value||'',{emitUpdate:false});
+  },[editor,value]);
+  if(!editor)return <div className="mt-2 min-h-[380px] rounded-2xl border border-[#0b3558] bg-white" />;
+  const applyTypography=(attribute,value)=>{
+    const {from,to,empty}=editor.state.selection;
+    const chain=editor.chain().focus();
+    if(empty)chain.selectAll();
+    chain.setMark('textStyle',{[attribute]:value});
+    if(empty)chain.setTextSelection({from,to}).setMark('textStyle',{[attribute]:value});
+    chain.run();
+  };
+  const button=(label,Icon,run,active=false,text='')=><button type="button" title={label} aria-label={label} onClick={run} className={`inline-flex h-9 min-w-9 items-center justify-center rounded-lg border px-2 ${active?'border-[#006bff] bg-[#e7f1ff] text-[#006bff]':'border-transparent text-[#476788] hover:border-[#d4e0ed] hover:bg-white hover:text-[#0b3558]'}`}><Icon className="h-4 w-4" />{text&&<span className="ml-2 text-xs font-medium">{text}</span>}</button>;
+  const insertImage=(src)=>{if(!src)return;editor.chain().focus().setResizableImage({src,alt:'Изображение материала'}).run();setAssetUrl('');setAssetPanel(null);};
+  const uploadImage=async event=>{
+    const file=event.target.files?.[0];if(!file)return;
+    setUploading(true);setAssetError('');
+    try{const stored=await uploadFile(file);insertImage(`/api/files/${stored.id}/image`);}catch(error){setAssetError(error instanceof Error?error.message:'Не удалось загрузить изображение');}finally{setUploading(false);event.target.value='';}
+  };
+  const setLink=()=>{if(!assetUrl.trim())editor.chain().focus().unsetLink().run();else editor.chain().focus().extendMarkRange('link').setLink({href:assetUrl.trim()}).run();setAssetPanel(null);setAssetUrl('');};
+  const tools:any[]=[
+    ['Обычный текст',Type,()=>editor.chain().focus().setParagraph().run(),editor.isActive('paragraph'),'Текст'],
+    ['Заголовок 1',Heading1,()=>editor.chain().focus().toggleHeading({level:1}).run(),editor.isActive('heading',{level:1})],
+    ['Заголовок 2',Heading2,()=>editor.chain().focus().toggleHeading({level:2}).run(),editor.isActive('heading',{level:2})],
+    ['Жирный',Bold,()=>editor.chain().focus().toggleBold().run(),editor.isActive('bold')],
+    ['Курсив',Italic,()=>editor.chain().focus().toggleItalic().run(),editor.isActive('italic')],
+    ['Подчеркнутый',Underline,()=>editor.chain().focus().toggleUnderline().run(),editor.isActive('underline')],
+    ['Список',List,()=>editor.chain().focus().toggleBulletList().run(),editor.isActive('bulletList')],
+    ['Цитата',Quote,()=>editor.chain().focus().toggleBlockquote().run(),editor.isActive('blockquote')],
+  ];
+  return <div data-material-editor className="mt-2 overflow-clip rounded-2xl border border-[#0b3558] bg-white focus-within:border-[#006bff] focus-within:ring-2 focus-within:ring-[#006bff]">
+    <div role="toolbar" aria-label="Форматирование текста" className="sticky -top-4 sm:-top-8 z-20 flex flex-wrap items-center gap-1.5 border-b border-[#a9bfd7] bg-[#edf3fa] px-3 py-2 shadow-[0_5px_14px_rgba(11,53,88,0.18)]">
+      {tools.map(([label,Icon,run,active,text])=><React.Fragment key={String(label)}>{button(label,Icon,run,active,text)}</React.Fragment>)}
+      {button('Изображение',ImageIcon,()=>{setAssetPanel(assetPanel==='image'?null:'image');setAssetUrl('');setAssetError('');},editor.isActive('image'))}
+      {button('Ссылка',ExternalLink,()=>{setAssetPanel(assetPanel==='link'?null:'link');setAssetUrl(editor.getAttributes('link').href||'');},editor.isActive('link'))}
+      <div className="mx-1 h-6 w-px bg-[#d4e0ed]" />
+      <CustomSelect className="w-32" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" value={editor.getAttributes('textStyle').fontFamily||'Arial'} onChange={font=>applyTypography('fontFamily',font)} options={['Manrope','Arial','Georgia']} />
+      <CustomSelect className="w-24" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" value={(editor.getAttributes('textStyle').fontSize||'16px').replace('px',' px')} onChange={size=>applyTypography('fontSize',size.replace(' ',''))} options={['10 px','12 px','14 px','16 px','18 px','20 px','24 px','28 px','32 px','36 px','48 px']} />
+      <Button variant="primary" size="sm" className="ml-auto w-full sm:w-auto" onClick={()=>setRewriteOpen(true)}><Sparkles className="h-4 w-4 shrink-0"/>Рерайт с помощью ИИ · 30 ₽</Button>
+    </div>
+    {assetPanel==='image'&&<div className="border-b border-[#d4e0ed] bg-white p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес изображения</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com/image.jpg" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label>
+        <Button variant="secondary" size="sm" disabled={!assetUrl.trim()} onClick={()=>insertImage(assetUrl.trim())}>Вставить по URL</Button>
+        <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={uploadImage} />
+        <Button variant="primary" size="sm" disabled={uploading} onClick={()=>imageInput.current?.click()}><UploadCloud className="h-4 w-4" />{uploading?'Загрузка…':'Загрузить файл'}</Button>
+        <Button variant="primary" size="sm" onClick={()=>onImageOpenChange(true)}><Sparkles className="h-4 w-4"/>Сгенерировать · 50 ₽</Button>
+      </div>
+      {assetError&&<p role="alert" className="mt-2 text-xs text-red-700">{assetError}</p>}
+    </div>}
+    {assetPanel==='link'&&<div className="flex flex-col gap-3 border-b border-[#d4e0ed] bg-white p-4 sm:flex-row sm:items-end"><label className="min-w-0 flex-1"><span className="text-xs font-medium text-[#476788]">Адрес ссылки</span><input type="url" className="mt-1 w-full rounded-lg border border-[#476788] px-3 py-2 text-sm" placeholder="https://example.com" value={assetUrl} onChange={e=>setAssetUrl(e.target.value)} /></label><Button variant="primary" size="sm" onClick={setLink}>{assetUrl.trim()?'Применить':'Удалить ссылку'}</Button></div>}
+    <EditorContent editor={editor}/>
+    <AiAssistModal isOpen={rewriteOpen} onClose={()=>setRewriteOpen(false)} body={value} onApply={body=>editor.commands.setContent(body)} onBusyChange={busy=>editor.setEditable(!busy)} />
+    <AiAssistModal isOpen={imageOpen} onClose={()=>onImageOpenChange(false)} type="image" onImage={result=>onImageStored(result.file.id)} onInsertImage={result=>{editor.chain().focus().insertContentAt(editor.state.selection.to,{type:'image',attrs:{src:result.url,alt:'Изображение материала'}}).run();setAssetPanel(null);}} onBusyChange={busy=>editor.setEditable(!busy)} />
+  </div>;
+};
+
+const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemove, onOpenAi, mode = 'create' }) => {
+  const backend = useBackend();
+  const [imageTarget,setImageTarget]=useState(null);
+  const currentDraft=useRef(draft);currentDraft.current=draft;
+  const attachImage=id=>onChange({metadata:{...currentDraft.current.metadata,attachments:[...new Set([...(currentDraft.current.metadata?.attachments||[]),id])]}});
+  return (
   <Card id={`material-form-${draft.id}`} className="scroll-mt-6 p-6">
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#d4e0ed] pb-4">
       <div>
@@ -3817,7 +4166,8 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
       </label>
       <label className="block">
         <span className="text-sm font-medium text-[#476788]">Рекламодатель</span>
-        <CustomSelect className="mt-2" value={draft.advertiser} onChange={(value) => onChange({ advertiser: value })} options={['ООО "Финтех Решения"', 'Урбан Групп']} />
+        <CustomSelect className="mt-2" value={draft.advertiser||'Без рекламодателя'} onChange={(value) => onChange({ advertiser: value,advertiserId:value==='Без рекламодателя'?null:backend.data.advertisers.find(a=>a.name===value)?.id??null })} options={['Без рекламодателя',...backend.data.advertisers.map(a => a.name)]} />
+        <span className="mt-2 block text-xs text-[#476788]">Необязательно. Рекламодателя можно привязать позже.</span>
       </label>
       <label className="block">
         <span className="text-sm font-medium text-[#476788]">Тип материала</span>
@@ -3830,12 +4180,12 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
       </label>
       <div>
         <span className="text-sm font-medium text-[#476788]">Файлы</span>
-        <FileUploadField accept=".pdf,.doc,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp" prompt="Выберите документ или перетащите его сюда" hint="PDF, DOCX, TXT, RTF или изображение · до 20 МБ" />
+        <FileUploadField accept=".pdf,.docx,.txt" prompt="Выберите документ или перетащите его сюда" hint="PDF, DOCX, TXT · до 20 МБ" storedIds={draft.metadata?.attachments || []} onStoredChange={ids=>onChange({metadata:{...draft.metadata,attachments:ids}})} />
       </div>
       <div>
         <span className="text-sm font-medium text-[#476788]">Изображения</span>
-        <FileUploadField accept="image/png,image/jpeg,image/webp" prompt="Выберите изображения или перетащите их сюда" hint="PNG, JPG или WEBP · до 20 МБ" />
-        <div className="mt-2 text-sm text-[#476788]">Или <button type="button" className="font-semibold text-[#006bff]" onClick={() => onOpenAi('image')}>сгенерируйте изображение с помощью ИИ за 50 ₽</button></div>
+        <FileUploadField accept="image/png,image/jpeg,image/webp" prompt="Выберите изображения или перетащите их сюда" hint="PNG, JPG или WEBP · до 20 МБ" storedIds={draft.metadata?.attachments || []} onStoredChange={ids=>onChange({metadata:{...draft.metadata,attachments:ids}})} imagesOnly />
+        <div className="mt-2 text-sm text-[#476788]">Или <button type="button" className="font-semibold text-[#006bff]" onClick={() => setImageTarget('attachments')}>сгенерируйте изображение с помощью ИИ за 50 ₽</button></div>
       </div>
       <label className="block md:col-span-2">
         <span className="text-sm font-medium text-[#476788]">Примечание и ТЗ</span>
@@ -3845,54 +4195,20 @@ const MaterialDraftForm = ({ draft, index, projects, onChange, onRemove, canRemo
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm font-medium text-[#476788]">Текст материала</span>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-[#476788]">2 840 знаков</span>
-            <Button variant="secondary" size="sm" onClick={() => onOpenAi('rewrite')}>Рерайт с помощью ИИ · 30 ₽</Button>
+            <span className="text-xs text-[#476788]">{richTextLength(draft.body)} знаков</span>
           </div>
         </div>
-        <div className="mt-2 overflow-hidden rounded-2xl border border-[#0b3558] bg-white focus-within:border-[#006bff] focus-within:ring-2 focus-within:ring-[#006bff]">
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-[#d4e0ed] bg-[#f8f9fb] px-3 py-2">
-            {[
-              { label: 'Обычный текст', icon: Type },
-              { label: 'Заголовок 1', icon: Heading1 },
-              { label: 'Заголовок 2', icon: Heading2 },
-              { label: 'Жирный', icon: Bold },
-              { label: 'Курсив', icon: Italic },
-              { label: 'Список', icon: List },
-              { label: 'Цитата', icon: Quote },
-              { label: 'Изображение', icon: ImageIcon },
-              { label: 'Ссылка', icon: ExternalLink },
-            ].map((tool) => {
-              const Icon = tool.icon;
-              return <button key={tool.label} type="button" title={tool.label} className="inline-flex h-9 min-w-9 items-center justify-center rounded-lg border border-transparent px-2 text-[#476788] hover:border-[#d4e0ed] hover:bg-white hover:text-[#0b3558]"><Icon className="h-4 w-4" />{tool.label === 'Обычный текст' && <span className="ml-2 text-xs font-medium">Текст</span>}</button>;
-            })}
-            <div className="mx-1 h-6 w-px bg-[#d4e0ed]" />
-            <CustomSelect className="w-32" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" options={['Manrope', 'Arial', 'Georgia']} />
-            <CustomSelect className="w-24" buttonClassName="min-h-9 px-2 py-1.5 text-xs border-[#d4e0ed]" options={['16 px', '18 px', '20 px']} />
-          </div>
-          <div className="min-h-[320px] p-6 text-[#0b3558] outline-none" contentEditable suppressContentEditableWarning>
-            <h2 className="mb-4 font-display text-2xl font-bold text-[#0b3558]">Финтех Решения запускает новую платформу аналитики</h2>
-            <p className="mb-4 text-base leading-7">Вставьте готовый материал или отредактируйте его прямо в платформе. Редактор поддерживает заголовки, базовое форматирование, списки, цитаты, ссылки и изображения.</p>
-            <h3 className="mb-3 font-display text-xl font-bold text-[#0b3558]">Ключевые тезисы</h3>
-            <ul className="mb-4 list-disc space-y-2 pl-6">
-              <li>материал проходит модерацию до выбора площадок;</li>
-              <li>изображения можно вставлять в тело публикации;</li>
-              <li>после принятия материала открывается каталог площадок.</li>
-            </ul>
-          </div>
-        </div>
+        <RichTextEditor value={draft.body||''} onChange={body=>onChange({body})} imageOpen={Boolean(imageTarget)} onImageOpenChange={open=>setImageTarget(open?'editor':null)} onImageStored={attachImage} />
       </div>
     </div>
     <details className="mt-6 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
       <summary className="cursor-pointer text-sm font-semibold text-[#0b3558]">Дополнительные настройки</summary>
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label><span className="text-sm font-medium text-[#476788]">Тэги</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="финтех, аналитика, запуск" /></label>
-        <label><span className="text-sm font-medium text-[#476788]">Title</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="Финтех Решения запускает платформу аналитики" /></label>
-        <label><span className="text-sm font-medium text-[#476788]">Description</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="Платформа помогает контролировать публикации, ссылки и отчеты." /></label>
-        <label><span className="text-sm font-medium text-[#476788]">Желаемый URL</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" defaultValue="/news/fintech-analytics-platform" /></label>
+        {Object.entries({tags:'Тэги',title:'Title',description:'Description',desiredUrl:'Желаемый URL'}).map(([key,label]) => <label key={key}><span className="text-sm font-medium text-[#476788]">{label}</span><input className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" value={draft.metadata?.[key] || ''} onChange={e => onChange({metadata:{...draft.metadata,[key]:e.target.value}})} /></label>)}
       </div>
     </details>
   </Card>
-);
+); };
 
 const ClientEditMaterialView = ({ navigate, material, projects, onUpdateMaterial }) => {
   const currentMaterial = material || mockMaterials[0];
@@ -3902,16 +4218,22 @@ const ClientEditMaterialView = ({ navigate, material, projects, onUpdateMaterial
     ...createMaterialDraft(currentMaterial.id, initialProjectName),
     title: currentMaterial.name,
     advertiser: currentMaterial.advertiser,
+    advertiserId: currentMaterial.advertiserId,
     materialType: currentMaterial.type,
     note: currentMaterial.note || '',
+    body: currentMaterial.body || '',
+    metadata: currentMaterial.metadata || {},
   }));
-  const saveMaterial = () => {
+  const saveMaterial = async () => {
     if (!draft.title.trim()) return;
-    onUpdateMaterial(currentMaterial.id, {
+    const ok = await onUpdateMaterial(currentMaterial.id, {
       name: draft.title.trim(),
       advertiser: draft.advertiser,
+      advertiserId: draft.advertiserId,
       type: draft.materialType,
       note: draft.note.trim(),
+      body: draft.body,
+      metadata: draft.metadata,
       projectId: draft.projectName === 'Без проекта'
         ? null
         : projects.find((project) => project.name === draft.projectName)?.id ?? null,
@@ -3919,7 +4241,7 @@ const ClientEditMaterialView = ({ navigate, material, projects, onUpdateMaterial
       statusColor: 'gray',
       date: '23.07.2026',
     });
-    navigate('material_detail');
+    if (ok) navigate('material_detail');
   };
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -3952,33 +4274,43 @@ const ClientEditMaterialView = ({ navigate, material, projects, onUpdateMaterial
 const ClientCreateMaterialView = ({ navigate, projects, defaultProjectId = null, onCreateMaterial }) => {
   const [aiModal, setAiModal] = useState(null);
   const defaultProjectName = projects.find((project) => project.id === defaultProjectId)?.name || 'Без проекта';
-  const [drafts, setDrafts] = useState(() => [createMaterialDraft(1, defaultProjectName, true)]);
+  const [drafts, setDrafts] = useState(() => [createMaterialDraft(1, defaultProjectName)]);
+  const requestKeys = useRef(new Map());
   const [expeditedModeration, setExpeditedModeration] = useState(false);
   const readyDrafts = drafts.filter((draft) => draft.title.trim());
   const materialsCount = readyDrafts.length;
   const expeditedTotal = materialsCount * 50;
   const updateDraft = (id, patch) => setDrafts((items) => items.map((draft) => draft.id === id ? { ...draft, ...patch } : draft));
-  const addDraft = () => {
+  const addDraft = async () => {
     const lastDraft = drafts[drafts.length - 1];
     if (!lastDraft?.title.trim()) return;
+    if (!await saveMaterials('Черновик', false)) return;
     const nextId = Math.max(...drafts.map((draft) => draft.id)) + 1;
     setDrafts((items) => [...items, createMaterialDraft(nextId, defaultProjectName)]);
     requestAnimationFrame(() => document.getElementById(`material-form-${nextId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
   const removeDraft = (id) => setDrafts((items) => items.filter((draft) => draft.id !== id));
-  const saveMaterials = (status) => {
-    readyDrafts.forEach((draft) => onCreateMaterial({
+  const saveMaterials = async (status, leave = true) => {
+    const items = readyDrafts.map((draft) => ({
+      clientKey: draft.clientKey,
       name: draft.title.trim(),
       advertiser: draft.advertiser,
+      advertiserId: draft.advertiserId,
       type: draft.materialType,
       note: draft.note.trim(),
+      body: draft.body,
+      metadata: draft.metadata,
       projectId: draft.projectName === 'Без проекта' ? null : projects.find((project) => project.name === draft.projectName)?.id ?? null,
       status,
       statusColor: status === 'Черновик' ? 'gray' : 'blue',
       expeditedModeration: status === 'На модерации' && expeditedModeration,
       moderationFee: status === 'На модерации' && expeditedModeration ? 50 : 0,
     }));
-    navigate('materials');
+    const fingerprint = JSON.stringify({items,status,expeditedModeration});
+    if (!requestKeys.current.has(fingerprint)) requestKeys.current.set(fingerprint,crypto.randomUUID());
+    const ok = await onCreateMaterial(items,status,expeditedModeration,requestKeys.current.get(fingerprint));
+    if (ok && leave) navigate('materials');
+    return ok;
   };
 
   return (
@@ -4058,7 +4390,9 @@ const ClientCreateMaterialView = ({ navigate, projects, defaultProjectId = null,
   );
 };
 
-const ClientAdvertisersView = ({ navigate }) => (
+const ClientAdvertisersView = ({ navigate, onOpenAdvertiser }) => {
+  const mockAdvertisers = useBackend().data.advertisers;
+  return (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <h1 className="font-display text-2xl font-bold text-[#0b3558]">Рекламодатели</h1>
@@ -4066,7 +4400,7 @@ const ClientAdvertisersView = ({ navigate }) => (
     </div>
     <Card className="p-5 bg-[#f8f9fb]">
       <p className="text-sm text-[#476788]">
-        Рекламодатель нужен только для маркировки. После сохранения данных платформа автоматически проверяет юрлицо через ЕГРЮЛ и присваивает статус.
+        Рекламодатель нужен для маркировки. Указанные реквизиты сохраняются в карточке; статус проверки отображается отдельно.
       </p>
     </Card>
     <Card className="overflow-hidden">
@@ -4082,10 +4416,9 @@ const ClientAdvertisersView = ({ navigate }) => (
         </thead>
         <tbody className="divide-y divide-[#d4e0ed]">
           {mockAdvertisers.map(item => (
-            <tr key={item.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('advertiser_detail')}>
+            <tr key={item.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => onOpenAdvertiser(item.id)}>
               <td className="px-6 py-4">
                 <div className="text-sm font-medium text-[#0b3558]">{item.name}</div>
-                <div className="mt-1 text-xs text-[#476788]">{item.code}</div>
               </td>
               <td className="px-6 py-4 text-sm text-[#476788]">{item.type}</td>
               <td className="px-6 py-4 text-sm text-[#476788]">{item.inn}</td>
@@ -4097,197 +4430,210 @@ const ClientAdvertisersView = ({ navigate }) => (
       </table>
     </Card>
   </div>
-);
+); };
 
-const ClientAdvertiserDetailView = ({ navigate }) => {
-  const advertiser = {
-    code: 'A-842',
-    name: 'ООО "Финтех Решения"',
-    status: 'Проверен',
-    color: 'green',
-    legal: [
-      ['Тип рекламодателя', 'Юридическое лицо'],
-      ['Юридическое название', 'ООО "Финтех Решения"'],
-      ['ИНН', '7700000000'],
-      ['КПП', '770001001'],
-      ['ОГРН', '1237700000000'],
-      ['Юридический адрес', '119019, Москва, ул. Воздвиженка, 10'],
-    ],
-    requests: [
-      ['#1045', 'Пресс-релиз: Запуск новой платформы', 'РБК Инвестиции', 'Ожидает приемки'],
-      ['#1052', 'Кейс внедрения системы управления клиентами', 'VC.ru', 'Завершено'],
-      ['#1055', 'Обзор рынка недвижимости за третий квартал', 'Бизнес Среда', 'Площадка отказала'],
-    ],
-  };
+const useAdvertiserRecord = (id) => {
+  const backend=useBackend();
+  const [fetched,setFetched]=useState(null);
+  const [loading,setLoading]=useState(Boolean(id));
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    if(!id){setFetched(null);setLoading(false);return;}
+    let active=true;
+    setLoading(true);setError('');
+    api(`/advertisers/${id}`).then(row=>{if(active)setFetched(normalizeAdvertiser(row));}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});
+    return()=>{active=false;};
+  },[id,backend.data.advertisers]);
+  return {advertiser:fetched?.id===id?fetched:backend.data.advertisers.find(item=>item.id===id),loading,error};
+};
+
+const ClientAdvertiserDetailRoute = ({id,navigate,orders,onOpenOrder}) => {
+  const {advertiser,loading,error}=useAdvertiserRecord(id);
+  if(!advertiser)return <Card className="p-6">{loading?'Загрузка…':error||'Выберите рекламодателя в списке.'}</Card>;
+  return <ClientAdvertiserDetailView navigate={navigate} advertiser={advertiser} orders={orders} onOpenOrder={onOpenOrder} />;
+};
+
+const ClientAdvertiserDetailView = ({ navigate, advertiser, orders = [], onOpenOrder }) => {
+  if (!advertiser) return <Card className="p-6">Выберите рекламодателя в списке.</Card>;
+  const details=advertiser.details||{};
+  const legal=[
+    ['Тип рекламодателя',details.kind==='entrepreneur'?'Индивидуальный предприниматель':'Юридическое лицо'],
+    ['Юридическое название',advertiser.name],['ИНН',advertiser.inn],['КПП',details.kpp],
+    ['ОГРН / ОГРНИП',details.ogrn],['Юридический адрес',details.address],
+  ].filter(([,value])=>Boolean(value));
+  const marking=[
+    ['Объект рекламирования',details.advertisedObject],['Целевая ссылка',details.targetUrl],
+    ['Тип исходного договора',details.contractType==='intermediary'?'Посреднический договор':details.contractType==='services'?'Договор оказания услуг':''],
+    ['Номер исходного договора',details.contractNumber],['Дата исходного договора',details.contractDate],
+    ['Первый исполнитель',details.executorName],['ИНН первого исполнителя',details.executorInn],
+  ].filter(([,value])=>Boolean(value));
+  const requests=orders.filter(order=>order.snapshot?.advertiser?.id?order.snapshot.advertiser.id===advertiser.id:order.snapshot?.advertiser?.inn===advertiser.inn);
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('advertisers')}>
         <ChevronRight className="w-4 h-4 rotate-180" /> К рекламодателям
       </button>
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-[#0b3558] flex flex-wrap items-center gap-3">
-            {advertiser.name}
-            <Badge color={advertiser.color}>{advertiser.status.toLowerCase()}</Badge>
-          </h1>
-          <p className="text-sm text-[#476788] mt-1">{advertiser.code} · рекламодатель для маркировки</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl font-bold leading-tight text-[#0b3558] break-words">{advertiser.name}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-3"><Badge color={advertiser.color}>{advertiser.status}</Badge><span className="text-sm text-[#476788]">ИНН {advertiser.inn}</span></div>
         </div>
         <Button variant="secondary" onClick={() => navigate('advertiser_edit')}>Изменить данные</Button>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="p-5 bg-[#f8f9fb]">
-            <p className="text-sm text-[#476788]">
-              Рекламодатель используется только для маркировки. В карточке хранится юридическое лицо, которое автоматически проверяется через внешний сервис.
-            </p>
-          </Card>
-          <Card className="p-6">
-            <h2 className="font-display text-base font-bold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Юридические данные для маркировки</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {advertiser.legal.map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-                  <div className="text-xs text-[#476788]">{label}</div>
-                  <div className="mt-1 text-sm font-medium text-[#0b3558] break-words">{value}</div>
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card className="p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#d4e0ed] pb-3">
-              <h2 className="font-display text-base font-bold text-[#0b3558]">Заявки с рекламодателем</h2>
-              <Badge color="blue">{advertiser.requests.length} заявки</Badge>
-            </div>
-            <div className="space-y-3">
-              {advertiser.requests.map(([id, material, platform, requestStatus]) => (
-                <button key={id} className="w-full rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-left transition-colors hover:border-[#006bff] hover:bg-white" onClick={() => navigate('order_detail')}>
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-[#0b3558]">{id}</span>
-                        <Badge color={requestStatus === 'Завершено' ? 'green' : requestStatus.includes('отказ') ? 'red' : 'blue'}>{requestStatus}</Badge>
-                      </div>
-                      <div className="mt-2 text-sm font-medium text-[#0b3558]">{material}</div>
-                      <div className="mt-1 text-xs text-[#476788]">Площадка: {platform}</div>
-                    </div>
-                    <span className="shrink-0 text-sm font-semibold text-[#006bff]">Открыть</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        <Card className="p-6 h-fit">
-          <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Автоматическая проверка</h2>
-          <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" />
-              <div>
-                <div className="text-sm font-semibold text-[#0b3558]">Юрлицо подтверждено</div>
-                <div className="mt-1 text-xs leading-5 text-[#476788]">Внешний сервис подтвердил существование юрлица и совпадение идентификаторов.</div>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
+      <Card className="p-5 sm:p-6">
+        <h2 className="font-display text-base font-bold text-[#0b3558]">Реквизиты</h2>
+        <dl className="mt-4 grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+          {legal.map(([label,value])=><div key={label} className="min-w-0 border-b border-[#d4e0ed] py-3"><dt className="text-xs text-[#476788]">{label}</dt><dd className="mt-1 break-words text-sm font-medium text-[#0b3558]">{value}</dd></div>)}
+        </dl>
+        {marking.length>0&&<div className="mt-6"><h3 className="font-display text-base font-bold text-[#0b3558]">Данные для маркировки</h3><dl className="mt-3 grid grid-cols-1 gap-x-8 sm:grid-cols-2">{marking.map(([label,value])=><div key={label} className="min-w-0 border-b border-[#d4e0ed] py-3"><dt className="text-xs text-[#476788]">{label}</dt><dd className="mt-1 break-words text-sm font-medium text-[#0b3558]">{value}</dd></div>)}</dl></div>}
+      </Card>
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-display text-base font-bold text-[#0b3558]">Заказы</h2><Badge color="blue">{requests.length}</Badge></div>
+        {requests.length?<div className="mt-4 divide-y divide-[#d4e0ed] border-t border-[#d4e0ed]">{requests.map(order=><button key={order.id} className="flex w-full items-center justify-between gap-4 py-4 text-left hover:text-[#006bff]" onClick={()=>onOpenOrder(order)}><span className="min-w-0"><span className="block break-words text-sm font-semibold text-[#0b3558]">Заказ №{orderNumber(order)} · {order.material}</span><span className="mt-1 block break-words text-xs text-[#476788]">{order.platform}</span></span><span className="flex shrink-0 items-center gap-2"><Badge color={order.statusColor}>{order.status}</Badge><ChevronRight className="h-4 w-4 text-[#476788]" /></span></button>)}</div>:<p className="mt-4 text-sm text-[#476788]">Заказов пока нет.</p>}
+      </Card>
     </div>
   );
 };
 
-const ClientAdvertiserEditView = ({ navigate }) => (
-  <div className="space-y-6 max-w-5xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('advertiser_detail')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К карточке рекламодателя
-    </button>
-    <div>
-      <h1 className="font-display text-2xl font-bold text-[#0b3558]">Редактирование рекламодателя</h1>
-      <p className="text-sm text-[#476788] mt-1">После изменения юридических данных проверка через внешний сервис запускается повторно.</p>
-    </div>
-    <Card className="p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">Тип рекламодателя</span>
-          <CustomSelect className="mt-2" options={['Юридическое лицо', 'Индивидуальный предприниматель']} />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">Юридическое название</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue='ООО "Финтех Решения"' />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">ИНН</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="7700000000" />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">КПП</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="770001001" />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">ОГРН / ОГРНИП</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="1237700000000" />
-        </label>
-        <label className="block md:col-span-2">
-          <span className="text-sm font-medium text-[#476788]">Юридический адрес</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" defaultValue="119019, Москва, ул. Воздвиженка, 10" />
-        </label>
-      </div>
-      <div className="mt-6 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4 text-sm text-[#476788]">
-        После сохранения платформа автоматически запросит проверку юрлица через внешний сервис.
-      </div>
-      <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
-        <Button variant="secondary" onClick={() => navigate('advertiser_detail')}>Отмена</Button>
-        <Button variant="primary" onClick={() => navigate('advertiser_detail')}>Сохранить изменения</Button>
-      </div>
-    </Card>
-  </div>
-);
+const ClientAdvertiserEditView = ({ navigate, id }) => {
+  const {advertiser,loading,error}=useAdvertiserRecord(id);
+  if(!advertiser)return <Card className="p-6">{loading?'Загрузка…':error||'Выберите рекламодателя в списке.'}</Card>;
+  return <ClientAdvertiserNewView navigate={navigate} advertiser={advertiser} />;
+};
 
-const ClientAdvertiserNewView = ({ navigate }) => (
+const ClientAdvertiserNewView = ({ navigate, advertiser = null }) => {
+  const backend = useBackend();
+  const [advertiserType,setAdvertiserType]=useState(advertiser?.details?.kind==='entrepreneur'?'Индивидуальный предприниматель':'Юридическое лицо');
+  const [fields,setFields] = useState({name:advertiser?.name||'',inn:advertiser?.inn||'',kpp:advertiser?.details?.kpp||'',ogrn:advertiser?.details?.ogrn||'',address:advertiser?.details?.address||'',advertisedObject:advertiser?.details?.advertisedObject||'',targetUrl:advertiser?.details?.targetUrl||'',contractType:advertiser?.details?.contractType==='intermediary'?'Посреднический договор':advertiser?.details?.contractType==='services'?'Договор оказания услуг':'Не указан',contractNumber:advertiser?.details?.contractNumber||'',contractDate:advertiser?.details?.contractDate||'',executorName:advertiser?.details?.executorName||'',executorInn:advertiser?.details?.executorInn||''});
+  const [errors,setErrors]=useState<Record<string,string>>({});
+  const [registryMessage,setRegistryMessage]=useState('');
+  const [registryBusy,setRegistryBusy]=useState(false);
+  const fillFromRegistry=async()=>{
+    setRegistryBusy(true);setRegistryMessage('');
+    try {
+      const params=new URLSearchParams({query:fields.inn,...(fields.kpp?{kpp:fields.kpp}:{})});
+      const result=await api(`/reference/party?${params}`);
+      if(!result.found){setRegistryMessage('Организация не найдена в реестре.');return;}
+      const party=result.party;
+      setAdvertiserType(party.kind==='entrepreneur'?'Индивидуальный предприниматель':'Юридическое лицо');
+      setFields(current=>({...current,name:party.shortName||party.name||current.name,kpp:party.kpp||'',ogrn:party.ogrn||'',address:party.kind==='legal'&&party.address?party.address:current.address}));
+      setErrors({});
+      setRegistryMessage('Данные реестра подставлены. Проверьте их перед сохранением.');
+    } catch(error) {setRegistryMessage(error instanceof Error?error.message:'Проверка недоступна');}
+    finally {setRegistryBusy(false);}
+  };
+  const save = async () => {
+    const nextErrors:Record<string,string>={};
+    if(fields.name.trim().length<2)nextErrors.name='Укажите юридическое название.';
+    const isLegal=advertiserType==='Юридическое лицо';
+    if(fields.inn.length!==(isLegal?10:12))nextErrors.inn=`ИНН должен состоять из ${isLegal?10:12} цифр.`;
+    if(isLegal&&fields.kpp.length!==9)nextErrors.kpp='КПП должен состоять из 9 цифр.';
+    if(fields.ogrn.length!==(isLegal?13:15))nextErrors.ogrn=`${isLegal?'ОГРН':'ОГРНИП'} должен состоять из ${isLegal?13:15} цифр.`;
+    if(!fields.address.trim())nextErrors.address='Укажите юридический адрес.';
+    if(fields.targetUrl && !/^https?:\/\//i.test(fields.targetUrl))nextErrors.targetUrl='Укажите ссылку с http:// или https://.';
+    if(fields.executorInn && !/^(\d{10}|\d{12})$/.test(fields.executorInn))nextErrors.executorInn='ИНН первого исполнителя должен состоять из 10 или 12 цифр.';
+    if(fields.executorInn && fields.executorInn===fields.inn)nextErrors.executorInn='Исполнитель и рекламодатель должны быть разными участниками.';
+    setErrors(nextErrors);if(Object.keys(nextErrors).length)return;
+    const payload={name:fields.name,inn:fields.inn,details:{kind:isLegal?'legal':'entrepreneur',kpp:fields.kpp,ogrn:fields.ogrn,address:fields.address,advertisedObject:fields.advertisedObject,targetUrl:fields.targetUrl||undefined,contractType:fields.contractType==='Не указан'?undefined:fields.contractType==='Посреднический договор'?'intermediary':'services',contractNumber:fields.contractNumber,contractDate:fields.contractDate||undefined,executorName:fields.executorName,executorInn:fields.executorInn}};
+    const ok = await backend.perform(async () => { await api(advertiser?`/advertisers/${advertiser.id}`:'/advertisers',advertiser?'PATCH':'POST',payload); await backend.refresh(); });
+    if(ok) navigate(advertiser?'advertiser_detail':'advertisers');
+  };
+  return (
   <div className="space-y-6 max-w-5xl mx-auto">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('advertisers')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К рекламодателям
+      <ChevronRight className="w-4 h-4 rotate-180" /> {advertiser?'К карточке рекламодателя':'К рекламодателям'}
     </button>
     <div>
-      <h1 className="font-display text-2xl font-bold text-[#0b3558]">Новый рекламодатель</h1>
-      <p className="text-sm text-[#476788] mt-1">Добавьте юрлицо для маркировки. Проверка существования запускается автоматически через внешний сервис.</p>
+      <h1 className="font-display text-2xl font-bold text-[#0b3558]">{advertiser?'Редактирование рекламодателя':'Новый рекламодатель'}</h1>
+      <p className="text-sm text-[#476788] mt-1">Данные карточки будут переданы площадке вместе с материалом заказа для маркировки.</p>
     </div>
     <Card className="p-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <label className="block">
           <span className="text-sm font-medium text-[#476788]">Тип рекламодателя</span>
-          <CustomSelect className="mt-2" options={['Юридическое лицо', 'Индивидуальный предприниматель']} />
+          <CustomSelect className="mt-2" value={advertiserType} onChange={value=>{setAdvertiserType(value);setFields(current=>({...current,kpp:value==='Юридическое лицо'?current.kpp:''}));setErrors({});}} options={['Юридическое лицо', 'Индивидуальный предприниматель']} />
         </label>
         <label className="block">
           <span className="text-sm font-medium text-[#476788]">Юридическое название</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="ООО «Название компании»" />
+          <input aria-invalid={Boolean(errors.name)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff] ${errors.name?'border-red-500':'border-[#476788]'}`} placeholder="ООО «Название компании»" value={fields.name} onChange={e => {setFields({...fields,name:e.target.value});setErrors({...errors,name:''});}} />{errors.name&&<span className="mt-1 block text-xs text-red-700">{errors.name}</span>}
         </label>
+        <div>
         <label className="block">
           <span className="text-sm font-medium text-[#476788]">ИНН</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="7700000000" />
+          <input inputMode="numeric" maxLength={advertiserType==='Юридическое лицо'?10:12} aria-invalid={Boolean(errors.inn)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff] ${errors.inn?'border-red-500':'border-[#476788]'}`} placeholder="7700000000" value={fields.inn} onChange={e => {setFields({...fields,inn:e.target.value.replace(/\D/g,'')});setErrors({...errors,inn:''});}} />{errors.inn&&<span className="mt-1 block text-xs text-red-700">{errors.inn}</span>}
         </label>
+        <button type="button" className="mt-2 text-sm font-medium text-[#006bff] hover:text-[#0b3558] disabled:opacity-50" disabled={registryBusy||![10,12].includes(fields.inn.length)} onClick={fillFromRegistry}>{registryBusy?'Поиск…':'Заполнить по ИНН'}</button>
+        {registryMessage&&<p role="status" className="mt-1 text-xs text-[#476788]">{registryMessage}</p>}
+        </div>
         <label className="block">
           <span className="text-sm font-medium text-[#476788]">КПП</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="770001001" />
+          <input inputMode="numeric" maxLength={9} disabled={advertiserType!=='Юридическое лицо'} aria-invalid={Boolean(errors.kpp)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff] disabled:bg-[#f0f3f8] ${errors.kpp?'border-red-500':'border-[#476788]'}`} placeholder="770001001" value={fields.kpp} onChange={e => {setFields({...fields,kpp:e.target.value.replace(/\D/g,'')});setErrors({...errors,kpp:''});}} />{errors.kpp&&<span className="mt-1 block text-xs text-red-700">{errors.kpp}</span>}
         </label>
         <label className="block">
           <span className="text-sm font-medium text-[#476788]">ОГРН / ОГРНИП</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="1237700000000" />
+          <input inputMode="numeric" maxLength={advertiserType==='Юридическое лицо'?13:15} aria-invalid={Boolean(errors.ogrn)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff] ${errors.ogrn?'border-red-500':'border-[#476788]'}`} placeholder="1237700000000" value={fields.ogrn} onChange={e => {setFields({...fields,ogrn:e.target.value.replace(/\D/g,'')});setErrors({...errors,ogrn:''});}} />{errors.ogrn&&<span className="mt-1 block text-xs text-red-700">{errors.ogrn}</span>}
         </label>
         <label className="block md:col-span-2">
           <span className="text-sm font-medium text-[#476788]">Юридический адрес</span>
-          <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="Индекс, город, улица, дом" />
+          <AddressInput ariaInvalid={Boolean(errors.address)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff] ${errors.address?'border-red-500':'border-[#476788]'}`} placeholder="Индекс, город, улица, дом" value={fields.address} onChange={value => {setFields(current=>({...current,address:value}));setErrors(current=>({...current,address:''}));}} />{errors.address&&<span className="mt-1 block text-xs text-red-700">{errors.address}</span>}
         </label>
       </div>
-      <div className="mt-6 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4 text-sm text-[#476788]">
-        После сохранения рекламодатель появится в списке со статусом «проверка запрошена». Результат применится автоматически после ответа API.
+      <div className="mt-7 border-t border-[#d4e0ed] pt-6">
+        <h2 className="font-display text-base font-bold text-[#0b3558]">Данные для маркировки <span className="font-sans text-sm font-normal text-[#476788]">(необязательно)</span></h2>
+        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-[#476788]">Объект рекламирования</span>
+            <input aria-invalid={Boolean(errors.advertisedObject)} maxLength={500} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm ${errors.advertisedObject?'border-red-500':'border-[#476788]'}`} placeholder="Бренд, товар или услуга" value={fields.advertisedObject} onChange={e=>{setFields({...fields,advertisedObject:e.target.value});setErrors({...errors,advertisedObject:''});}} />
+            {errors.advertisedObject&&<span className="mt-1 block text-xs text-red-700">{errors.advertisedObject}</span>}
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-[#476788]">Целевая ссылка в материале</span>
+            <input type="url" aria-invalid={Boolean(errors.targetUrl)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm ${errors.targetUrl?'border-red-500':'border-[#476788]'}`} placeholder="https://" value={fields.targetUrl} onChange={e=>{setFields({...fields,targetUrl:e.target.value});setErrors({...errors,targetUrl:''});}} />
+            <span className="mt-1 block text-xs text-[#476788]">Если в публикации есть ссылка на рекламируемый объект.</span>
+            {errors.targetUrl&&<span className="mt-1 block text-xs text-red-700">{errors.targetUrl}</span>}
+          </label>
+        </div>
       </div>
+      <div className="mt-7 border-t border-[#d4e0ed] pt-6">
+        <h2 className="font-display text-base font-bold text-[#0b3558]">Исходный договор с рекламодателем <span className="font-sans text-sm font-normal text-[#476788]">(необязательно)</span></h2>
+        <p className="mt-1 text-sm text-[#476788]">Договор между рекламодателем и первым исполнителем. Если заказчик — агентство, укажите договор агентства с рекламодателем.</p>
+        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Тип договора</span>
+            <CustomSelect className="mt-2" value={fields.contractType} onChange={value=>setFields({...fields,contractType:value})} options={['Не указан','Договор оказания услуг','Посреднический договор']} />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Номер договора</span>
+            <input maxLength={100} className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-2.5 text-sm" placeholder="Оставьте пустым, если без номера" value={fields.contractNumber} onChange={e=>setFields({...fields,contractNumber:e.target.value})} />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Дата договора</span>
+            <input type="date" aria-invalid={Boolean(errors.contractDate)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm ${errors.contractDate?'border-red-500':'border-[#476788]'}`} value={fields.contractDate} onChange={e=>{setFields({...fields,contractDate:e.target.value});setErrors({...errors,contractDate:''});}} />
+            {errors.contractDate&&<span className="mt-1 block text-xs text-red-700">{errors.contractDate}</span>}
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">Первый исполнитель по договору</span>
+            <input aria-invalid={Boolean(errors.executorName)} maxLength={300} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm ${errors.executorName?'border-red-500':'border-[#476788]'}`} placeholder="Юридическое название агентства или исполнителя" value={fields.executorName} onChange={e=>{setFields({...fields,executorName:e.target.value});setErrors({...errors,executorName:''});}} />
+            {errors.executorName&&<span className="mt-1 block text-xs text-red-700">{errors.executorName}</span>}
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-[#476788]">ИНН первого исполнителя</span>
+            <input inputMode="numeric" maxLength={12} aria-invalid={Boolean(errors.executorInn)} className={`mt-2 w-full rounded-lg border px-4 py-2.5 text-sm ${errors.executorInn?'border-red-500':'border-[#476788]'}`} value={fields.executorInn} onChange={e=>{setFields({...fields,executorInn:e.target.value.replace(/\D/g,'')});setErrors({...errors,executorInn:''});}} />
+            {errors.executorInn&&<span className="mt-1 block text-xs text-red-700">{errors.executorInn}</span>}
+          </label>
+        </div>
+      </div>
+      <div className="mt-6 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4 text-sm text-[#476788]">
+        Площадка получит эти сведения вместе с текстом материала. Регистрацию рекламы в ОРД выполняет площадка.
+      </div>
+      {Object.values(errors).some(Boolean)&&<p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">Проверьте поля, отмеченные красным.</p>}
       <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
-        <Button variant="secondary" onClick={() => navigate('advertisers')}>Отмена</Button>
-        <Button variant="primary" onClick={() => navigate('advertisers')}>Сохранить рекламодателя</Button>
+        <Button variant="secondary" onClick={() => navigate(advertiser?'advertiser_detail':'advertisers')}>Отмена</Button>
+        <Button variant="primary" disabled={backend.busy} onClick={save}>{advertiser?'Сохранить изменения':'Сохранить рекламодателя'}</Button>
       </div>
     </Card>
   </div>
-);
+); };
 
 const PlatformListTable = ({ items, favoritePlatforms, toggleFavoritePlatform, navigate, selectedPlatformIds = [], toggleSelectedPlatform = null, emptyText = 'Площадки не найдены.' }) => (
   <Card className="overflow-hidden">
@@ -4311,9 +4657,9 @@ const PlatformListTable = ({ items, favoritePlatforms, toggleFavoritePlatform, n
 	          {items.length ? items.map((item) => {
 	            const isFavorite = favoritePlatforms.includes(item.id);
 	            const isSelected = selectedPlatformIds.includes(item.id);
-	            const mediologyRank = ((item.id - 100) * 5) % 30 || 30;
+	            const mediologyRank = item.details?.medialogiaRank ?? '—';
 	            return (
-              <tr key={item.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('platform_detail')}>
+              <tr key={item.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('platform_detail', item.id)}>
                 {toggleSelectedPlatform && (
                   <td className="px-4 py-4 whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
                     <button
@@ -4347,7 +4693,13 @@ const PlatformListTable = ({ items, favoritePlatforms, toggleFavoritePlatform, n
                   </div>
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-[#476788] truncate">{item.reach}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-[#0b3558] tabular-nums">{formatMoney(item.price)}</td>
+                <td className="px-4 py-4 whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold tabular-nums text-[#0b3558]">{formatMoney(item.price)}</span>
+                    {item.discountActive && <Badge color="green">−{item.discount_bps / 100}%</Badge>}
+                  </div>
+                  {item.discountActive && item.basePrice > item.price && <div className="mt-1 text-xs tabular-nums text-[#7890aa] line-through">{formatMoney(item.basePrice)}</div>}
+                </td>
                 <td className="px-4 py-4 whitespace-nowrap text-right">
                   <Button
                     variant={isFavorite ? 'primary' : 'secondary'}
@@ -4370,14 +4722,22 @@ const PlatformListTable = ({ items, favoritePlatforms, toggleFavoritePlatform, n
 );
 
 const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate, materials, projects, onCreateOrders }) => {
+  const backend=useBackend();
+  const informer=backend.data.informers.find(i=>i.id===new URLSearchParams(location.search).get('informer'));
+  const mockCatalog = backend.data.outlets.filter(o=>!informer?.selectionIds?.length||informer.selectionIds.includes(o.id));
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
-  const [selectedPlatformIds, setSelectedPlatformIds] = useState([]);
+  const [selectedPlatformIds, setSelectedPlatformIds] = useState(() => Number(informer?.packagePrice || 0) > 0 ? [...(informer.selectionIds || [])] : []);
   const [isBulkModalOpen, setBulkModalOpen] = useState(false);
   const [audienceFilter, setAudienceFilter] = useState(undefined);
   const [regionFilter, setRegionFilter] = useState(undefined);
   const [goalFilter, setGoalFilter] = useState(undefined);
   const [formatFilter, setFormatFilter] = useState(undefined);
+  const [typeFilter, setTypeFilter] = useState(undefined);
+  const [topicFilter, setTopicFilter] = useState(undefined);
+  const [priceFilter, setPriceFilter] = useState(undefined);
+  const [deadlineFilter, setDeadlineFilter] = useState(undefined);
+  const topicOptions = ['Любая тематика', ...new Set(mockCatalog.flatMap((item) => item.details?.topics || []))];
   const getReachValue = (reach) => {
     const normalized = String(reach).replace(',', '.');
     const number = Number(normalized.match(/[\d.]+/)?.[0] || 0);
@@ -4398,13 +4758,39 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
   const matchesFormat = (item) => !formatFilter
     || formatFilter === 'Все форматы'
     || item.formats.includes(formatFilter);
+  const matchesType = (item) => !typeFilter || typeFilter === 'Все типы' || item.type === typeFilter;
+  const matchesTopic = (item) => !topicFilter || topicFilter === 'Любая тематика' || (item.details?.topics || []).includes(topicFilter);
+  const matchesPrice = (item) => {
+    if (!priceFilter || priceFilter === 'Любая цена') return true;
+    if (priceFilter === 'До 50 000 ₽') return item.price <= 50000;
+    if (priceFilter === '50 000-100 000 ₽') return item.price > 50000 && item.price <= 100000;
+    return item.price > 100000;
+  };
+  const matchesDeadline = (item) => {
+    if (!deadlineFilter || deadlineFilter === 'Любой срок') return true;
+    const selectedFormat=apiFormatByLabel[formatFilter];
+    const days = Number((selectedFormat&&item.details?.publicationDaysByFormat?.[selectedFormat]) ?? item.details?.publicationDays ?? parseInt(item.deadline, 10) ?? 0);
+    if (deadlineFilter === '1 день') return days === 1;
+    if (deadlineFilter === '2-3 дня') return days >= 2 && days <= 3;
+    return days > 0 && days <= 7;
+  };
   const visiblePlatforms = (showFavoritesOnly ? mockCatalog.filter(item => favoritePlatforms.includes(item.id)) : mockCatalog)
+    .filter(matchesType)
     .filter(matchesRegion)
     .filter(matchesGoal)
     .filter(matchesFormat)
+    .filter(matchesTopic)
+    .filter(matchesPrice)
+    .filter(matchesDeadline)
     .filter(matchesAudience);
   const selectedPlatforms = mockCatalog.filter(item => selectedPlatformIds.includes(item.id));
-  const selectedTotal = selectedPlatforms.reduce((sum, item) => sum + item.price, 0);
+  const selectedStandardTotal = selectedPlatforms.reduce((sum, item) => sum + item.price, 0);
+  const packagePlatformIds = (informer?.selectionIds || []).map(String).sort();
+  const selectedPlatformIdSet = selectedPlatforms.map((item) => String(item.id)).sort();
+  const packageApplies = Number(informer?.packagePrice || 0) > 0
+    && packagePlatformIds.length === selectedPlatformIdSet.length
+    && packagePlatformIds.every((id, index) => id === selectedPlatformIdSet[index]);
+  const selectedTotal = packageApplies ? Number(informer.packagePrice) : selectedStandardTotal;
   const toggleSelectedPlatform = (id) => {
     setSelectedPlatformIds((items) => items.includes(id) ? items.filter((itemId) => itemId !== id) : [...items, id]);
   };
@@ -4436,12 +4822,12 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
       <CollapsiblePanel open={filtersOpen}>
         <Card id="catalog-filters" className="p-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <CustomSelect placeholder="Тип площадки" options={['Все типы', 'СМИ', 'ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
+            <CustomSelect placeholder="Тип площадки" options={['Все типы', 'СМИ', 'ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} value={typeFilter} onChange={setTypeFilter} />
             <CustomSelect placeholder="Цель размещения" options={['Любая цель', 'Пиар', 'SEO', 'SERM']} value={goalFilter} onChange={setGoalFilter} />
             <CustomSelect placeholder="География" options={regionFilterOptions} value={regionFilter} onChange={setRegionFilter} />
-            <CustomSelect placeholder="Тематика" options={['Любая тематика', 'Финансы', 'ИТ', 'Бизнес']} />
-            <CustomSelect placeholder="Цена" options={['Любая цена', 'До 50 000 ₽', '50 000-100 000 ₽', '100 000+ ₽']} />
-            <CustomSelect placeholder="Срок публикации" options={['Любой срок', '1 день', '2-3 дня', 'До недели']} />
+            <CustomSelect placeholder="Тематика" options={topicOptions} value={topicFilter} onChange={setTopicFilter} />
+            <CustomSelect placeholder="Цена" options={['Любая цена', 'До 50 000 ₽', '50 000-100 000 ₽', '100 000+ ₽']} value={priceFilter} onChange={setPriceFilter} />
+            <CustomSelect placeholder="Срок публикации" options={['Любой срок', '1 день', '2-3 дня', 'До недели']} value={deadlineFilter} onChange={setDeadlineFilter} />
             <CustomSelect placeholder="Формат" options={placementFormatFilterOptions} value={formatFilter} onChange={setFormatFilter} />
             <CustomSelect placeholder="Аудитория" options={['Любая аудитория', 'До 100 тыс.', '100 тыс.-1 млн', '1 млн+']} value={audienceFilter} onChange={setAudienceFilter} />
           </div>
@@ -4489,21 +4875,24 @@ const ClientCatalogView = ({ favoritePlatforms, toggleFavoritePlatform, navigate
         materials={materials}
         projects={projects}
         onCreateOrders={onCreateOrders}
+        informer={informer}
       />
     </div>
   );
 };
 
-const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, navigate, materials, projects, onCreateOrders }) => {
-  const item = mockCatalog[0];
-  const isFavorite = favoritePlatforms.includes(item.id);
+const ClientPlatformDetailView = ({ favoritePlatforms = [], toggleFavoritePlatform = undefined, navigate, materials = [], projects = [], onCreateOrders = undefined, ownerControls = undefined, readOnlyFormats = false }) => {
+  const backend = useBackend();
+  const item = backend.data.outlets.find(o=>o.id===backend.outletId);
+  const isFavorite = favoritePlatforms.includes(item?.id);
   const [isMaterialModalOpen, setMaterialModalOpen] = useState(false);
-  const placementFormats = [
-    { name: 'Статья', deadline: 'до 2 дней', basePrice: 150000, price: 135000 },
-    { name: 'Новость', deadline: 'до 1 дня', basePrice: 85000, price: 76500 },
-  ];
-  const [selectedFormatName, setSelectedFormatName] = useState(placementFormats[0].name);
+  const placementFormats = (item?.formats || []).map(name=>({name,deadline:item.deadline,basePrice:item.formatPrices[name],price:getPlatformPriceForFormat(item,name)}));
+  const cheapestFormatName = placementFormats.reduce((cheapest,current) => !cheapest || current.price < cheapest.price ? current : cheapest, null)?.name;
+  const [selectedFormatName, setSelectedFormatName] = useState(cheapestFormatName);
+  useEffect(() => setSelectedFormatName(cheapestFormatName), [item?.id, cheapestFormatName]);
   const selectedFormat = placementFormats.find((format) => format.name === selectedFormatName) || placementFormats[0];
+  if(!item || !selectedFormat) return <Card className="p-6">Выберите площадку в каталоге.</Card>;
+  const relatedOrders=ownerControls?backend.data.orders.filter(order=>order.outlet_id===item.id):[];
   const selectedPlatform = {
     ...item,
     format: selectedFormat.name,
@@ -4511,46 +4900,41 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
     price: selectedFormat.price,
   };
   return (
-    <div className="platform-view-enter space-y-6 max-w-5xl mx-auto">
+    <div className="platform-view-enter space-y-6 max-w-6xl mx-auto">
       <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('catalog')}>
-        <ChevronRight className="w-4 h-4 rotate-180" /> К каталогу
+        <ChevronRight className="w-4 h-4 rotate-180" /> {ownerControls ? 'К площадкам' : 'К каталогу'}
       </button>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-start gap-4">
-            <div className="platform-logo-motion flex h-16 w-16 flex-none flex-col items-center justify-center rounded-2xl border border-[#d4e0ed] bg-white shadow-sm" aria-label="Логотип РБК">
-              <span className="flex h-4 items-end gap-0.5" aria-hidden="true">
-                <span className="h-2.5 w-1.5 rounded-sm bg-[#f5a623]" />
-                <span className="h-3.5 w-1.5 rounded-sm bg-[#4dbb73]" />
-                <span className="h-4 w-1.5 rounded-sm bg-[#28a8df]" />
-                <span className="h-3 w-1.5 rounded-sm bg-[#405de6]" />
-              </span>
-              <span className="mt-1 text-xs font-bold leading-none text-[#0b3558]">РБК</span>
+            <div className="platform-logo-motion flex h-16 w-16 flex-none flex-col items-center justify-center rounded-2xl border border-[#d4e0ed] bg-white shadow-sm" aria-label={`Логотип ${item.name}`}>
+              {item.details.logoFileId || item.details.logoUrl ? <img src={item.details.logoFileId?`/api/files/${item.details.logoFileId}/image`:item.details.logoUrl} alt={item.name} className="h-12 w-12 object-contain" /> : <span className="text-lg font-bold text-[#0b3558]">{item.name.slice(0,2)}</span>}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="font-display text-2xl font-bold text-[#0b3558]">{item.name}</h1>
                 <div className="flex flex-wrap gap-2">{item.tags.map(tag => <Badge key={tag} color="blue">{tag}</Badge>)}</div>
+                {ownerControls&&<Badge color={item.status==='approved'?(item.active?'green':'gray'):'amber'}>{{pending:'На проверке',approved:item.active?'Активна':'На паузе',rejected:'Отклонена'}[item.status]}</Badge>}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#476788]">
                 <span>{item.type} · {item.theme} · {item.region}</span>
                 <span className="hidden text-[#9bb6d3] sm:inline">·</span>
-                <a className="inline-flex items-center gap-1 font-medium text-[#006cff] hover:underline" href="https://invest.rbc.ru" target="_blank" rel="noreferrer">
-                  invest.rbc.ru <ExternalLink className="h-3.5 w-3.5" />
+                <a className="inline-flex items-center gap-1 font-medium text-[#006cff] hover:underline" href={item.url} target="_blank" rel="noreferrer">
+                  {new URL(item.url).hostname} <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </div>
             </div>
           </div>
         </div>
-        <Button variant={isFavorite ? 'primary' : 'secondary'} onClick={() => toggleFavoritePlatform(item.id)}>
+        {!ownerControls && <Button variant={isFavorite ? 'primary' : 'secondary'} onClick={() => toggleFavoritePlatform(item.id)}>
           <Star className={`w-4 h-4 mr-2 ${isFavorite ? 'fill-white' : ''}`} /> {isFavorite ? 'В избранном' : 'В избранное'}
-        </Button>
+        </Button>}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="platform-card-motion p-5" style={{ animationDelay: '80ms' }}><div className="text-xs text-[#476788] uppercase">Посещаемость в день</div><div className="mt-2 text-xl font-semibold">82 тыс.</div><a className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#006cff] hover:underline" href="https://metrika.yandex.ru" target="_blank" rel="noreferrer">Яндекс Метрика <ExternalLink className="h-3 w-3" /></a></Card>
+        <Card className="platform-card-motion p-5" style={{ animationDelay: '80ms' }}><div className="text-xs text-[#476788] uppercase">Посещаемость в день</div><div className="mt-2 text-xl font-semibold">{item.details.dailyAudience?.toLocaleString('ru-RU') ?? '—'}</div>{item.details.metrikaUrl && <a className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#006cff] hover:underline" href={item.details.metrikaUrl} target="_blank" rel="noreferrer">Яндекс Метрика <ExternalLink className="h-3 w-3" /></a>}</Card>
         <Card className="platform-card-motion p-5" style={{ animationDelay: '120ms' }}><div className="text-xs text-[#476788] uppercase">Срок публикации</div><div className="mt-2 text-xl font-semibold">{item.deadline}</div></Card>
         <Card className="platform-card-motion p-5" style={{ animationDelay: '160ms' }}><div className="text-xs text-[#476788] uppercase">Хранение</div><div className="mt-2 text-xl font-semibold">{item.storage}</div></Card>
-	        <Card className="platform-card-motion p-5" style={{ animationDelay: '200ms' }}><div className="text-xs text-[#476788] uppercase flex items-center gap-1">Медиалогия <Info className="w-3.5 h-3.5" /></div><div className="mt-2 text-xl font-semibold">#{((item.id - 100) * 5) % 30 || 30}</div><div className="text-xs text-[#476788] mt-1">{item.region === 'Федеральный охват' ? 'общий рейтинг' : 'рейтинг по региону/отрасли'}</div></Card>
+	        <Card className="platform-card-motion p-5" style={{ animationDelay: '200ms' }}><div className="text-xs text-[#476788] uppercase flex items-center gap-1">Медиалогия <Info className="w-3.5 h-3.5" /></div><div className="mt-2 text-xl font-semibold">{item.details.medialogiaRank ?? '—'}</div><div className="text-xs text-[#476788] mt-1">{item.region}</div></Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-6 lg:col-span-2">
@@ -4558,13 +4942,21 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
             <div className="flex flex-col gap-2 border-b border-[#d4e0ed] bg-[#f8f9fb] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-base font-bold text-[#0b3558]">Форматы и цены</h2>
-                <p className="mt-1 text-xs text-[#476788]">Сезонная скидка 10% действует до 31 августа</p>
+                {item.discount_bps > 0 && <p className="mt-1 text-xs text-[#476788]">Скидка {item.discount_bps / 100}% до {String(item.discount_until).slice(0,10)}</p>}
               </div>
-              <Badge color="green">Коэффициент сезона ×1,0</Badge>
+              <Badge color="green">Коэффициент сезона ×{item.coefficient_bps / 10000}</Badge>
             </div>
             <div className="divide-y divide-[#d4e0ed]">
               {placementFormats.map((format) => {
                 const selected = selectedFormatName === format.name;
+                const content=<>
+                  <span className="min-w-0"><span className="flex items-center gap-2 text-sm font-semibold text-[#0b3558]">
+                    {!readOnlyFormats&&<span className={`flex h-5 w-5 items-center justify-center rounded-full border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3] bg-white'}`}>{selected&&<Check className="h-3.5 w-3.5" />}</span>}
+                    {format.name}
+                  </span><span className={`mt-1 block text-xs text-[#476788] ${readOnlyFormats?'':'pl-7'}`}>Публикация {format.deadline}</span></span>
+                  <span className="text-right">{format.basePrice!==format.price&&<span className="block text-xs text-[#7890aa] line-through">{formatMoney(format.basePrice)}</span>}<span className="mt-0.5 block text-base font-semibold text-[#0b3558]">{formatMoney(format.price)}</span></span>
+                </>;
+                if(readOnlyFormats)return <div key={format.name} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 bg-white px-6 py-3.5">{content}</div>;
                 return (
                   <button
                     key={format.name}
@@ -4573,19 +4965,7 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
                     onClick={() => setSelectedFormatName(format.name)}
                     aria-pressed={selected}
                   >
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2 text-sm font-semibold text-[#0b3558]">
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${selected ? 'border-[#006cff] bg-[#006cff] text-white' : 'border-[#9bb6d3] bg-white'}`}>
-                          {selected && <Check className="h-3.5 w-3.5" />}
-                        </span>
-                        {format.name}
-                      </span>
-                      <span className="mt-1 block pl-7 text-xs text-[#476788]">Публикация {format.deadline}</span>
-                    </span>
-                    <span className="text-right">
-                      <span className="block text-xs text-[#7890aa] line-through">{formatMoney(format.basePrice)}</span>
-                      <span className="mt-0.5 block text-base font-semibold text-[#0b3558]">{formatMoney(format.price)}</span>
-                    </span>
+                    {content}
                   </button>
                 );
               })}
@@ -4594,7 +4974,7 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
           <Card className="platform-section-motion p-6">
             <h2 className="font-display text-base font-bold text-[#0b3558]">Требования</h2>
             <p className="mt-3 text-sm leading-6 text-[#476788]">
-              Площадка принимает материалы о финансах, бизнесе и технологиях. Редакция может изменить заголовок и структуру текста без искажения смысла. Допускается до двух внешних ссылок, изображения обязательны. Не принимаются запрещенные тематики и обещания гарантированного дохода.
+              {item.details.requirements || 'Не указаны'}
             </p>
             <div className="mt-5 grid gap-5 border-t border-[#d4e0ed] pt-5 sm:grid-cols-2 sm:gap-0">
               <div className="flex min-w-0 items-center gap-3 sm:pr-5">
@@ -4626,7 +5006,7 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
             </div>
           </Card>
         </div>
-        <Card className="platform-section-motion self-start overflow-hidden">
+        {ownerControls || <Card className="platform-section-motion self-start overflow-hidden">
           <div className="border-b border-[#d4e0ed] px-6 py-4">
             <h2 className="font-display text-base font-bold text-[#0b3558]">Размещение</h2>
           </div>
@@ -4647,33 +5027,41 @@ const ClientPlatformDetailView = ({ favoritePlatforms, toggleFavoritePlatform, n
             <Button variant="primary" className="mt-4 w-full" onClick={() => setMaterialModalOpen(true)}>Разместить материал</Button>
             <Button variant="secondary" className="mt-3 w-full" onClick={() => navigate('catalog')}>К каталогу</Button>
           </div>
-        </Card>
+        </Card>}
       </div>
-      <MaterialSelectionModal isOpen={isMaterialModalOpen} onClose={() => setMaterialModalOpen(false)} platform={selectedPlatform} materials={materials} projects={projects} onCreateOrders={onCreateOrders} />
+      {ownerControls&&<Card className="platform-section-motion overflow-hidden">
+        <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-display text-lg font-bold text-[#0b3558]">Публикации на площадке</h2><p className="mt-1 text-sm text-[#476788]">Заказы и размещения, связанные с {item.name}</p></div><Badge color="blue">{relatedOrders.length} {relatedOrders.length===1?'заказ':'заказов'}</Badge></div>
+        {relatedOrders.length?<div className="overflow-x-auto"><table className="w-full min-w-[720px] divide-y divide-[#d4e0ed]"><thead className="bg-[#f8f9fb]"><tr>{['Заказ','Материал','Формат','Дата','Статус'].map(head=><th key={head} className="px-6 py-3 text-left text-xs font-medium uppercase text-[#476788]">{head}</th>)}</tr></thead><tbody className="divide-y divide-[#d4e0ed]">{relatedOrders.map(order=><tr key={order.id}><td className="px-6 py-4 text-sm font-semibold text-[#006bff]">№{orderNumber(order)}</td><td className="px-6 py-4 text-sm font-medium text-[#0b3558]">{order.material}</td><td className="px-6 py-4 text-sm text-[#476788]">{{article:'Статья',news:'Новость',post:'Пост',longread:'Лонгрид'}[order.snapshot?.format]||order.snapshot?.format}</td><td className="px-6 py-4 text-sm text-[#476788]">{order.date}</td><td className="px-6 py-4"><Badge color={order.statusColor}>{order.status}</Badge></td></tr>)}</tbody></table></div>:<p className="px-6 py-8 text-sm text-[#476788]">Связанных заказов пока нет.</p>}
+      </Card>}
+      {!ownerControls && <MaterialSelectionModal isOpen={isMaterialModalOpen} onClose={() => setMaterialModalOpen(false)} platform={selectedPlatform} materials={materials} projects={projects} onCreateOrders={onCreateOrders} />}
     </div>
   );
 };
 
-const ClientReportsView = ({ projects, openProject, onOpenReport, onCreateProjectReport }) => {
+const ClientReportsView = ({ projects, reports, openProject, onOpenReport, onCreateProjectReport }) => {
   const [projectFilter, setProjectFilter] = useState('Все проекты');
   const [reportOpen, setReportOpen] = useState(false);
   const [reportProject, setReportProject] = useState(projects[0]?.name || '');
   const [periodPreset, setPeriodPreset] = useState('Текущий месяц');
-  const [dateFrom, setDateFrom] = useState('2023-10-01');
-  const [dateTo, setDateTo] = useState('2023-10-31');
-  const visibleReports = mockReports.filter((report) => {
+  const today = new Date();
+  const isoDate = (value) => value.toISOString().slice(0,10);
+  const [dateFrom, setDateFrom] = useState(isoDate(new Date(today.getFullYear(),today.getMonth(),1)));
+  const [dateTo, setDateTo] = useState(isoDate(new Date(today.getFullYear(),today.getMonth()+1,0)));
+  const visibleReports = reports.filter((report) => {
     if (projectFilter === 'Все проекты') return true;
     if (projectFilter === 'Без проекта') return !report.projectId;
     return projects.find((project) => project.id === report.projectId)?.name === projectFilter;
   });
+  const selectedProject = projects.find((project) => project.name === projectFilter);
+  const exportPath = selectedProject ? `/reports/export.csv?projectId=${encodeURIComponent(selectedProject.id)}` : '/reports/export.csv';
   const applyPeriodPreset = (preset) => {
     setPeriodPreset(preset);
     const periods = {
-      'Последние 7 дней': ['2023-10-12', '2023-10-18'],
-      'Последние 30 дней': ['2023-09-19', '2023-10-18'],
-      'Текущий месяц': ['2023-10-01', '2023-10-31'],
-      'Прошлый месяц': ['2023-09-01', '2023-09-30'],
-      'За все время': ['2023-01-01', '2023-12-31'],
+      'Последние 7 дней': [isoDate(new Date(today.getFullYear(),today.getMonth(),today.getDate()-6)),isoDate(today)],
+      'Последние 30 дней': [isoDate(new Date(today.getFullYear(),today.getMonth(),today.getDate()-29)),isoDate(today)],
+      'Текущий месяц': [isoDate(new Date(today.getFullYear(),today.getMonth(),1)),isoDate(new Date(today.getFullYear(),today.getMonth()+1,0))],
+      'Прошлый месяц': [isoDate(new Date(today.getFullYear(),today.getMonth()-1,1)),isoDate(new Date(today.getFullYear(),today.getMonth(),0))],
+      'За все время': ['2000-01-01',isoDate(today)],
     };
     const nextPeriod = periods[preset];
     if (nextPeriod) {
@@ -4681,16 +5069,16 @@ const ClientReportsView = ({ projects, openProject, onOpenReport, onCreateProjec
       setDateTo(nextPeriod[1]);
     }
   };
-  const createProjectReport = () => {
+  const createProjectReport = async () => {
     const project = projects.find((item) => item.name === reportProject);
     if (!project || !dateFrom || !dateTo || dateFrom > dateTo) return;
-    onCreateProjectReport({
+    const ok=await onCreateProjectReport({
       projectId: project.id,
       from: dateFrom,
       to: dateTo,
       label: periodPreset,
     });
-    setReportOpen(false);
+    if(ok)setReportOpen(false);
   };
 
   return (
@@ -4701,8 +5089,11 @@ const ClientReportsView = ({ projects, openProject, onOpenReport, onCreateProjec
         <p className="mt-1 text-sm text-[#476788]">Размещения и сводные отчеты по проектам</p>
       </div>
       <div className="flex flex-wrap gap-3">
-        <Button variant="secondary"><Download className="h-4 w-4" /> Скачать таблицу</Button>
-        <Button variant="primary" onClick={() => setReportOpen(true)}><CalendarDays className="h-4 w-4" /> Отчет по проекту</Button>
+        <Button variant="secondary" onClick={() => downloadFromApi(exportPath)}><Download className="h-4 w-4" /> Скачать таблицу</Button>
+        <Button variant="primary" onClick={() => {
+          setReportProject(selectedProject?.name || projects[0]?.name || '');
+          setReportOpen(true);
+        }}><CalendarDays className="h-4 w-4" /> Отчет по проекту</Button>
       </div>
     </div>
     <Card className="p-4">
@@ -4738,6 +5129,7 @@ const ClientReportsView = ({ projects, openProject, onOpenReport, onCreateProjec
               <td className="px-6 py-4"><Badge color={row.color}>{row.status}</Badge></td>
             </tr>
           ))}
+          {!visibleReports.length && <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-[#476788]">Размещений по выбранному проекту пока нет.</td></tr>}
         </tbody>
       </table>
       </div>
@@ -4897,35 +5289,33 @@ const ClientSupportView = ({ navigate, role = 'client' }) => {
 
 // --- 3. КАБИНЕТ ПЛОЩАДКИ ---
 
-const PublisherDashboardView = ({ navigate }) => {
-  const openOrder = (order) => {
-    navigate(
-      order.status === 'Ожидает приемки'
-        ? 'pub_order_acceptance_detail'
-        : order.id === 1048
-          ? 'pub_order_new_detail'
-          : /жалоб|спор/i.test(order.status)
-            ? 'pub_dispute_detail'
-            : 'pub_order_detail',
-    );
-  };
+const publisherOrderStatus = (order) => order.apiStatus === 'pending' ? 'Новая заявка' : order.status;
+const publisherOrderAction = (order) => ({
+  pending: 'принять или отклонить',
+  accepted: 'загрузить ссылку',
+  submitted: 'дождаться приемки',
+  disputed: 'ответить на спор',
+})[order.apiStatus] || 'действий нет';
 
-  const currentOrders = mockOrdersPublisher
-    .filter((order) => order.status !== 'Завершено')
+const PublisherDashboardView = ({ navigate, onOpenOrder }) => {
+  const backend = useBackend();
+  const orders = backend.data.orders;
+  const currentOrders = orders
+    .filter((order) => !['completed', 'rejected', 'refunded'].includes(order.apiStatus))
     .map((order) => {
-      const isNew = order.status === 'Новая заявка';
-      const isDispute = /жалоб|спор/i.test(order.status);
-      const isAcceptance = order.status === 'Ожидает приемки';
+      const isNew = order.apiStatus === 'pending';
+      const isDispute = order.apiStatus === 'disputed';
+      const isAcceptance = order.apiStatus === 'submitted';
 
       return {
         ...order,
         deadline: isNew
-          ? 'до 18:00 сегодня'
+          ? 'ожидает решения'
           : isDispute
-            ? 'в течение 24 часов'
+            ? 'до решения спора'
             : isAcceptance
               ? 'ожидаем заказчика'
-              : 'до 20.10',
+              : 'срок не зафиксирован',
         nextAction: isNew
           ? 'Принять или отклонить'
           : isDispute
@@ -4934,21 +5324,22 @@ const PublisherDashboardView = ({ navigate }) => {
               ? 'Дождаться приемки'
               : 'Загрузить ссылку',
         priority: isNew ? 0 : isDispute ? 1 : isAcceptance ? 3 : 2,
+        format: formatLabels[order.snapshot?.format] ?? order.snapshot?.format ?? 'Материал',
       };
     })
     .sort((left, right) => left.priority - right.priority);
 
   const summary = [
-    ['Новые заявки', '1', 'Нужно решение редакции'],
-    ['В работе', '3', 'Заказы приняты'],
-    ['На приемке', '4', 'Ожидают заказчика'],
-    ['Завершено в июле', '12', 'Приняты и оплачены'],
+    ['Новые заявки', String(orders.filter((order) => order.apiStatus === 'pending').length), 'Нужно решение редакции'],
+    ['В работе', String(orders.filter((order) => order.apiStatus === 'accepted').length), 'Заказы приняты'],
+    ['На приемке', String(orders.filter((order) => order.apiStatus === 'submitted').length), 'Ожидают заказчика'],
+    ['Завершено', String(orders.filter((order) => order.apiStatus === 'completed').length), 'Приняты и оплачены'],
   ];
 
   const finance = [
-    ['Доступно к выводу', formatMoney(235000)],
-    ['Ожидает приемки', formatMoney(127500)],
-    ['На выплате', formatMoney(180000)],
+    ['Доступно к выводу', formatMoney(backend.data.balance.available / 100)],
+    ['Ожидает приемки', formatMoney(orders.filter((order) => order.apiStatus === 'submitted').reduce((sum, order) => sum + Number(order.payout) / 100, 0))],
+    ['В работе', formatMoney(orders.filter((order) => order.apiStatus === 'accepted').reduce((sum, order) => sum + Number(order.payout) / 100, 0))],
   ];
 
   return (
@@ -4967,7 +5358,7 @@ const PublisherDashboardView = ({ navigate }) => {
             <button
               key={label}
               className="min-h-[128px] bg-white p-5 text-left transition-colors hover:bg-[#f8fbff] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#006bff]"
-              onClick={() => navigate('pub_orders')}
+              onClick={() => navigate('pub_orders',{order_status:label})}
             >
               <div className="text-sm font-medium text-[#476788]">{label}</div>
               <div className="mt-2 font-display text-3xl font-bold text-[#0b3558] tabular-nums">{value}</div>
@@ -5014,10 +5405,10 @@ const PublisherDashboardView = ({ navigate }) => {
                 <tr
                   key={order.id}
                   className="cursor-pointer transition-colors hover:bg-[#f8f9fb]"
-                  onClick={() => openOrder(order)}
+                  onClick={() => onOpenOrder(order)}
                 >
                   <td className="px-6 py-4 align-top">
-                    <div className="text-sm font-semibold text-[#0b3558]">#{order.id}</div>
+                    <div className="text-sm font-semibold text-[#0b3558]">№{orderNumber(order)}</div>
                     <div className="mt-1 text-xs text-[#476788] tabular-nums">{order.date}</div>
                   </td>
                   <td className="px-6 py-4 align-top">
@@ -5025,7 +5416,7 @@ const PublisherDashboardView = ({ navigate }) => {
                     <div className="mt-1 text-xs text-[#476788]">{order.format}</div>
                   </td>
                   <td className="px-6 py-4 align-top text-sm text-[#476788]">{order.deadline}</td>
-                  <td className="px-6 py-4 align-top"><Badge color={order.statusColor}>{order.status}</Badge></td>
+                  <td className="px-6 py-4 align-top"><Badge color={order.statusColor}>{publisherOrderStatus(order)}</Badge></td>
                   <td className="px-6 py-4 align-top">
                     <span className="inline-flex items-center text-sm font-semibold text-[#006bff]">
                       {order.nextAction}
@@ -5034,6 +5425,9 @@ const PublisherDashboardView = ({ navigate }) => {
                   </td>
                 </tr>
               ))}
+              {!currentOrders.length && (
+                <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-[#476788]">Текущих заказов пока нет.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -5058,7 +5452,44 @@ const PublisherDashboardView = ({ navigate }) => {
   );
 };
 
-const PublisherOrdersView = ({ navigate }) => (
+const PublisherOrdersView = ({ navigate, onOpenOrder }) => {
+  const orders = useBackend().data.orders;
+  const [query,setQuery]=useState('');
+  const [statusFilter,setStatusFilter]=useState(()=>new URLSearchParams(location.search).get('order_status')||undefined);
+  useEffect(()=>{
+    const restore=()=>setStatusFilter(new URLSearchParams(location.search).get('order_status')||undefined);
+    window.addEventListener('popstate',restore);
+    return()=>window.removeEventListener('popstate',restore);
+  },[]);
+  const [platformFilter,setPlatformFilter]=useState(undefined);
+  const [deadlineFilter,setDeadlineFilter]=useState(undefined);
+  const now=new Date();
+  const startOfToday=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const endOfToday=new Date(startOfToday);endOfToday.setDate(endOfToday.getDate()+1);
+  const endOfWeek=new Date(startOfToday);endOfWeek.setDate(endOfWeek.getDate()+7);
+  const statusMatches=(order)=>{
+    if(!statusFilter||statusFilter==='Все заказы')return true;
+    if(statusFilter==='Новые заявки')return order.apiStatus==='pending';
+    if(statusFilter==='В работе')return order.apiStatus==='accepted';
+    if(statusFilter==='Ждут публикации')return order.apiStatus==='accepted';
+    if(statusFilter==='На приемке')return order.apiStatus==='submitted';
+    if(statusFilter==='Завершено')return order.apiStatus==='completed';
+    return order.apiStatus==='disputed';
+  };
+  const deadlineMatches=(order)=>{
+    if(!deadlineFilter||deadlineFilter==='Любой дедлайн')return true;
+    if(!order.deadlineAt)return false;
+    const deadline=new Date(order.deadlineAt);
+    if(deadlineFilter==='Сегодня')return deadline>=startOfToday&&deadline<endOfToday;
+    if(deadlineFilter==='Просрочено')return deadline<now;
+    return deadline>=now&&deadline<endOfWeek;
+  };
+  const mockOrdersPublisher=orders
+    .filter(statusMatches)
+    .filter(order=>!platformFilter||platformFilter==='Все площадки'||order.platform===platformFilter)
+    .filter(deadlineMatches)
+    .filter(o=>`${o.number} ${o.material} ${o.platform}`.toLowerCase().includes(query.trim().replace(/^[№#]\s*/, '').toLowerCase()));
+  return (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
@@ -5068,10 +5499,10 @@ const PublisherOrdersView = ({ navigate }) => (
     </div>
     <Card className="p-4">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <CustomSelect placeholder="Статус заказа" options={['Все заказы', 'Новые заявки', 'В работе', 'Ждут публикации', 'На приемке', 'С жалобой']} />
-        <CustomSelect placeholder="Площадка" options={['Все площадки', 'РБК Инвестиции', 'РБК Телеграм']} />
-        <CustomSelect placeholder="Дедлайн" options={['Любой дедлайн', 'Сегодня', 'Просрочено', 'На неделе']} />
-        <input className="border border-[#476788] rounded-lg px-3 py-2 text-sm" placeholder="Поиск по номеру или материалу" />
+        <CustomSelect placeholder="Статус заказа" options={['Все заказы', 'Новые заявки', 'В работе', 'Ждут публикации', 'На приемке', 'Завершено', 'С жалобой']} value={statusFilter} onChange={(value)=>{setStatusFilter(value);const url=new URL(location.href);if(value&&value!=='Все заказы')url.searchParams.set('order_status',value);else url.searchParams.delete('order_status');history.replaceState(null,'',url);}} />
+        <CustomSelect placeholder="Площадка" options={['Все площадки', ...new Set(orders.map((order)=>order.platform))]} value={platformFilter} onChange={setPlatformFilter} />
+        <CustomSelect placeholder="Дедлайн" options={['Любой дедлайн', 'Сегодня', 'Просрочено', 'На неделе']} value={deadlineFilter} onChange={setDeadlineFilter} />
+        <input className="border border-[#476788] rounded-lg px-3 py-2 text-sm" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по номеру или материалу" />
       </div>
     </Card>
     <Card className="overflow-hidden">
@@ -5095,35 +5526,47 @@ const PublisherOrdersView = ({ navigate }) => (
               <tr
                 key={order.id}
                 className="hover:bg-[#f8f9fb] cursor-pointer"
-                onClick={() => navigate(order.status === 'Ожидает приемки' ? 'pub_order_acceptance_detail' : order.id === 1048 ? 'pub_order_new_detail' : 'pub_order_detail')}
+                onClick={() => onOpenOrder(order)}
               >
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-[#0b3558]">#{order.id}</div>
+                  <div className="text-sm font-medium text-[#0b3558]">№{orderNumber(order)}</div>
                   <div className="text-xs text-[#476788] mt-1 tabular-nums">{order.date}</div>
                 </td>
                 <td className="px-6 py-4 text-sm text-[#0b3558] font-medium truncate">{order.material}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <Badge color={order.statusColor}>{order.status}</Badge>
+                  <Badge color={order.statusColor}>{publisherOrderStatus(order)}</Badge>
                 </td>
                 <td className="px-6 py-4 text-sm text-[#476788]">
-                  {order.status === 'Новая заявка' ? 'принять или отклонить' : order.status === 'Завершено' ? 'действий нет' : order.status === 'Жалоба открыта' ? 'ответить на жалобу' : 'загрузить ссылку'}
+                  {publisherOrderAction(order)}
                 </td>
               </tr>
             ))}
+            {!mockOrdersPublisher.length && <tr><td colSpan={4} className="px-6 py-10 text-center text-sm text-[#476788]">Заказов по выбранным условиям нет.</td></tr>}
           </tbody>
         </table>
       </div>
     </Card>
   </div>
-);
+); };
 
-const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
+const PublisherOrderDetailView = ({ navigate, state = 'publication', sourceOrder = null }) => {
+  const backend = useBackend();
+  const [publicationUrl,setPublicationUrl] = useState('');
+  const [markingConfirmed,setMarkingConfirmed] = useState(false);
+  const [reason,setReason] = useState('');
+  const act = (action) => backend.perform(async () => {
+    if (!sourceOrder) throw new Error('Заказ не выбран');
+    await api(`/orders/${sourceOrder.id}/action`,'POST',{action,...(action==='publish'?{url:publicationUrl,markingConfirmed}:{}),...(action==='reject'?{reason}:{})},crypto.randomUUID());await backend.refresh();
+  });
   const [publicationPanelOpen, setPublicationPanelOpen] = useState(false);
   const [rejectionPanelOpen, setRejectionPanelOpen] = useState(false);
   const [markingDataOpen, setMarkingDataOpen] = useState(false);
-  const isAcceptanceState = state === 'acceptance';
-  const isNewState = state === 'new';
-  const order = isNewState
+  const isAcceptanceState = sourceOrder ? ['submitted','completed','disputed'].includes(sourceOrder.apiStatus) : state === 'acceptance';
+  const isNewState = sourceOrder ? sourceOrder.apiStatus === 'pending' : state === 'new';
+  const isPublishable = sourceOrder ? sourceOrder.apiStatus === 'accepted' : !isNewState && !isAcceptanceState;
+  const isClosed = sourceOrder && ['completed','rejected','refunded'].includes(sourceOrder.apiStatus);
+  const isDisputed = sourceOrder?.apiStatus === 'disputed';
+  const order = sourceOrder ? {...sourceOrder,status:publisherOrderStatus(sourceOrder),title:sourceOrder.material,amount:sourceOrder.payout/100,format:({article:'Статья',news:'Новость',post:'Пост',longread:'Лонгрид'})[sourceOrder.snapshot.format],subtitle:sourceOrder.platform} : isNewState
     ? {
         id: 1048,
         status: 'Новая заявка',
@@ -5144,7 +5587,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
       };
 
   return (
-  <div className="space-y-6 max-w-5xl mx-auto">
+  <div className="space-y-6 max-w-5xl mx-auto" data-order-state={sourceOrder?.apiStatus || state}>
     <div className="flex items-center gap-2 text-sm text-[#476788] cursor-pointer hover:text-[#0b3558]" onClick={() => navigate('pub_orders')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> Назад к списку
     </div>
@@ -5153,7 +5596,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <Badge color={order.statusColor}>{order.status}</Badge>
-          <span className="text-sm text-[#476788]">Заказ #{order.id}</span>
+          <span className="text-sm text-[#476788]">Заказ №{orderNumber(order)}</span>
         </div>
         <h1 className="mt-3 max-w-4xl break-words font-display text-3xl font-bold leading-tight text-[#0b3558]">
           {order.title}
@@ -5181,10 +5624,10 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
         </div>
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-[#0b3558]">
-            {isAcceptanceState ? 'Публикация отправлена на приемку' : isNewState ? 'Заказ еще не принят' : 'Заказ принят в работу'}
+            {isClosed ? order.status : isDisputed ? 'Открыт спор' : isAcceptanceState ? 'Публикация отправлена на приемку' : isNewState ? 'Заказ еще не принят' : 'Заказ принят в работу'}
           </h3>
           <p className="text-sm text-[#476788] mt-1 mb-5">
-            {isAcceptanceState
+            {isClosed ? 'Работа по заказу завершена.' : isDisputed ? 'Средства зарезервированы до решения администратора.' : isAcceptanceState
               ? 'Заказчик получил ссылку на публикацию. Начисление станет доступно после приемки публикации или после решения модератора, если будет открыт спор.'
               : isNewState
                 ? 'Проверьте материал, юридические данные рекламодателя и требования к публикации. После принятия заказа станет доступна отправка ссылки на публикацию.'
@@ -5193,13 +5636,13 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
           <div className="flex flex-wrap gap-3">
             {isNewState && (
               <>
-                <Button variant="primary">Принять заказ</Button>
+                <Button variant="primary" disabled={backend.busy} onClick={() => act('accept')}>Принять заказ</Button>
                 <Button variant="secondary" onClick={() => setRejectionPanelOpen((value) => !value)}>
                   {rejectionPanelOpen ? 'Скрыть форму отказа' : 'Отказать'}
                 </Button>
               </>
             )}
-            {!isAcceptanceState && !isNewState && (
+            {isPublishable && (
               <>
                 <Button variant="primary" onClick={() => {
                   setPublicationPanelOpen((value) => !value);
@@ -5218,8 +5661,8 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
               <div className="mt-4 rounded-lg border border-[#d4e0ed] bg-white p-4">
                 <div className="text-xs text-[#476788]">Ссылка на публикацию</div>
                 <div className="mt-1 flex items-center justify-between gap-3">
-                  <a className="text-sm font-medium text-[#006bff] break-all" href="https://invest.rbc.ru/news/652a9f">https://invest.rbc.ru/news/652a9f</a>
-                  <CopyButton value="https://invest.rbc.ru/news/652a9f" label="Скопировать ссылку" />
+                  <a className="text-sm font-medium text-[#006bff] break-all" href={sourceOrder?.publication_url}>{sourceOrder?.publication_url}</a>
+                  <CopyButton value={sourceOrder?.publication_url || ''} label="Скопировать ссылку" />
                 </div>
               </div>
               <label className="mt-4 flex items-start gap-3 rounded-lg border border-[#d4e0ed] bg-white p-4">
@@ -5230,7 +5673,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
               </label>
             </div>
           )}
-          {!isAcceptanceState && !isNewState && (
+          {isPublishable && (
             <CollapsiblePanel open={publicationPanelOpen}>
             <div className="mt-6 rounded-2xl border border-[#d4e0ed] bg-[#f8f9fb] p-5">
               <div className="mb-5">
@@ -5241,10 +5684,10 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
               <div className="grid grid-cols-1 gap-4">
                 <label className="block md:col-span-2">
                   <span className="text-sm font-medium text-[#476788]">Ссылка на публикацию</span>
-                  <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="https://invest.rbc.ru/news/652a9f" />
+                  <input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" value={publicationUrl} onChange={e => setPublicationUrl(e.target.value)} />
                 </label>
                 <label className="flex items-start gap-3 rounded-lg border border-[#d4e0ed] bg-white p-4">
-                  <input type="checkbox" className="mt-1 h-4 w-4 rounded border-[#476788] text-[#006bff]" />
+                  <input type="checkbox" className="mt-1 h-4 w-4 rounded border-[#476788] text-[#006bff]" checked={markingConfirmed} onChange={e => setMarkingConfirmed(e.target.checked)} />
                   <span className="text-sm leading-6 text-[#0b3558]">
                     Подтверждаю, что опубликованный материал содержит обязательную пометку о рекламе, идентификатор рекламы (ERID) получен через оператора рекламных данных, сведения о рекламе переданы в ЕРИР в установленном порядке, а ERID размещен в публикации.
                   </span>
@@ -5252,7 +5695,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
               </div>
               <div className="mt-5 flex flex-wrap justify-end gap-3">
                 <Button variant="secondary" onClick={() => setPublicationPanelOpen(false)}>Отмена</Button>
-                <Button variant="primary">Отправить на приемку</Button>
+                <Button variant="primary" disabled={backend.busy || !markingConfirmed || !publicationUrl} onClick={() => act('publish')}>Отправить на приемку</Button>
               </div>
             </div>
             </CollapsiblePanel>
@@ -5267,11 +5710,12 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
                   <textarea
                     className="mt-2 w-full min-h-[130px] resize-y border border-[#476788] rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
                     placeholder="Укажите, почему редакция не может принять заказ, и при необходимости предложите другие сроки или условия."
+                    value={reason} onChange={e => setReason(e.target.value)}
                   />
                 </label>
                 <div className="mt-5 flex flex-wrap justify-end gap-3">
                   <Button variant="secondary" onClick={() => setRejectionPanelOpen(false)}>Отмена</Button>
-                  <Button variant="primary">Отправить отказ</Button>
+                  <Button variant="primary" disabled={backend.busy || !reason.trim()} onClick={() => act('reject')}>Отправить отказ</Button>
                 </div>
               </div>
             </CollapsiblePanel>
@@ -5295,7 +5739,20 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
             </button>
             <CollapsiblePanel open={markingDataOpen}>
               <div className="divide-y divide-[#d4e0ed]">
-                {advertiserLegalData.map(([label, value]) => (
+                {(sourceOrder ? [
+                  ['Рекламодатель',sourceOrder.snapshot.advertiser?.name||'Без рекламодателя'],
+                  ['ИНН',sourceOrder.snapshot.advertiser?.inn||'—'],
+                  ['КПП',sourceOrder.snapshot.advertiser?.details?.kpp],
+                  ['ОГРН / ОГРНИП',sourceOrder.snapshot.advertiser?.details?.ogrn],
+                  ['Адрес',sourceOrder.snapshot.advertiser?.details?.address],
+                  ['Объект рекламирования',sourceOrder.snapshot.advertiser?.details?.advertisedObject],
+                  ['Целевая ссылка',sourceOrder.snapshot.advertiser?.details?.targetUrl],
+                  ['Тип исходного договора',sourceOrder.snapshot.advertiser?.details?.contractType==='intermediary'?'Посреднический договор':sourceOrder.snapshot.advertiser?.details?.contractType==='services'?'Договор оказания услуг':''],
+                  ['Номер исходного договора',sourceOrder.snapshot.advertiser?.details?.contractNumber],
+                  ['Дата исходного договора',sourceOrder.snapshot.advertiser?.details?.contractDate],
+                  ['Первый исполнитель',sourceOrder.snapshot.advertiser?.details?.executorName],
+                  ['ИНН первого исполнителя',sourceOrder.snapshot.advertiser?.details?.executorInn],
+                ].filter(([,value])=>value) : []).map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between gap-3 px-4 py-3 bg-white">
                     <div className="min-w-0">
                       <div className="text-xs text-[#476788]">{label}</div>
@@ -5309,6 +5766,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
           </div>
         </Card>
 
+        {sourceOrder ? <LiveMaterialContent material={sourceOrder.snapshot} copy preserveOrderLayout /> : <>
         <Card className="p-6">
           <FullMaterialPreview
             context="publisher"
@@ -5390,6 +5848,7 @@ const PublisherOrderDetailView = ({ navigate, state = 'publication' }) => {
             </div>
           </div>
         </Card>
+        </>}
     </div>
   </div>
   );
@@ -5532,61 +5991,55 @@ const PublisherOrderNewDetailView = ({ navigate }) => {
           </div>
         </Card>
 
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-[#0b3558] mb-4 pb-3 border-b border-[#d4e0ed]">Таймлайн</h3>
-          <div className="space-y-4">
-            {[
-              ['Заявка поступила', '18.10, 10:15', 'done'],
-              ['Ожидается решение площадки', 'до 18:00', 'current'],
-              ['Принятие заказа', 'после решения', 'next'],
-              ['Публикация', 'после принятия', 'next'],
-            ].map(([state, time, status]) => (
-              <div key={`${state}-${time}`} className="flex items-start gap-3">
-                {status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5" /> : status === 'current' ? <Clock className="w-4 h-4 text-amber-500 mt-0.5" /> : <div className="w-4 h-4 rounded-full border-2 border-[#d4e0ed] mt-0.5" />}
-                <div>
-                  <div className="text-sm font-medium text-[#0b3558]">{state}</div>
-                  <div className="text-xs text-[#476788] mt-1">{time}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
       </div>
     </div>
   </div>
   );
 };
 
-const PublisherPlatformsView = ({ navigate }) => (
+const PublisherPlatformsView = ({ navigate }) => {
+  const backend=useBackend();
+  const publisherPlatforms=backend.data.outlets;
+  return (
   <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Мои площадки</h1>
+        <h1 className="font-display text-2xl font-bold text-[#0b3558]">{backend.user.role==='admin'?'Площадки':'Мои площадки'}</h1>
         <p className="text-sm text-[#476788] mt-1">Список площадок, статусы модерации и переход к карточке редактирования.</p>
       </div>
-      <Button variant="primary" onClick={() => navigate('pub_platform_new')}><Plus className="h-4 w-4" /> Добавить площадку</Button>
+      {backend.user.role==='publisher' && <Button variant="primary" onClick={() => navigate('pub_platform_new')}><Plus className="h-4 w-4" /> Добавить площадку</Button>}
     </div>
     <Card className="overflow-hidden">
       <table className="min-w-full divide-y divide-[#d4e0ed]">
         <thead className="bg-[#f8f9fb]"><tr>{['Название', 'Тип', 'Тематика', 'Регион', 'Форматы', 'Цена', 'Сроки', 'Статус'].map(head => <th key={head} className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">{head}</th>)}</tr></thead>
         <tbody className="divide-y divide-[#d4e0ed]">
           {publisherPlatforms.map((platform) => (
-            <tr key={platform.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => navigate('pub_platform_detail')}>
+            <tr key={platform.id} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => {backend.setOutletId(platform.id);navigate(backend.user.role==='admin'?'admin_platform_detail':'pub_platform_detail');}}>
               <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">{platform.name}</td>
               <td className="px-6 py-4 text-sm text-[#476788]">{platform.type}</td>
               <td className="px-6 py-4 text-sm text-[#476788]">{platform.theme}</td>
               <td className="px-6 py-4 text-sm text-[#476788]">{platform.region}</td>
-              <td className="px-6 py-4 text-sm text-[#476788]">{platform.formats}</td>
-              <td className="px-6 py-4 text-sm text-[#476788]">{platform.price}</td>
-              <td className="px-6 py-4 text-sm text-[#476788]">{platform.answer} / {platform.publication}</td>
-              <td className="px-6 py-4"><Badge color={platform.color}>{platform.status}</Badge></td>
+              <td className="px-6 py-4 text-sm text-[#476788]">{platform.formats.join(', ')}</td>
+              <td className="px-6 py-4 text-sm text-[#476788]">{formatMoney(platform.price)}</td>
+              <td className="px-6 py-4 text-sm text-[#476788]">{platform.deadline}</td>
+              <td className="px-6 py-4"><Badge color={platform.status==='approved'?'green':'amber'}>{{pending:'На модерации',approved:platform.active?'Активна':'На паузе',rejected:'Отклонена'}[platform.status]}</Badge></td>
             </tr>
           ))}
         </tbody>
       </table>
     </Card>
   </div>
-);
+);};
+
+const LivePublisherPlatformDetail = ({navigate}) => {
+  const backend=useBackend();
+  const [editing,setEditing]=useState(false);
+  const outlet=backend.data.outlets.find(o=>o.id===backend.outletId);
+  if(!outlet)return <Card className="p-6">Выберите площадку в списке.</Card>;
+if(backend.user.role==='admin')return <ClientPlatformDetailView navigate={()=>navigate('admin_platforms')} ownerControls={<Card className="platform-section-motion self-start p-6"><h2 className="font-display text-base font-bold text-[#0b3558]">Администрирование</h2><p className="mt-2 text-sm leading-6 text-[#476788]">Управление площадкой без изменения коммерческой карточки.</p><div className="mt-5 space-y-3 text-sm"><div className="flex justify-between gap-4"><span className="text-[#476788]">Паблишер</span><span className="break-all text-right font-medium text-[#0b3558]">{outlet.owner_email}</span></div><div className="flex justify-between gap-4"><span className="text-[#476788]">Статус</span><span className="text-right font-medium text-[#0b3558]">{{pending:'На модерации',approved:outlet.active?'Активна':'На паузе',rejected:'Отклонена'}[outlet.status]}</span></div>{backend.user.teamRole!=='moderator'&&<div className="flex justify-between gap-4"><span className="text-[#476788]">Активных заказов</span><span className="font-medium text-[#0b3558]">{backend.data.orders.filter(order=>order.outlet_id===outlet.id&&!['completed','rejected','refunded'].includes(order.apiStatus)).length}</span></div>}</div>{backend.user.teamRole!=='moderator'&&outlet.status==='approved'&&<Button variant="secondary" className="mt-5 w-full" disabled={backend.busy} onClick={()=>backend.perform(async()=>{await api(`/outlets/${outlet.id}/active`,'POST',{active:!outlet.active});await backend.refresh();})}>{outlet.active?'Приостановить':'Вернуть в каталог'}</Button>}{outlet.status==='pending'&&<div className="mt-5 flex flex-col gap-3">{[[true,'Принять площадку'],[false,'Отклонить площадку']].map(([approved,label])=><Button key={String(approved)} variant={approved?'primary':'secondary'} disabled={backend.busy} onClick={()=>backend.perform(async()=>{await api(`/admin/outlets/${outlet.id}`,'POST',{approved});await backend.refresh();})}>{label}</Button>)}</div>}</Card>} />;
+  if(editing)return <PublisherPlatformNewView navigate={navigate} embedded outletId={outlet.id} initialValues={outletFormValues(outlet)} onDone={()=>setEditing(false)} />;
+  return <ClientPlatformDetailView navigate={()=>navigate('pub_platforms')} readOnlyFormats ownerControls={<Card className="p-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-display text-lg font-bold">Управление площадкой</h2><Badge color={outlet.status==='approved'?'green':'amber'}>{{pending:'На модерации',rejected:'Отклонена',approved:outlet.active?'Активна':'На паузе'}[outlet.status]}</Badge></div><Button variant="secondary" className="mt-5 w-full" onClick={()=>setEditing(true)}><Pencil className="h-4 w-4" />Редактировать</Button><button type="button" role="switch" aria-checked={outlet.active} disabled={backend.busy||outlet.status!=='approved'} className="mt-5 flex w-full items-center justify-between gap-4 border-t border-[#d4e0ed] pt-5 disabled:opacity-50" onClick={()=>backend.perform(async()=>{await api(`/outlets/${outlet.id}/active`,'POST',{active:!outlet.active});await backend.refresh();})}><span>Принимать заказы</span><span className={`relative h-6 w-11 rounded-full ${outlet.active?'bg-emerald-500':'bg-gray-300'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white ${outlet.active?'left-6':'left-1'}`} /></span></button></Card>} />;
+};
 
 const PublisherPlatformDetailView = ({ navigate }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -5777,7 +6230,7 @@ const PublisherPlatformDetailView = ({ navigate }) => {
             <tbody className="divide-y divide-[#d4e0ed] bg-white">
               {platformPublications.map((order) => (
                 <tr key={order.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => navigate('pub_order_detail')}>
-                  <td className="px-6 py-4 text-sm font-semibold text-[#006bff]">#{order.id}</td>
+                  <td className="px-6 py-4 text-sm font-semibold text-[#006bff]">№{orderNumber(order)}</td>
                   <td className="max-w-[340px] px-6 py-4 text-sm font-medium text-[#0b3558]"><span className="line-clamp-2">{order.material}</span></td>
                   <td className="px-6 py-4 text-sm text-[#476788]">{order.format.replace('СМИ (', '').replace(')', '')}</td>
                   <td className="px-6 py-4 text-sm tabular-nums text-[#476788]">{order.date}</td>
@@ -5792,7 +6245,44 @@ const PublisherPlatformDetailView = ({ navigate }) => {
   );
 };
 
-const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialValues = {} }) => {
+type PlatformFormValues = {
+  logoFileId?: string;
+  formats?: string[]; goals?: string[]; aggregators?: string[]; seasonalOfferEnabled?: boolean;
+  name?: string; url?: string; type?: string; geography?: string; theme?: string;
+  dailyReach?: string | number; subscribers?: string | number; metrikaUrl?: string;
+  mediologyRank?: string | number; formatPrices?: Record<string, string | number>;
+  formatDeadlines?: Record<string, string | number>; responseDeadline?: string;
+  storage?: string; discount?: string | number; coefficient?: string | number;
+  seasonStart?: string; seasonEnd?: string; requirements?: string;
+};
+const PublisherPlatformNewView = ({ navigate, embedded = false, onDone = undefined, initialValues = {} as PlatformFormValues, outletId = null }) => {
+  const backend=useBackend();
+  const formRef=useRef(null);
+  const [logoIds,setLogoIds]=useState(initialValues.logoFileId?[initialValues.logoFileId]:[]);
+  const [selects,setSelects]=useState({type:initialValues.type||'СМИ',geography:initialValues.geography||'Федеральные',responseDeadline:initialValues.responseDeadline||'2 часа',storage:initialValues.storage||'2 года',formatDeadlines:initialValues.formatDeadlines||{}});
+  const setSelect=(key,value)=>setSelects(v=>({...v,[key]:value}));
+  const save=()=>{
+    if(!formRef.current.reportValidity()) return;
+    backend.perform(async()=>{
+      const fields=new FormData(formRef.current);
+      const text=(key)=>String(fields.get(key)||'').trim();
+      const number=(key,fallback=0)=>text(key)?Number(text(key).replace(/\s/g,'').replace(',','.')):fallback;
+      const formats={Статья:'article',Новость:'news',Пост:'post',Лонгрид:'longread'};
+      if(!selectedFormats.length)throw new Error('Выберите хотя бы один формат размещения');
+      const prices=Object.fromEntries(selectedFormats.map(f=>[formats[f],Math.round(number(`price-${f}`)*100)]));
+      const publicationDaysByFormat=Object.fromEntries(selectedFormats.map(f=>[formats[f],parseInt(String(selects.formatDeadlines[f]||'1 день'))]));
+      const payload={name:text('name'),url:text('url'),kind:({'СМИ':'media','ТГ-канал':'telegram','Паблик ВК':'vk','Канал в MAX':'max','Канал в Дзене':'dzen'})[selects.type],geography:selects.geography,prices,
+        details:{...(logoIds[0]?{logoFileId:logoIds[0]}:{}),topics:text('theme').split(',').map(s=>s.trim()).filter(Boolean),goals:selectedGoals.map(g=>({Пиар:'pr',SEO:'seo',SERM:'serm'})[g]),aggregators:selectedAggregators.map(a=>({'Google News':'google_news','Дзен':'dzen','Новости Mail.ru':'mail_news'})[a]),
+          ...(text('dailyReach')?{dailyAudience:number('dailyReach')}:{}),...(text('subscribers')?{subscribers:number('subscribers')}:{}),...(text('mediologyRank')?{medialogiaRank:number('mediologyRank')}:{}),...(text('metrikaUrl')?{metrikaUrl:text('metrikaUrl')}:{}),
+          publicationDays:Math.max(...Object.values(publicationDaysByFormat) as number[]),publicationDaysByFormat,storageMonths:24,storageIndefinite:selects.storage==='Бессрочно',responseHours:selects.responseDeadline==='1 рабочий день'?24:parseInt(selects.responseDeadline),requirements:text('requirements')},
+        coefficientBps:seasonalOfferEnabled?Math.round(number('coefficient',1)*10000):10000,discountBps:seasonalOfferEnabled?Math.round(number('discount')*100):0,
+        seasonStart:seasonalOfferEnabled?text('seasonStart')||null:null,discountUntil:seasonalOfferEnabled?text('seasonEnd')||null:null};
+      if(seasonalOfferEnabled&&(!payload.seasonStart||!payload.discountUntil||payload.seasonStart>payload.discountUntil))throw new Error('Укажите корректный период сезонных условий');
+      const saved=await api(outletId?`/outlets/${outletId}`:'/outlets',outletId?'PUT':'POST',payload);
+      await backend.refresh();backend.setOutletId(saved.id);
+      if(embedded)onDone?.();else navigate('pub_platforms');
+    });
+  };
   const formatNames = ['Статья', 'Новость', 'Пост', 'Лонгрид'];
   const goalNames = ['Пиар', 'SEO', 'SERM'];
   const aggregatorNames = ['Google News', 'Дзен', 'Новости Mail.ru'];
@@ -5817,7 +6307,7 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
   );
 
   return (
-    <div className={embedded ? 'space-y-6' : 'mx-auto max-w-5xl space-y-6'}>
+    <form ref={formRef} onSubmit={e=>{e.preventDefault();save();}} className={embedded ? 'space-y-6' : 'mx-auto max-w-5xl space-y-6'}>
       {!embedded && (
         <>
           <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('pub_platforms')}>
@@ -5835,27 +6325,27 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
         <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium text-[#476788]">Название площадки</span>
-            <input className={inputClassName} defaultValue={initialValues.name} placeholder="Например, Investor.ru" />
+            <input name="name" required maxLength={200} className={inputClassName} defaultValue={initialValues.name} placeholder="Например, Investor.ru" />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-[#476788]">Ссылка на площадку</span>
-            <input className={inputClassName} type="url" defaultValue={initialValues.url} placeholder="https://investor.ru" />
+            <input name="url" required className={inputClassName} type="url" defaultValue={initialValues.url} placeholder="https://investor.ru" />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-[#476788]">Тип площадки</span>
-            <CustomSelect className="mt-2" defaultValue={initialValues.type} options={['СМИ', 'ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
+            <CustomSelect className="mt-2" value={selects.type} onChange={v=>setSelect('type',v)} options={['СМИ', 'ТГ-канал', 'Паблик ВК', 'Канал в MAX', 'Канал в Дзене']} />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-[#476788]">География</span>
-            <CustomSelect className="mt-2" defaultValue={initialValues.geography} options={regionFilterOptions.slice(1)} />
+            <CustomSelect className="mt-2" value={selects.geography} onChange={v=>setSelect('geography',v)} options={regionFilterOptions.slice(1)} />
           </label>
           <label className="block md:col-span-2">
             <span className="text-sm font-medium text-[#476788]">Тематика</span>
-            <input className={inputClassName} defaultValue={initialValues.theme} placeholder="Например, финансы, инвестиции, бизнес" />
+            <input name="theme" className={inputClassName} defaultValue={initialValues.theme} placeholder="Например, финансы, инвестиции, бизнес" />
           </label>
           <div className="md:col-span-2">
             <span className="text-sm font-medium text-[#476788]">Логотип площадки</span>
-            {embedded && (
+            {embedded && !outletId && (
               <div className="mt-2 flex items-center gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-3">
                 <div className="flex h-12 w-12 flex-none flex-col items-center justify-center rounded-xl border border-[#d4e0ed] bg-white">
                   <span className="flex h-3 items-end gap-0.5" aria-hidden="true">
@@ -5873,7 +6363,7 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
               </div>
             )}
             <div className="mt-2">
-              <FileUploadField accept="image/png,image/jpeg,image/webp" multiple={false} compact />
+              <FileUploadField accept="image/png,image/jpeg,image/webp" multiple={false} compact storedIds={logoIds} onStoredChange={ids=>setLogoIds(ids.slice(-1))} imagesOnly />
             </div>
             <p className="mt-2 text-xs text-[#7890aa]">PNG, JPG или WEBP. Рекомендуемый размер от 256 × 256 px.</p>
           </div>
@@ -5886,19 +6376,19 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="text-sm font-medium text-[#476788]">Посещаемость в день</span>
-              <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.dailyReach} placeholder="Например, 82 000" />
+              <input name="dailyReach" className={inputClassName} inputMode="numeric" defaultValue={initialValues.dailyReach} placeholder="Например, 82 000" />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-[#476788]">Подписчики</span>
-              <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.subscribers} placeholder="Для Telegram и ВК" />
+              <input name="subscribers" className={inputClassName} inputMode="numeric" defaultValue={initialValues.subscribers} placeholder="Для Telegram и ВК" />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-[#476788]">Ссылка на Яндекс Метрику</span>
-              <input className={inputClassName} type="url" defaultValue={initialValues.metrikaUrl} placeholder="https://metrika.yandex.ru/..." />
+              <input name="metrikaUrl" className={inputClassName} type="url" defaultValue={initialValues.metrikaUrl} placeholder="https://metrika.yandex.ru/..." />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-[#476788]">Ранг Медиалогии</span>
-              <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.mediologyRank} placeholder="Например, 5" />
+              <input name="mediologyRank" className={inputClassName} inputMode="numeric" defaultValue={initialValues.mediologyRank} placeholder="Например, 5" />
               <span className="mt-2 block text-xs text-[#7890aa]">Позиция в общем или отраслевом рейтинге.</span>
             </label>
           </div>
@@ -5985,6 +6475,7 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
                           className={`${inputClassName} mt-0 pr-9 disabled:bg-[#f0f3f8] disabled:text-[#9bb0c5]`}
                           inputMode="numeric"
                           defaultValue={initialValues.formatPrices?.[format]}
+                          name={`price-${format}`} aria-label={`Цена: ${format}`} required={selected}
                           placeholder="0"
                           disabled={!selected}
                         />
@@ -5995,7 +6486,8 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
                       <span className="text-xs text-[#7890aa] md:hidden">Срок публикации</span>
                       <CustomSelect
                         className="mt-1 md:mt-0"
-                        defaultValue={initialValues.formatDeadlines?.[format]}
+                        value={selects.formatDeadlines[format]||'1 день'}
+                        onChange={v=>setSelect('formatDeadlines',{...selects.formatDeadlines,[format]:v})}
                         options={['1 день', '2 дня', '3 дня', '4 дня', '5 дней', '6 дней']}
                         buttonClassName={!selected ? 'opacity-50 pointer-events-none' : ''}
                       />
@@ -6008,11 +6500,11 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <label className="block">
               <span className="text-sm font-medium text-[#476788]">Срок ответа на заказ</span>
-              <CustomSelect className="mt-2" defaultValue={initialValues.responseDeadline} options={['2 часа', '4 часа', '8 часов', '1 рабочий день']} />
+              <CustomSelect className="mt-2" value={selects.responseDeadline} onChange={v=>setSelect('responseDeadline',v)} options={['2 часа', '4 часа', '8 часов', '1 рабочий день']} />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-[#476788]">Минимальный срок хранения</span>
-              <CustomSelect className="mt-2" defaultValue={initialValues.storage} options={['2 года', 'Бессрочно']} />
+              <CustomSelect className="mt-2" value={selects.storage} onChange={v=>setSelect('storage',v)} options={['2 года', 'Бессрочно']} />
             </label>
           </div>
           <div className="border-t border-[#d4e0ed] pt-5">
@@ -6034,19 +6526,19 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
               <div className="mt-5 grid grid-cols-1 gap-5 rounded-lg bg-[#f8f9fb] p-5 md:grid-cols-4">
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Скидка</span>
-                  <input className={inputClassName} inputMode="numeric" defaultValue={initialValues.discount} placeholder="10%" />
+                  <input name="discount" className={inputClassName} inputMode="numeric" defaultValue={initialValues.discount} placeholder="10" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Коэффициент</span>
-                  <input className={inputClassName} inputMode="decimal" defaultValue={initialValues.coefficient} placeholder="×1,0" />
+                  <input name="coefficient" className={inputClassName} inputMode="decimal" defaultValue={initialValues.coefficient} placeholder="1,0" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Начало</span>
-                  <input className={inputClassName} type="date" defaultValue={initialValues.seasonStart} />
+                  <input name="seasonStart" required className={inputClassName} type="date" defaultValue={initialValues.seasonStart} />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-[#476788]">Окончание</span>
-                  <input className={inputClassName} type="date" defaultValue={initialValues.seasonEnd} />
+                  <input name="seasonEnd" required className={inputClassName} type="date" defaultValue={initialValues.seasonEnd} />
                 </label>
               </div>
             )}
@@ -6059,84 +6551,105 @@ const PublisherPlatformNewView = ({ navigate, embedded = false, onDone, initialV
         <div className="p-6">
           <label className="block">
             <span className="text-sm font-medium text-[#476788]">Требования к материалам</span>
-            <textarea className={`${inputClassName} min-h-[140px] resize-y py-3`} defaultValue={initialValues.requirements} placeholder="Укажите допустимые тематики, требования к изображениям, ссылкам, структуре текста и основания для отказа." />
+            <textarea name="requirements" className={`${inputClassName} min-h-[140px] resize-y py-3`} defaultValue={initialValues.requirements} placeholder="Укажите допустимые тематики, требования к изображениям, ссылкам, структуре текста и основания для отказа." />
           </label>
         </div>
       </Card>
 
       <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
-        <Button variant="secondary" onClick={() => (embedded ? onDone?.() : navigate('pub_platforms'))}>{embedded ? 'Отмена' : 'Сохранить черновик'}</Button>
-        <Button variant="primary" onClick={() => (embedded ? onDone?.() : navigate('pub_platforms'))}>{embedded ? 'Сохранить изменения' : 'Отправить на модерацию'}</Button>
+        <Button type="button" variant="secondary" disabled={backend.busy} onClick={() => (embedded ? onDone?.() : navigate('pub_platforms'))}>Отмена</Button>
+        <Button type="button" variant="primary" disabled={backend.busy} onClick={save}>{embedded ? 'Сохранить изменения' : 'Отправить на модерацию'}</Button>
       </div>
-    </div>
+    </form>
   );
 };
 
-const PublisherFinanceView = () => (
-  <div className="space-y-6">
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <Card className="p-6">
-      <h1 className="font-display text-sm font-medium text-[#476788] mb-2">Доступно к выводу</h1>
-      <div className="text-4xl font-semibold text-[#0b3558]">{formatMoney(235000)}</div>
-      <div className="mt-6 space-y-3 text-sm">
-        <div className="flex justify-between"><span className="text-[#476788]">Начислено</span><span className="text-[#0b3558]">{formatMoney(684000)}</span></div>
-        <div className="flex justify-between"><span className="text-[#476788]">Ожидает приемки</span><span className="text-[#0b3558]">{formatMoney(127500)}</span></div>
-        <div className="flex justify-between"><span className="text-[#476788]">Комиссия вывода 15%</span><span className="text-[#0b3558]">{formatMoney(35250)}</span></div>
-        <div className="flex justify-between"><span className="text-[#476788]">К получению</span><span className="text-[#0b3558]">{formatMoney(199750)}</span></div>
-        <div className="flex justify-between"><span className="text-[#a6bbd1]">Ближайшая выплата</span><span>01.11.2023</span></div>
-      </div>
-      <Button variant="primary" className="w-full mt-8" disabled>Реквизиты на проверке</Button>
-    </Card>
-    <Card className="p-6 lg:col-span-2">
-      <h2 className="font-display text-lg font-bold text-[#0b3558] mb-4">История выплат</h2>
-      <div className="space-y-3">
-        {['01.10 · выплата 430 000 ₽', '01.09 · выплата 386 000 ₽', '12.08 · удержание по спору 52 000 ₽'].map(item => (
-          <div key={item} className="p-4 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] text-sm text-[#476788]">{item}</div>
-        ))}
-      </div>
-    </Card>
-  </div>
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">На выводе</div><div className="mt-2 text-xl font-semibold">{formatMoney(180000)}</div></Card>
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Удержано</div><div className="mt-2 text-xl font-semibold text-red-600">{formatMoney(52000)}</div></Card>
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Комиссия вывода</div><div className="mt-2 text-xl font-semibold">15%</div></Card>
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Минимум вывода</div><div className="mt-2 text-xl font-semibold">{formatMoney(10000)}</div></Card>
-    </div>
-    <Card className="p-6">
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-        <div>
-          <h2 className="font-display text-base font-bold text-[#0b3558]">Реквизиты для выплаты</h2>
-          <p className="text-sm text-[#476788] mt-1">Используются для вывода средств паблишеру. Пока реквизиты на проверке, запрос выплаты недоступен.</p>
-        </div>
-        <Badge color="blue">на проверке</Badge>
-      </div>
-      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        {[
-          ['Получатель', 'ООО "Редакция РБК"'],
-          ['ИНН', '7700001111'],
-          ['КПП', '770001001'],
-          ['Банк', 'АО "Банк"'],
-          ['Расчетный счет', '40702810900000004432'],
-          ['БИК', '044525000'],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] px-3 py-2">
-            <div className="text-xs text-[#476788]">{label}</div>
-            <div className="font-medium text-[#0b3558] mt-1">{value}</div>
+const PublisherFinanceView = ({ navigate }) => {
+  const backend = useBackend();
+  const orders = backend.data.orders;
+  const transactions = financialTransactions(backend.data.transactions, backend.user.id, orders);
+  const completedOrders = orders.filter((order) => order.apiStatus === 'completed');
+  const awaitingOrders = orders.filter((order) => order.apiStatus === 'submitted');
+  const activeOrders = orders.filter((order) => order.apiStatus === 'accepted');
+  const earned = completedOrders.reduce((sum, order) => sum + Number(order.payout) / 100, 0);
+  const awaiting = awaitingOrders.reduce((sum, order) => sum + Number(order.payout) / 100, 0);
+  const inWork = activeOrders.reduce((sum, order) => sum + Number(order.payout) / 100, 0);
+  const commission = completedOrders.reduce((sum, order) => sum + (Number(order.amount) - Number(order.payout)) / 100, 0);
+  const basisOrders = orders.filter((order) => ['accepted', 'submitted', 'completed', 'disputed'].includes(order.apiStatus));
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="p-6">
+          <h1 className="font-display text-sm font-medium text-[#476788] mb-2">Доступно к выводу</h1>
+          <div className="text-4xl font-semibold text-[#0b3558]">{formatMoney(backend.data.balance.available / 100)}</div>
+          <div className="mt-6 space-y-3 text-sm">
+            <div className="flex justify-between"><span className="text-[#476788]">Начислено</span><span className="text-[#0b3558]">{formatMoney(earned)}</span></div>
+            <div className="flex justify-between"><span className="text-[#476788]">Ожидает приемки</span><span className="text-[#0b3558]">{formatMoney(awaiting)}</span></div>
+            <div className="flex justify-between"><span className="text-[#476788]">В работе</span><span className="text-[#0b3558]">{formatMoney(inWork)}</span></div>
+            <div className="flex justify-between"><span className="text-[#476788]">Комиссия платформы</span><span className="text-[#0b3558]">{formatMoney(commission)}</span></div>
+            <div className="flex justify-between"><span className="text-[#a6bbd1]">Ближайшая выплата</span><span>не назначена</span></div>
           </div>
-        ))}
+          <Button variant="primary" className="w-full mt-8" disabled={!backend.data.balance.available} onClick={() => navigate('pub_payout_request')}>Запросить выплату</Button>
+        </Card>
+        <Card className="p-6 lg:col-span-2">
+          <h2 className="font-display text-lg font-bold text-[#0b3558] mb-4">История начислений</h2>
+          <div className="space-y-3">
+            {transactions.map((item) => (
+              <div key={item.id} className="flex flex-col gap-1 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div><div className="font-medium text-[#0b3558]">{item.desc}</div><div className="mt-1 text-xs text-[#476788]">{item.date} · {item.status}</div></div>
+                <div className={`font-semibold tabular-nums ${item.amount < 0 ? 'text-red-600' : 'text-[#0b3558]'}`}>{item.amount > 0 ? '+' : ''}{formatMoney(item.amount)}</div>
+              </div>
+            ))}
+            {!transactions.length && <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-6 text-sm text-[#476788]">Начислений пока нет.</div>}
+          </div>
+        </Card>
       </div>
-      <div className="mt-5 flex justify-end"><Button variant="secondary">Изменить реквизиты</Button></div>
-    </Card>
-    <Card className="overflow-hidden">
-      <div className="px-6 py-5 border-b border-[#d4e0ed] bg-[#f8f9fb]"><h2 className="font-display text-base font-bold text-[#0b3558]">Заказы-основания</h2></div>
-      <table className="min-w-full divide-y divide-[#d4e0ed]">
-        <tbody className="divide-y divide-[#d4e0ed]">
-          {mockOrdersPublisher.slice(0, 4).map(order => <tr key={order.id}><td className="px-6 py-4 text-sm font-medium">#{order.id}</td><td className="px-6 py-4 text-sm text-[#476788]">{order.material}</td><td className="px-6 py-4 text-sm font-semibold">{formatMoney(order.price)}</td><td className="px-6 py-4"><Badge color={order.statusColor}>{order.status}</Badge></td></tr>)}
-        </tbody>
-      </table>
-    </Card>
-  </div>
-);
+      <Card className="overflow-hidden">
+        <h2 className="border-b border-[#d4e0ed] px-6 py-4 font-display text-lg font-bold text-[#0b3558]">Заявки на выплату</h2>
+        <div className="divide-y divide-[#d4e0ed]">
+          {backend.data.payouts.map(item=><div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 text-sm"><div><span className="font-semibold text-[#0b3558]">W-{item.number}</span><span className="ml-3 text-[#476788]">{new Date(item.created_at).toLocaleDateString('ru-RU')}</span><div className="mt-1 text-[#476788]">{{pending:'На проверке',approved:'Подтверждена, ожидает перечисления',transferred:'Перечислена',returned:'Возвращена',rejected:'Отклонена'}[item.status]}{item.comment?` · ${item.comment}`:''}</div></div><span className="font-semibold tabular-nums">{formatMoney(Number(item.amount)/100)}</span></div>)}
+          {!backend.data.payouts.length&&<p className="px-6 py-5 text-sm text-[#476788]">Заявок пока нет.</p>}
+        </div>
+      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">В работе</div><div className="mt-2 text-xl font-semibold">{formatMoney(inWork)}</div></Card>
+        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Ожидает приемки</div><div className="mt-2 text-xl font-semibold">{formatMoney(awaiting)}</div></Card>
+        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Комиссия платформы</div><div className="mt-2 text-xl font-semibold">{formatMoney(commission)}</div></Card>
+        <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Завершено заказов</div><div className="mt-2 text-xl font-semibold">{completedOrders.length}</div></Card>
+      </div>
+      <Card className="p-6">
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+          <div>
+            <h2 className="font-display text-base font-bold text-[#0b3558]">Реквизиты для выплаты</h2>
+            <p className="text-sm text-[#476788] mt-1">Реквизиты ещё не добавлены, поэтому запрос выплаты недоступен.</p>
+          </div>
+          <Badge color="gray">не настроены</Badge>
+        </div>
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          {['Получатель', 'ИНН', 'КПП', 'Банк', 'Расчетный счет', 'БИК'].map((label) => (
+            <div key={label} className="rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] px-3 py-2">
+              <div className="text-xs text-[#476788]">{label}</div>
+              <div className="font-medium text-[#0b3558] mt-1">Не указано</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 flex justify-end"><Button variant="secondary" onClick={() => navigate('pub_settings')}>Добавить реквизиты</Button></div>
+      </Card>
+      <Card className="overflow-hidden">
+        <div className="px-6 py-5 border-b border-[#d4e0ed] bg-[#f8f9fb]"><h2 className="font-display text-base font-bold text-[#0b3558]">Заказы-основания</h2></div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[760px] w-full divide-y divide-[#d4e0ed]">
+            <tbody className="divide-y divide-[#d4e0ed]">
+              {basisOrders.map((order) => <tr key={order.id}><td className="px-6 py-4 text-sm font-medium">№{orderNumber(order)}</td><td className="px-6 py-4 text-sm text-[#476788]">{order.material}</td><td className="px-6 py-4 text-sm font-semibold">{formatMoney(Number(order.payout) / 100)}</td><td className="px-6 py-4"><Badge color={order.statusColor}>{order.status}</Badge></td></tr>)}
+              {!basisOrders.length && <tr><td colSpan={4} className="px-6 py-10 text-center text-sm text-[#476788]">Заказов для начисления пока нет.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+};
 
 const PublisherSanctionsView = ({ navigate }) => (
   <div className="space-y-6">
@@ -6206,7 +6719,24 @@ const PublisherComplaintView = ({ navigate }) => (
   </div>
 );
 
-const PublisherPayoutRequestView = ({ navigate }) => (
+const PublisherPayoutRequestView = ({ navigate }) => {
+  const backend = useBackend();
+  const available = Number(backend.data.balance.available || 0) / 100;
+  const [amount,setAmount]=useState(()=>String(available));
+  const amountValue=Number(amount.replace(',','.'));
+  const amountKopeks=Math.round(amountValue*100);
+  const validAmount=/^\d+(?:[.,]\d{0,2})?$/.test(amount)&&amountKopeks>0&&amountKopeks<=Number(backend.data.balance.available)&&Number.isSafeInteger(amountKopeks);
+  const requisites=backend.data.account?.requisites||{};
+  const verified=backend.data.account?.requisites_status==='verified';
+  const ready=verified&&(requisites.payeeStatus==='Физическое лицо'
+    ? Boolean(requisites.personName&&requisites.personInn&&requisites.personAccount&&requisites.personBik)
+    : Boolean(requisites.recipient&&requisites.inn&&requisites.account&&requisites.bik));
+  const requestPayout=async()=>{
+    if(!validAmount)return;
+    const ok=await backend.perform(async()=>{await api('/payouts','POST',{amount:amountKopeks},crypto.randomUUID());await backend.refresh();});
+    if(ok)navigate('pub_finance');
+  };
+  return (
   <div className="space-y-6 max-w-4xl mx-auto">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('pub_finance')}>
       <ChevronRight className="w-4 h-4 rotate-180" /> К выплатам
@@ -6214,22 +6744,23 @@ const PublisherPayoutRequestView = ({ navigate }) => (
     <h1 className="font-display text-2xl font-bold text-[#0b3558]">Запрос выплаты</h1>
     <Card className="p-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Сумма к выводу</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="235 000 ₽" /></label>
-        <label className="block"><span className="text-sm font-medium text-[#476788]">Доступная сумма</span><input className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" defaultValue="235 000 ₽" /></label>
-        <label className="block md:col-span-2"><span className="text-sm font-medium text-[#476788]">Реквизиты</span><CustomSelect className="mt-2" options={['ООО Редакция, р/с **** 4432 · на проверке', 'Добавить реквизиты']} /></label>
+        <label className="block"><span className="text-sm font-medium text-[#476788]">Сумма к выводу</span><input inputMode="decimal" aria-invalid={amount!==''&&!validAmount} className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" value={amount} onChange={event=>setAmount(event.target.value.replace(/[^\d.,]/g,'').slice(0,15))} /></label>
+        <label className="block"><span className="text-sm font-medium text-[#476788]">Доступная сумма</span><input readOnly className="mt-2 w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm" value={formatMoney(available)} /></label>
+        <div className="md:col-span-2"><span className="text-sm font-medium text-[#476788]">Реквизиты</span><div className="mt-2 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] px-4 py-3 text-sm text-[#0b3558]">{ready ? `${requisites.recipient||requisites.personName} · ${requisites.bank||requisites.personBank||'Банк не указан'} · ${requisites.account||requisites.personAccount}` : 'Подтвержденные реквизиты не заполнены'}</div></div>
       </div>
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">Комиссия вывода 15%</div><div className="mt-1 text-xl font-semibold">{formatMoney(35250)}</div></Card>
-        <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">К получению</div><div className="mt-1 text-xl font-semibold">{formatMoney(199750)}</div></Card>
-        <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">Статус</div><div className="mt-1 text-sm font-semibold text-[#0b3558]">форма доступна</div></Card>
+        <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">Комиссия за вывод</div><div className="mt-1 text-xl font-semibold">{formatMoney(0)}</div></Card>
+        <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">К получению</div><div className="mt-1 text-xl font-semibold">{formatMoney(validAmount?amountValue:0)}</div></Card>
+        <Card className="p-5 bg-[#f8f9fb]"><div className="text-xs text-[#476788]">Статус</div><div className="mt-1 text-sm font-semibold text-[#0b3558]">{ready?'реквизиты проверены':'реквизиты не настроены'}</div></Card>
       </div>
       <div className="mt-6 rounded-lg bg-[#f8f9fb] border border-[#d4e0ed] p-4 text-sm text-[#476788]">
-        Реквизиты находятся на проверке, поэтому запрос можно подготовить, но отправка станет доступна после подтверждения реквизитов.
+        Заявка будет передана финансовому контролеру. Банковское перечисление выполняется отдельно.
       </div>
-      <div className="mt-6 flex justify-end"><Button variant="primary" disabled>Дождаться проверки реквизитов</Button></div>
+      <div className="mt-6 flex justify-end"><Button variant="primary" disabled={!ready||!validAmount||backend.busy} onClick={requestPayout}>Отправить заявку</Button></div>
     </Card>
   </div>
-);
+  );
+};
 
 const SettingField = ({ label, children, className = '' }) => (
   <label className={`block ${className}`}>
@@ -6255,6 +6786,64 @@ const SettingsSection = ({ title, description, icon: Icon, children }) => (
   </Card>
 );
 
+const AccountFieldsPanel = ({ title, description, icon, fields, kind, submitLabel, note=null, statusLabel=false }) => {
+  const backend=useBackend();
+  const [values,setValues]=useState({});
+  const [status,setStatus]=useState('draft');
+  const [reviewComment,setReviewComment]=useState('');
+  const [loaded,setLoaded]=useState(false);
+  const [saved,setSaved]=useState(false);
+  const [registryBusy,setRegistryBusy]=useState(false);
+  const [registryMessage,setRegistryMessage]=useState('');
+  useEffect(()=>{let active=true;api('/settings/account').then(data=>{
+    if(active){setValues(data[kind]||{});setStatus(data.requisites_status||'draft');setReviewComment(data.requisites_review_comment||'');setLoaded(true);}
+  }).catch(error=>{if(active)backend.setError(error.message);});return()=>{active=false;};},[kind]);
+  const change=(key,value)=>{setValues(current=>({...current,[key]:value}));setSaved(false);};
+  const fillFromRegistry=async()=>{
+    setRegistryBusy(true);setRegistryMessage('');
+    try {
+      const inn=String(values.inn||'').replace(/\D/g,'');
+      const result=await api(`/reference/party?${new URLSearchParams({query:inn})}`);
+      if(!result.found||result.party.inn!==inn){setRegistryMessage('Организация не найдена в реестре.');return;}
+      const party=result.party;
+      setValues(current=>({...current,inn:party.inn,kpp:party.kpp||'',ogrn:party.ogrn||'',legalAddress:party.address||current.legalAddress,...(fields.some(field=>field.key==='recipient')?{recipient:party.shortName||party.name||current.recipient}: {})}));
+      setSaved(false);
+      setRegistryMessage('Реквизиты подставлены. Проверьте данные перед сохранением.');
+    } catch(error) {setRegistryMessage(error instanceof Error?error.message:'Поиск недоступен');}
+    finally {setRegistryBusy(false);}
+  };
+  const visibleFields=fields.filter(field=>!field.when||field.when(values));
+  return <SettingsSection title={title} description={description} icon={icon}>
+    <form onSubmit={async event=>{
+      event.preventDefault();
+      const allowed=Object.fromEntries(visibleFields.map(field=>[field.key,String(values[field.key]||field.options?.[0]||'')]));
+      const ok=await backend.perform(async()=>{
+        const result=await api(`/settings/account/${kind==='profile'?'profile':'requisites'}`,'PUT',allowed);
+        if(kind==='requisites'){setStatus(result.status);setReviewComment('');}
+      });
+      if(ok)setSaved(true);
+    }}>
+      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+        {visibleFields.map(field=>{
+          const options=field.key==='vat'&&values.vat==='20%'?[{value:'20%',label:'20% (ранее сохранено)'},...field.options]:field.options;
+          return <div key={field.key} className={field.wide?'min-w-0 md:col-span-2':'min-w-0'}><SettingField label={field.label}>
+            {options?<CustomSelect className="mt-2" options={options} value={values[field.key]||field.options[0]} onChange={value=>change(field.key,value)} />
+              :['legalAddress','registrationAddress'].includes(field.key)?<AddressInput className={settingInputClass} value={values[field.key]||''} onChange={value=>change(field.key,value)} />
+              :<input className={settingInputClass} value={values[field.key]||''} maxLength={field.maxLength||500} onChange={event=>change(field.key,event.target.value)} />}
+          </SettingField>{kind==='requisites'&&field.key==='inn'&&<><button type="button" className="mt-2 text-sm font-medium text-[#006bff] hover:text-[#0b3558] disabled:opacity-50" disabled={registryBusy||![10,12].includes(String(values.inn||'').replace(/\D/g,'').length)} onClick={fillFromRegistry}>{registryBusy?'Поиск…':'Заполнить по ИНН'}</button>{registryMessage&&<p role="status" className="mt-1 text-xs text-[#476788]">{registryMessage}</p>}</>}</div>;
+        })}
+      </div>
+      {note&&<div className="mt-6 rounded-lg border border-dashed border-[#0b3558] bg-[#f8f9fb] p-5 text-sm leading-6 text-[#476788]">{typeof note==='function'?note(values):note}</div>}
+      {statusLabel&&<div className="mt-5 flex flex-col justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 md:flex-row md:items-center">
+        <div><div className="text-sm font-medium text-[#0b3558]">Статус реквизитов: {{pending:'на проверке',verified:'подтверждены',rejected:'отклонены'}[status]||'не отправлены'}</div><div className="mt-1 text-xs text-[#476788]">{status==='rejected'&&reviewComment?reviewComment:'До подтверждения можно готовить запрос выплаты, но нельзя отправить его в обработку.'}</div></div>
+        <Badge color={{pending:'amber',verified:'green',rejected:'red'}[status]||'gray'}>{{pending:'проверка',verified:'подтверждены',rejected:'отклонены'}[status]||'черновик'}</Badge>
+      </div>}
+      <div className="mt-6 flex justify-end"><Button variant="primary" type="submit" disabled={!loaded||backend.busy}>{submitLabel}</Button></div>
+      {saved&&<p role="status" className="mt-3 text-right text-sm text-emerald-700">{kind==='profile'?'Профиль сохранён.':'Реквизиты отправлены на проверку.'}</p>}
+    </form>
+  </SettingsSection>;
+};
+
 const NotificationChannelToggle = ({ label, defaultEnabled = false }) => {
   const [enabled, setEnabled] = useState(defaultEnabled);
   return (
@@ -6267,6 +6856,93 @@ const NotificationChannelToggle = ({ label, defaultEnabled = false }) => {
       {label}
     </button>
   );
+};
+
+const AccountSecuritySettings = () => {
+  const backend = useBackend();
+  const [passwords,setPasswords] = useState({current:'',next:'',confirm:''});
+  const [sessions,setSessions] = useState(null);
+  const [message,setMessage] = useState('');
+  const [error,setError] = useState('');
+  useEffect(()=>{let active=true;api('/auth/sessions').then(rows=>{if(active)setSessions(rows);}).catch(()=>{if(active)setError('Не удалось загрузить сеансы.');});return()=>{active=false;};},[]);
+  const changePassword = async e => {
+    e.preventDefault();setMessage('');setError('');
+    if(passwords.next!==passwords.confirm){setError('Новый пароль и подтверждение не совпадают.');return;}
+    const ok=await backend.perform(async()=>{
+      await api('/auth/password','POST',{currentPassword:passwords.current,newPassword:passwords.next});
+    });
+    if(ok){setPasswords({current:'',next:'',confirm:''});setSessions([{current:true}]);setMessage('Пароль изменён. Другие сеансы завершены.');}
+  };
+  return <SettingsSection title="Безопасность" description="" icon={Lock}>
+    <form onSubmit={changePassword} className="space-y-4">
+      <SettingField label="Текущий пароль"><input required autoComplete="current-password" type="password" className={settingInputClass} value={passwords.current} onChange={e=>{setMessage('');setPasswords({...passwords,current:e.target.value});}} /></SettingField>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <SettingField label="Новый пароль" className="min-w-0"><input required minLength={12} maxLength={128} autoComplete="new-password" type="password" className={settingInputClass} placeholder="Минимум 12 символов" value={passwords.next} onChange={e=>{setMessage('');setPasswords({...passwords,next:e.target.value});}} /></SettingField>
+        <SettingField label="Подтверждение пароля" className="min-w-0"><input required minLength={12} maxLength={128} autoComplete="new-password" type="password" className={settingInputClass} value={passwords.confirm} onChange={e=>{setMessage('');setPasswords({...passwords,confirm:e.target.value});}} /></SettingField>
+      </div>
+      <div className="flex justify-end"><Button variant="primary" type="submit" disabled={backend.busy}>Сменить пароль</Button></div>
+    </form>
+    <div className="mt-6 border-t border-[#d4e0ed] pt-5">
+      <TwoFactorSettings />
+    </div>
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-[#d4e0ed] pt-5">
+      <div><div className="text-sm font-medium text-[#0b3558]">Сеансы аккаунта</div><p className="mt-1 text-xs text-[#476788]">{sessions===null?'Загрузка…':`Других активных сеансов: ${sessions.filter(s=>!s.current).length}`}</p></div>
+      <Button variant="secondary" size="sm" disabled={backend.busy || !sessions?.some(s=>!s.current)} onClick={async()=>{
+        setMessage('');setError('');
+        const ok=await backend.perform(()=>api('/auth/sessions/revoke-others','POST',{}));
+        if(ok){setSessions(sessions.filter(s=>s.current));setMessage('Другие сеансы завершены.');}
+      }}>Завершить другие сеансы</Button>
+    </div>
+    {message && <p role="status" className="mt-4 text-sm text-emerald-700">{message}</p>}
+    {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+  </SettingsSection>;
+};
+
+const TwoFactorSettings = () => {
+  const backend=useBackend();
+  const [enabled,setEnabled]=useState(false),[action,setAction]=useState(null);
+  const [password,setPassword]=useState(''),[code,setCode]=useState('');
+  const [setup,setSetup]=useState(null),[backupCodes,setBackupCodes]=useState([]);
+  useEffect(()=>{let active=true;api('/auth/two-factor').then(data=>{if(active)setEnabled(data.enabled);}).catch(error=>backend.setError(error.message));return()=>{active=false;};},[]);
+  const close=()=>{setAction(null);setPassword('');setCode('');setSetup(null);setBackupCodes([]);};
+  const submit=()=>backend.perform(async()=>{
+    if(action==='disable'){await api('/auth/two-factor/disable','POST',{password,code});setEnabled(false);close();return;}
+    if(!setup){setSetup(await api('/auth/two-factor/setup','POST',{password}));setPassword('');return;}
+    const result=await api('/auth/two-factor/enable','POST',{code});setEnabled(true);setBackupCodes(result.backupCodes);setSetup(null);setCode('');
+  });
+  return <div className="min-w-0"><SettingField label="Двухфакторная защита"><CustomSelect className="mt-2" options={['Отключена','Код на почту','Приложение-аутентификатор']} value={enabled?'Приложение-аутентификатор':'Отключена'} onChange={value=>{if(value==='Код на почту'){backend.setError('Подтверждение по почте еще не подключено.');return;}if((value==='Отключена')===!enabled)return;setAction(value==='Отключена'?'disable':'enable');}} /></SettingField>
+    <Modal isOpen={Boolean(action)} onClose={close} title={backupCodes.length?'Резервные коды':action==='disable'?'Отключить двухфакторную защиту':'Настроить двухфакторную защиту'} className="max-w-md">
+      {backupCodes.length?<><div className="grid grid-cols-2 gap-2 font-mono text-sm">{backupCodes.map(value=><div key={value} className="rounded-lg border border-[#d4e0ed] p-2">{value}</div>)}</div><p className="mt-4 text-sm text-[#476788]">Каждый код действует один раз. Сохраните коды для входа при потере доступа к аутентификатору.</p><Button className="mt-5 w-full" variant="primary" onClick={close}>Готово</Button></>:<form className="space-y-4" onSubmit={event=>{event.preventDefault();submit();}}>
+        {!setup&&<SettingField label="Текущий пароль"><input type="password" required autoComplete="current-password" className={settingInputClass} value={password} onChange={event=>setPassword(event.target.value)} /></SettingField>}
+        {setup&&<><img className="mx-auto h-48 w-48" src={setup.qr} alt="QR-код аутентификатора" /><div className="flex min-w-0 items-center gap-2"><input className={`${settingInputClass} min-w-0 flex-1 font-mono text-xs`} readOnly aria-label="Ключ аутентификатора" value={setup.secret} /><CopyButton value={setup.secret} label="Скопировать ключ" /></div></>}
+        {(setup||action==='disable')&&<SettingField label="Код аутентификатора или резервный код"><input required autoComplete="one-time-code" className={settingInputClass} value={code} onChange={event=>setCode(event.target.value)} /></SettingField>}
+        <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={close}>Отмена</Button><Button type="submit" variant={action==='disable'?'danger':'primary'} disabled={backend.busy}>{action==='disable'?'Отключить':setup?'Подтвердить':'Продолжить'}</Button></div>
+      </form>}
+    </Modal>
+  </div>;
+};
+
+const OrderLimitsSettings = () => {
+  const backend=useBackend();
+  const [value,setValue]=useState(backend.data.limits.orderLimit===null?'':String(backend.data.limits.orderLimit/100));
+  const [saved,setSaved]=useState(false);
+  const [error,setError]=useState('');
+  return <SettingsSection title="Лимиты и согласования" description="Контроль автоприемки для крупных заказов." icon={CreditCard}>
+    <form onSubmit={async e=>{
+      e.preventDefault();setSaved(false);setError('');
+      const normalized=value.replace(/[\s₽]/g,'').replace(',','.');
+      if(normalized && !/^\d+(\.\d{1,2})?$/.test(normalized)){setError('Укажите сумму в рублях.');return;}
+      const orderLimit=normalized?Math.round(Number(normalized)*100):null;
+      const ok=await backend.perform(async()=>{await api('/settings/limits','PUT',{orderLimit,autoAccept:false});await backend.refresh();});
+      if(ok)setSaved(true);
+    }}>
+      <SettingField label="Лимит автоприемки, ₽"><input inputMode="decimal" className={settingInputClass} value={value} placeholder="Без лимита" onChange={e=>{setValue(e.target.value);setSaved(false);setError('');}} /></SettingField>
+      <div className="mt-4"><SettingField label="Автоприёмка"><CustomSelect className="mt-2" options={['Выключена', 'Через 72 часа без жалобы']} /></SettingField></div>
+      <Button type="submit" variant="primary" className="mt-5 w-full" disabled={backend.busy}>{backend.busy?'Сохранение…':'Сохранить лимиты'}</Button>
+      {saved && <p role="status" className="mt-3 text-sm text-emerald-700">Лимиты сохранены</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+    </form>
+  </SettingsSection>;
 };
 
 const NotificationsSettingsBlock = ({ events }) => {
@@ -6329,12 +7005,38 @@ const NotificationsSettingsBlock = ({ events }) => {
 };
 
 const TeamAccessSettingsBlock = ({ description, members }) => {
+  const backend=useBackend();
   const [editing, setEditing] = useState(false);
-  const roleOptions = (currentRole) => Array.from(new Set([currentRole, 'Администратор', 'Заказы и чат', 'Публикации', 'Выплаты', 'Материалы', 'Финансы', 'Только просмотр', 'Без доступа']));
+  const [team,setTeam]=useState({members:[],pending:[]});
+  const [email,setEmail]=useState('');
+  const [inviteRole,setInviteRole]=useState('admin');
+  const [inviteLink,setInviteLink]=useState('');
+  const [saved,setSaved]=useState(false);
+  const roleNames:Record<string,string>=backend.user.role==='admin'?{admin:'Администратор',moderator:'Модератор',superadmin:'Суперадминистратор'}:{admin:'Администратор',content:backend.user.role==='publisher'?'Публикации':'Материалы',finance:backend.user.role==='publisher'?'Выплаты':'Финансы',viewer:'Только просмотр'};
+  const roleByName=Object.fromEntries(Object.entries(roleNames).map(([key,label])=>[label,key]));
+  const reload=()=>api('/team').then(setTeam).catch(error=>backend.setError(error.message));
+  useEffect(()=>{reload();},[]);
+  const rows=[...team.members.map(item=>({...item,status:'активен',color:'green'})),...team.pending.map(item=>({...item,status:'ожидает принятия',color:'amber'}))];
+
+  const updateRole=async(item,value)=>{
+    if(item.status!=='активен')return;
+    const nextRole=roleByName[value]??null;
+    const ok=await backend.perform(()=>api(`/team/members/${item.id}`,'PATCH',{teamRole:nextRole}));
+    if(ok){setSaved(true);await reload();}
+  };
+
+  const invite=async()=>{
+    const ok=await backend.perform(async()=>{
+      const result=await api('/team/invitations','POST',{email,teamRole:inviteRole});
+      setInviteLink(`${location.origin}/?invite=${encodeURIComponent(result.token)}`);
+      setEmail('');await reload();
+    });
+    if(ok)setSaved(true);
+  };
 
   return (
     <SettingsSection
-      title="Доступы команды"
+      title={backend.user.role==='admin'?'Администраторы':'Доступы команды'}
       description={editing ? description : ''}
       icon={ShieldCheck}
     >
@@ -6343,43 +7045,45 @@ const TeamAccessSettingsBlock = ({ description, members }) => {
           <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
             <div className="text-sm font-semibold text-[#0b3558]">Пригласить по email</div>
             <div className="mt-3 space-y-3">
-              <input className="w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="name@company.ru" />
-              <CustomSelect options={['Роль: администратор', 'Роль: заказы и чат', 'Роль: публикации', 'Роль: выплаты', 'Только просмотр']} />
-              <Button variant="primary" className="w-full"><Plus className="h-4 w-4" /> Отправить приглашение</Button>
+              <input type="email" className="w-full border border-[#476788] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder="name@company.ru" value={email} onChange={event=>setEmail(event.target.value)} />
+              <CustomSelect options={Object.values(roleNames)} value={roleNames[inviteRole]} onChange={value=>setInviteRole(roleByName[value])} />
+              <Button variant="primary" className="w-full" disabled={!email.trim()||backend.busy} onClick={invite}><Plus className="h-4 w-4" /> Создать приглашение</Button>
             </div>
-            <p className="text-xs text-[#476788] mt-3">Сотрудник получит письмо со ссылкой для входа и создания пароля.</p>
+            <p className="text-xs text-[#476788] mt-3">Передайте сотруднику ссылку для входа и создания пароля.</p>
+            {inviteLink&&<div className="mt-3 flex min-w-0 items-center gap-2"><input readOnly aria-label="Ссылка приглашения" className="min-w-0 flex-1 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2 text-xs" value={inviteLink}/><CopyButton value={inviteLink} label="Скопировать приглашение" /></div>}
           </div>
           <div className="mt-5 space-y-3">
-            {members.map(([name, email, role, status, color]) => (
-              <div key={email} className="rounded-lg border border-[#d4e0ed] bg-white p-3">
+            {rows.map(item => (
+              <div key={item.id} className="rounded-lg border border-[#d4e0ed] bg-white p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-[#0b3558] truncate">{email}</div>
-                    <div className="text-xs text-[#476788] mt-1 truncate">{role}</div>
+                    <div className="text-sm font-medium text-[#0b3558] truncate">{item.email}</div>
+                    <div className="text-xs text-[#476788] mt-1 truncate">{roleNames[item.team_role]}</div>
                   </div>
-                  <Badge color={color}>{status}</Badge>
+                  <Badge color={item.color}>{item.status}</Badge>
                 </div>
                 <div className="mt-3">
-                  <CustomSelect options={roleOptions(role)} />
+                  {item.status==='активен'?<CustomSelect options={[...Object.values(roleNames),'Без доступа']} value={roleNames[item.team_role]} onChange={value=>updateRole(item,value)} />:<Button variant="secondary" size="sm" onClick={async()=>{const ok=await backend.perform(()=>api(`/team/invitations/${item.id}`,'DELETE'));if(ok)await reload();}}>Отозвать приглашение</Button>}
                 </div>
               </div>
             ))}
           </div>
-          <Button variant="primary" className="w-full mt-4" onClick={() => setEditing(false)}>Сохранить</Button>
+          <Button variant="primary" className="w-full mt-4" onClick={() => setEditing(false)}>Готово</Button>
         </div>
       ) : (
         <div className="ui-enter">
           <div className="space-y-2">
-            {members.map(([name, email, role, status, color]) => (
-              <div key={email} className="flex items-center justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2.5">
+            {rows.map(item => (
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2.5">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-[#0b3558] truncate">{email}</div>
-                  <div className="text-xs text-[#476788] mt-0.5 truncate">{role}</div>
+                  <div className="text-sm font-medium text-[#0b3558] truncate">{item.email}</div>
+                  <div className="text-xs text-[#476788] mt-0.5 truncate">{roleNames[item.team_role]}</div>
                 </div>
-                <Badge color={color}>{status}</Badge>
+                <Badge color={item.color}>{item.status}</Badge>
               </div>
             ))}
           </div>
+          {!rows.length&&<p className="text-sm text-[#476788]">Сотрудников пока нет.</p>}
           <Button variant="secondary" className="w-full mt-4" onClick={() => setEditing(true)}>Редактировать</Button>
         </div>
       )}
@@ -6387,51 +7091,35 @@ const TeamAccessSettingsBlock = ({ description, members }) => {
   );
 };
 
-const ClientSettingsView = () => {
-  const [payerStatus, setPayerStatus] = useState('Юридическое лицо');
-  const isLegalEntity = payerStatus === 'Юридическое лицо';
-  const legalDocumentsSection = (
-    <SettingsSection title="Юридические данные и документы" description="Используются в счетах, отчетах и проверках рекламодателя для маркировки." icon={FileText}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-        <SettingField label="Статус плательщика" className="min-w-0">
-          <CustomSelect
-            className="mt-2"
-            options={['Юридическое лицо', 'Физическое лицо']}
-            value={payerStatus}
-            onChange={setPayerStatus}
-          />
-        </SettingField>
+const TeamMemberSettingsView = () => <div className="max-w-3xl space-y-6">
+  <h1 className="font-display text-2xl font-bold text-[#0b3558]">Настройки аккаунта</h1>
+  <AccountSecuritySettings />
+</div>;
 
-        {isLegalEntity ? (
-          <React.Fragment key="legal-entity-fields">
-            <SettingField label="ИНН" className="min-w-0"><input className={settingInputClass} defaultValue="7700000000" /></SettingField>
-            <SettingField label="КПП" className="min-w-0"><input className={settingInputClass} defaultValue="770001001" /></SettingField>
-            <SettingField label="ОГРН" className="min-w-0"><input className={settingInputClass} defaultValue="1237700000000" /></SettingField>
-            <SettingField label="НДС" className="min-w-0"><CustomSelect className="mt-2" options={['20%', 'Без НДС', 'УСН']} /></SettingField>
-            <SettingField label="Юридический адрес" className="md:col-span-2 min-w-0"><input className={settingInputClass} defaultValue="125009, Москва, ул. Тверская, 1" /></SettingField>
-            <SettingField label="Документооборот" className="min-w-0"><CustomSelect className="mt-2" options={['ЭДО: Диадок', 'ЭДО: СБИС', 'Бумажные оригиналы']} /></SettingField>
-            <SettingField label="Идентификатор оператора ЭДО" className="min-w-0"><input className={settingInputClass} defaultValue="2BM-7700000000-770001001-2024010100000000000000000" /></SettingField>
-          </React.Fragment>
-        ) : (
-          <React.Fragment key="individual-fields">
-            <SettingField label="ФИО" className="min-w-0"><input className={settingInputClass} defaultValue="Александр Сергеевич Иванов" /></SettingField>
-            <SettingField label="ИНН физлица" className="min-w-0"><input className={settingInputClass} defaultValue="770000000000" /></SettingField>
-            <SettingField label="Дата рождения" className="min-w-0"><input className={settingInputClass} defaultValue="12.04.1988" /></SettingField>
-            <SettingField label="СНИЛС" className="min-w-0"><input className={settingInputClass} defaultValue="123-456-789 00" /></SettingField>
-            <SettingField label="Паспортные данные" className="md:col-span-2 min-w-0"><input className={settingInputClass} defaultValue="4510 123456, выдан ОМВД России по г. Москве 12.05.2010" /></SettingField>
-            <SettingField label="Адрес регистрации" className="md:col-span-2 min-w-0"><input className={settingInputClass} defaultValue="125009, Москва, ул. Тверская, 1, кв. 10" /></SettingField>
-            <SettingField label="Документооборот" className="min-w-0"><CustomSelect className="mt-2" options={['Электронная подпись', 'Бумажные оригиналы', 'Через представителя']} /></SettingField>
-            <SettingField label="Налоговый статус" className="min-w-0"><CustomSelect className="mt-2" options={['Физическое лицо', 'Самозанятый', 'ИП']} /></SettingField>
-          </React.Fragment>
-        )}
-      </div>
-      <div className="mt-6 rounded-lg border border-dashed border-[#0b3558] p-5 text-sm leading-6 text-[#476788] bg-[#f8f9fb]">
-        {isLegalEntity
-          ? 'Юрлицо заполняет реквизиты компании, налоговый режим и параметры ЭДО для счетов, отчетов и договоров.'
-          : 'Физлицо заполняет паспортные данные и адрес регистрации, чтобы платформа могла подготовить договор и закрывающие документы.'}
-      </div>
-      <div className="mt-6 flex justify-end"><Button variant="primary">Сохранить документы</Button></div>
-    </SettingsSection>
+const ClientSettingsView = () => {
+  const backend=useBackend();
+  if(backend.user.teamRole)return <TeamMemberSettingsView />;
+  const legalDocumentsSection = (
+    <AccountFieldsPanel title="Юридические данные и документы" description="Используются в счетах, отчетах и проверках рекламодателя для маркировки." icon={FileText} kind="requisites" submitLabel="Сохранить документы"
+      note={values=>values.payerStatus==='Физическое лицо'?'Физлицо заполняет паспортные данные и адрес регистрации, чтобы платформа могла подготовить договор и закрывающие документы.':'Юрлицо заполняет реквизиты компании, налоговый режим и параметры ЭДО для счетов, отчетов и договоров.'}
+      fields={[
+        {key:'payerStatus',label:'Статус плательщика',options:['Юридическое лицо','Физическое лицо']},
+        {key:'inn',label:'ИНН',when:v=>v.payerStatus!=='Физическое лицо'},
+        {key:'kpp',label:'КПП',when:v=>v.payerStatus!=='Физическое лицо'},
+        {key:'ogrn',label:'ОГРН',when:v=>v.payerStatus!=='Физическое лицо'},
+        {key:'vat',label:'НДС',options:['22%','УСН + НДС 5%','Без НДС','УСН'],when:v=>v.payerStatus!=='Физическое лицо'},
+        {key:'legalAddress',label:'Юридический адрес',wide:true,when:v=>v.payerStatus!=='Физическое лицо'},
+        {key:'documentFlow',label:'Документооборот',options:['ЭДО: Диадок','ЭДО: СБИС','Бумажные оригиналы'],when:v=>v.payerStatus!=='Физическое лицо'},
+        {key:'edoId',label:'Идентификатор оператора ЭДО',when:v=>v.payerStatus!=='Физическое лицо'},
+        {key:'personName',label:'ФИО',when:v=>v.payerStatus==='Физическое лицо'},
+        {key:'personInn',label:'ИНН физлица',when:v=>v.payerStatus==='Физическое лицо'},
+        {key:'birthDate',label:'Дата рождения',when:v=>v.payerStatus==='Физическое лицо'},
+        {key:'snils',label:'СНИЛС',when:v=>v.payerStatus==='Физическое лицо'},
+        {key:'passport',label:'Паспортные данные',wide:true,when:v=>v.payerStatus==='Физическое лицо'},
+        {key:'registrationAddress',label:'Адрес регистрации',wide:true,when:v=>v.payerStatus==='Физическое лицо'},
+        {key:'personDocumentFlow',label:'Документооборот',options:['Электронная подпись','Бумажные оригиналы','Через представителя'],when:v=>v.payerStatus==='Физическое лицо'},
+        {key:'taxStatus',label:'Налоговый статус',options:['Физическое лицо','Самозанятый','ИП'],when:v=>v.payerStatus==='Физическое лицо'},
+      ]} />
   );
 
   return (
@@ -6443,36 +7131,16 @@ const ClientSettingsView = () => {
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
-        <SettingsSection title="Профиль аккаунта" description="Эти данные видят только команда платформы и ваши сотрудники." icon={Briefcase}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <SettingField label="Название компании"><input className={settingInputClass} defaultValue="ООО Финтех Решения" /></SettingField>
-            <SettingField label="Ответственный"><input className={settingInputClass} defaultValue="Анна Морозова" /></SettingField>
-            <SettingField label="Рабочий почта"><input className={settingInputClass} defaultValue="client@example.ru" /></SettingField>
-            <SettingField label="Телефон"><input className={settingInputClass} defaultValue="+7 495 000-00-00" /></SettingField>
-	            <SettingField label="Часовой пояс"><CustomSelect options={['Москва, UTC+3', 'Екатеринбург, UTC+5', 'Новосибирск, UTC+7']} /></SettingField>
-	            <SettingField label="Язык интерфейса"><CustomSelect options={['Русский', 'English']} /></SettingField>
-          </div>
-          <div className="mt-6 flex justify-end"><Button variant="primary">Сохранить профиль</Button></div>
-        </SettingsSection>
+        <AccountFieldsPanel title="Профиль аккаунта" description="Эти данные видят только команда платформы и ваши сотрудники." icon={Briefcase} kind="profile" submitLabel="Сохранить профиль" fields={[
+          {key:'company',label:'Название компании'},
+          {key:'responsible',label:'Ответственный'},
+          {key:'workEmail',label:'Рабочий почта'},
+          {key:'phone',label:'Телефон'},
+          {key:'timezone',label:'Часовой пояс',options:['Москва, UTC+3','Екатеринбург, UTC+5','Новосибирск, UTC+7']},
+          {key:'language',label:'Язык интерфейса',options:['Русский','English']},
+        ]} />
 
-        <SettingsSection title="Безопасность" description="Смена пароля, двухфакторная защита и контроль активных сессий." icon={Lock}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <SettingField label="Текущий пароль"><input type="password" className={settingInputClass} defaultValue="password" /></SettingField>
-            <SettingField label="Новый пароль"><input type="password" className={settingInputClass} placeholder="Минимум 12 символов" /></SettingField>
-            <SettingField label="Подтверждение пароля"><input type="password" className={settingInputClass} placeholder="Повторите новый пароль" /></SettingField>
-	            <SettingField label="Двухфакторная защита"><CustomSelect options={['Включена: код на почту', 'Включить приложение-аутентификатор', 'Отключена']} /></SettingField>
-          </div>
-          <div className="mt-5 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-[#0b3558]">Активная сессия: Chrome, macOS</div>
-                <div className="text-xs text-[#476788] mt-1">Последняя активность сегодня, 12:44 · Москва</div>
-              </div>
-              <Button variant="secondary" size="sm">Завершить другие сессии</Button>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end"><Button variant="primary">Обновить безопасность</Button></div>
-        </SettingsSection>
+        <AccountSecuritySettings />
 
         {legalDocumentsSection}
       </div>
@@ -6497,13 +7165,7 @@ const ClientSettingsView = () => {
           ]}
         />
 
-        <SettingsSection title="Лимиты и согласования" description="Защита от случайной заморозки крупных сумм." icon={CreditCard}>
-          <div className="space-y-4">
-            <SettingField label="Лимит заказа без согласования"><input className={settingInputClass} defaultValue="100 000 ₽" /></SettingField>
-            <SettingField label="Автоприемка"><CustomSelect options={['Выключена', 'Через 72 часа без жалобы']} /></SettingField>
-          </div>
-          <Button variant="primary" className="w-full mt-5">Сохранить лимиты</Button>
-        </SettingsSection>
+        <OrderLimitsSettings />
       </div>
     </div>
   </div>
@@ -6511,9 +7173,8 @@ const ClientSettingsView = () => {
 };
 
 const PublisherSettingsView = () => {
-  const [payeeStatus, setPayeeStatus] = useState('Юридическое лицо');
-  const isLegalPayee = payeeStatus === 'Юридическое лицо';
-
+  const backend=useBackend();
+  if(backend.user.teamRole)return <TeamMemberSettingsView />;
   return (
   <div className="space-y-6 max-w-6xl">
     <div>
@@ -6523,86 +7184,45 @@ const PublisherSettingsView = () => {
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
-        <SettingsSection title="Профиль редакции" description="Данные аккаунта владельца площадок и основного контактного лица." icon={Store}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <SettingField label="Юридическое название"><input className={settingInputClass} defaultValue="ООО Редакция" /></SettingField>
-            <SettingField label="Ответственный редактор"><input className={settingInputClass} defaultValue="Редакция" /></SettingField>
-            <SettingField label="Почта для заказов"><input className={settingInputClass} defaultValue="publisher@example.ru" /></SettingField>
-            <SettingField label="Телефон"><input className={settingInputClass} defaultValue="+7 495 111-22-33" /></SettingField>
-            <SettingField label="Рабочие часы"><input className={settingInputClass} defaultValue="Пн-Пт, 10:00-19:00" /></SettingField>
-            <SettingField label="Автоответ при новых заявках"><CustomSelect className="mt-2" options={['Выключен', 'Включен: заявка получена']} /></SettingField>
-          </div>
-          <div className="mt-6 flex justify-end"><Button variant="primary">Сохранить профиль</Button></div>
-        </SettingsSection>
+        <AccountFieldsPanel title="Профиль редакции" description="Данные аккаунта владельца площадок и основного контактного лица." icon={Store} kind="profile" submitLabel="Сохранить профиль" fields={[
+          {key:'legalName',label:'Юридическое название'},
+          {key:'responsibleEditor',label:'Ответственный редактор'},
+          {key:'orderEmail',label:'Почта для заказов'},
+          {key:'phone',label:'Телефон'},
+          {key:'workingHours',label:'Рабочие часы'},
+          {key:'autoReply',label:'Автоответ при новых заявках',options:['Выключен','Включен: заявка получена']},
+        ]} />
 
-        <SettingsSection title="Безопасность" description="Пароль, 2FA и API-ключи для интеграций." icon={Lock}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <SettingField label="Текущий пароль"><input type="password" className={settingInputClass} defaultValue="password" /></SettingField>
-            <SettingField label="Новый пароль"><input type="password" className={settingInputClass} placeholder="Новый пароль" /></SettingField>
-            <SettingField label="Двухфакторная защита"><CustomSelect className="mt-2" options={['Включена: почта', 'Приложение-аутентификатор', 'Отключена']} /></SettingField>
-            <SettingField label="API-доступ"><CustomSelect className="mt-2" options={['Отключен', 'Только чтение заказов', 'Заказы и выплаты']} /></SettingField>
-          </div>
-          <div className="mt-6 flex flex-wrap justify-end gap-3"><Button variant="primary">Обновить безопасность</Button></div>
-        </SettingsSection>
+        <AccountSecuritySettings />
 
-        <SettingsSection title="Реквизиты выплат" description="Сюда платформа перечисляет выплаты после приемки заказов и удержания комиссии 15%." icon={CreditCard}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-            <SettingField label="Статус получателя" className="min-w-0">
-              <CustomSelect
-                className="mt-2"
-                options={['Юридическое лицо', 'Физическое лицо']}
-                value={payeeStatus}
-                onChange={setPayeeStatus}
-              />
-            </SettingField>
-            <SettingField label="График выплат" className="min-w-0">
-              <CustomSelect className="mt-2" options={['1 раз в месяц', '2 раза в месяц', 'По запросу после проверки']} />
-            </SettingField>
-
-            {isLegalPayee ? (
-              <React.Fragment key="publisher-legal-payee">
-                <SettingField label="Получатель" className="min-w-0"><input className={settingInputClass} defaultValue="ООО Редакция" /></SettingField>
-                <SettingField label="ИНН" className="min-w-0"><input className={settingInputClass} defaultValue="7701000000" /></SettingField>
-                <SettingField label="КПП" className="min-w-0"><input className={settingInputClass} defaultValue="770101001" /></SettingField>
-                <SettingField label="ОГРН" className="min-w-0"><input className={settingInputClass} defaultValue="1237701000000" /></SettingField>
-                <SettingField label="Расчетный счет" className="min-w-0"><input className={settingInputClass} defaultValue="40702810********4432" /></SettingField>
-                <SettingField label="Банк" className="min-w-0"><input className={settingInputClass} defaultValue="АО Банк" /></SettingField>
-                <SettingField label="БИК" className="min-w-0"><input className={settingInputClass} defaultValue="044525000" /></SettingField>
-                <SettingField label="НДС" className="min-w-0"><CustomSelect className="mt-2" options={['20%', 'Без НДС', 'УСН']} /></SettingField>
-                <SettingField label="Юридический адрес" className="md:col-span-2 min-w-0"><input className={settingInputClass} defaultValue="125009, Москва, ул. Тверская, 7" /></SettingField>
-                <SettingField label="Документооборот" className="min-w-0"><CustomSelect className="mt-2" options={['ЭДО: Диадок', 'ЭДО: СБИС', 'Бумажные оригиналы']} /></SettingField>
-                <SettingField label="Идентификатор оператора ЭДО" className="min-w-0"><input className={settingInputClass} defaultValue="2BM-7701000000-770101001-2024010100000000000000000" /></SettingField>
-              </React.Fragment>
-            ) : (
-              <React.Fragment key="publisher-individual-payee">
-                <SettingField label="ФИО" className="min-w-0"><input className={settingInputClass} defaultValue="Александр Сергеевич Иванов" /></SettingField>
-                <SettingField label="ИНН физлица" className="min-w-0"><input className={settingInputClass} defaultValue="770100000000" /></SettingField>
-                <SettingField label="Дата рождения" className="min-w-0"><input className={settingInputClass} defaultValue="12.04.1988" /></SettingField>
-                <SettingField label="СНИЛС" className="min-w-0"><input className={settingInputClass} defaultValue="123-456-789 00" /></SettingField>
-                <SettingField label="Банк" className="min-w-0"><input className={settingInputClass} defaultValue="АО Банк" /></SettingField>
-                <SettingField label="БИК" className="min-w-0"><input className={settingInputClass} defaultValue="044525000" /></SettingField>
-                <SettingField label="Номер счета" className="md:col-span-2 min-w-0"><input className={settingInputClass} defaultValue="40817810********7788" /></SettingField>
-                <SettingField label="Паспортные данные" className="md:col-span-2 min-w-0"><input className={settingInputClass} defaultValue="4510 123456, выдан ОМВД России по г. Москве 12.05.2010" /></SettingField>
-                <SettingField label="Адрес регистрации" className="md:col-span-2 min-w-0"><input className={settingInputClass} defaultValue="125009, Москва, ул. Тверская, 7, кв. 14" /></SettingField>
-                <SettingField label="Налоговый статус" className="min-w-0"><CustomSelect className="mt-2" options={['Физическое лицо', 'Самозанятый', 'ИП']} /></SettingField>
-                <SettingField label="Документооборот" className="min-w-0"><CustomSelect className="mt-2" options={['Электронная подпись', 'Бумажные оригиналы', 'Через представителя']} /></SettingField>
-              </React.Fragment>
-            )}
-          </div>
-          <div className="mt-6 rounded-lg border border-dashed border-[#0b3558] p-5 text-sm leading-6 text-[#476788] bg-[#f8f9fb]">
-            {isLegalPayee
-              ? 'Юрлицо заполняет реквизиты компании, налоговый режим и параметры ЭДО для выплат, отчетов и закрывающих документов.'
-              : 'Физлицо заполняет паспортные данные, счет и налоговый статус, чтобы платформа могла подготовить договор и выплаты.'}
-          </div>
-          <div className="mt-5 rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium text-[#0b3558]">Статус реквизитов: на проверке</div>
-              <div className="text-xs text-[#476788] mt-1">До подтверждения можно готовить запрос выплаты, но нельзя отправить его в обработку.</div>
-            </div>
-            <Badge color="amber">проверка</Badge>
-          </div>
-          <div className="mt-6 flex justify-end"><Button variant="primary">Отправить реквизиты на проверку</Button></div>
-        </SettingsSection>
+        <AccountFieldsPanel title="Реквизиты выплат" description={`Сюда платформа перечисляет выплаты после приемки заказов и удержания комиссии ${backend.data.commission.commissionBps/100}%.`} icon={CreditCard} kind="requisites" statusLabel submitLabel="Отправить реквизиты на проверку"
+          note={values=>values.payeeStatus==='Физическое лицо'?'Физлицо заполняет паспортные данные, счет и налоговый статус, чтобы платформа могла подготовить договор и выплаты.':'Юрлицо заполняет реквизиты компании, налоговый режим и параметры ЭДО для выплат, отчетов и закрывающих документов.'}
+          fields={[
+            {key:'payeeStatus',label:'Статус получателя',options:['Юридическое лицо','Физическое лицо']},
+            {key:'paymentSchedule',label:'График выплат',options:['1 раз в месяц','2 раза в месяц','По запросу после проверки']},
+            {key:'recipient',label:'Получатель',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'inn',label:'ИНН',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'kpp',label:'КПП',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'ogrn',label:'ОГРН',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'account',label:'Расчетный счет',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'bank',label:'Банк',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'bik',label:'БИК',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'vat',label:'НДС',options:['22%','УСН + НДС 5%','Без НДС','УСН'],when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'legalAddress',label:'Юридический адрес',wide:true,when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'documentFlow',label:'Документооборот',options:['ЭДО: Диадок','ЭДО: СБИС','Бумажные оригиналы'],when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'edoId',label:'Идентификатор оператора ЭДО',when:v=>v.payeeStatus!=='Физическое лицо'},
+            {key:'personName',label:'ФИО',when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'personInn',label:'ИНН физлица',when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'birthDate',label:'Дата рождения',when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'snils',label:'СНИЛС',when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'personBank',label:'Банк',when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'personBik',label:'БИК',when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'personAccount',label:'Номер счета',wide:true,when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'passport',label:'Паспортные данные',wide:true,when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'registrationAddress',label:'Адрес регистрации',wide:true,when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'taxStatus',label:'Налоговый статус',options:['Физическое лицо','Самозанятый','ИП'],when:v=>v.payeeStatus==='Физическое лицо'},
+            {key:'personDocumentFlow',label:'Документооборот',options:['Электронная подпись','Бумажные оригиналы','Через представителя'],when:v=>v.payeeStatus==='Физическое лицо'},
+          ]} />
       </div>
 
       <div className="space-y-6">
@@ -6665,7 +7285,7 @@ const publisherApplicationStatusColor = {
 
 const publisherAccountStatusColor = {
   'Не создан': 'gray',
-  'Приглашение отправлено': 'blue',
+  'Приглашение создано': 'blue',
   'Активен': 'green',
   'Заблокирован': 'red',
 };
@@ -6685,7 +7305,7 @@ const AdminPublisherApplicationsView = ({ applications, onOpenApplication, onCre
   });
 
   const filteredApplications = applications.filter((application) => {
-    const source = `${application.id} ${application.platform} ${application.legalName} ${application.applicant} ${application.email}`.toLowerCase();
+    const source = `${application.number} ${application.id} ${application.platform} ${application.legalName} ${application.applicant} ${application.email}`.toLowerCase();
     return source.includes(query.trim().toLowerCase())
       && (!statusFilter || statusFilter === 'Все статусы' || application.status === statusFilter)
       && (!typeFilter || typeFilter === 'Все типы' || application.platformType === typeFilter);
@@ -6694,25 +7314,17 @@ const AdminPublisherApplicationsView = ({ applications, onOpenApplication, onCre
   const createManualApplication = () => {
     if (!manualDraft.platform.trim() || !manualDraft.legalName.trim() || !manualDraft.email.trim()) return;
     onCreateApplication({
-      id: `PA-${String(applications.length + 15).padStart(3, '0')}`,
-      submittedAt: '23.07.2026, 15:20',
-      status: 'Одобрена',
-      accountStatus: 'Приглашение отправлено',
-      applicant: manualDraft.applicant || 'Не указан',
-      position: 'Представитель паблишера',
+      applicant: manualDraft.applicant,
+      position: '',
       email: manualDraft.email,
-      phone: 'Не указан',
-      relation: 'Подтвержденный представитель',
+      phone: '',
+      relation: '',
       platform: manualDraft.platform,
       platformType: manualDraft.platformType,
       platformUrl: '',
       legalName: manualDraft.legalName,
-      inn: manualDraft.inn || 'Не указан',
-      theme: 'Будет заполнено паблишером',
-      reach: 'Будет заполнено паблишером',
-      comment: 'Кабинет создан администратором без входящей анкеты.',
-      checks: { resource: true, legal: true, representative: true, duplicate: true },
-      decisionComment: 'Паблишер подтвержден администратором.',
+      inn: manualDraft.inn,
+      theme: '',reach:'',comment:'',
     });
     setManualOpen(false);
   };
@@ -6771,7 +7383,7 @@ const AdminPublisherApplicationsView = ({ applications, onOpenApplication, onCre
                   onClick={() => onOpenApplication(application.id)}
                 >
                   <td className="px-5 py-4">
-                    <div className="text-sm font-semibold text-[#006bff]">{application.id}</div>
+                    <div className="text-sm font-semibold text-[#006bff]">№{application.number}</div>
                     <div className="mt-1 text-xs text-[#476788]">{application.submittedAt}</div>
                   </td>
                   <td className="px-5 py-4">
@@ -6805,7 +7417,7 @@ const AdminPublisherApplicationsView = ({ applications, onOpenApplication, onCre
       <Modal isOpen={manualOpen} onClose={() => setManualOpen(false)} title="Создать паблишера" className="max-w-2xl">
         <div className="space-y-5">
           <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm leading-6 text-[#476788]">
-            Используйте ручное создание только для уже проверенного паблишера. Пользователь получит приглашение на почту и сам задаст пароль.
+            После создания проверьте данные заявки. Ссылку для доступа можно будет создать после одобрения.
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {[
@@ -6832,7 +7444,7 @@ const AdminPublisherApplicationsView = ({ applications, onOpenApplication, onCre
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setManualOpen(false)}>Отмена</Button>
-            <Button variant="primary" disabled={!manualDraft.platform.trim() || !manualDraft.legalName.trim() || !manualDraft.email.trim()} onClick={createManualApplication}>Создать и отправить приглашение</Button>
+            <Button variant="primary" disabled={!manualDraft.platform.trim() || !manualDraft.legalName.trim() || !manualDraft.email.trim()} onClick={createManualApplication}>Создать заявку</Button>
           </div>
         </div>
       </Modal>
@@ -6840,10 +7452,12 @@ const AdminPublisherApplicationsView = ({ applications, onOpenApplication, onCre
   );
 };
 
-const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateApplication }) => {
+const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateApplication, onInvite, onDelete }) => {
   const [comment, setComment] = useState(application?.decisionComment || '');
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState(application?.email || '');
+  const [inviteLink,setInviteLink]=useState('');
 
   useEffect(() => {
     setComment(application?.decisionComment || '');
@@ -6864,9 +7478,9 @@ const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateAp
     if (['Нужны данные', 'Отклонена'].includes(status) && !comment.trim()) return;
     update({ status, decisionComment: comment });
   };
-  const sendInvite = () => {
-    update({ status: 'Одобрена', accountStatus: 'Приглашение отправлено', email: inviteEmail });
-    setInviteOpen(false);
+  const sendInvite = async () => {
+    const token=await onInvite(application.id);
+    if(token){setInviteLink(`${location.origin}/?invite=${encodeURIComponent(token)}`);setInviteOpen(false);}
   };
 
   const checkItems = [
@@ -6892,7 +7506,7 @@ const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateAp
       <div className="flex flex-col gap-4 border-b border-[#d4e0ed] pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-2xl font-bold text-[#0b3558]">Заявка {application.id}</h1>
+            <h1 className="font-display text-2xl font-bold text-[#0b3558]">Заявка №{application.number}</h1>
             <Badge color={publisherApplicationStatusColor[application.status]}>{application.status}</Badge>
           </div>
           <p className="mt-1 text-sm text-[#476788]">{application.platform} · поступила {application.submittedAt}</p>
@@ -6911,7 +7525,7 @@ const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateAp
                 <h2 className="font-display text-lg font-bold">Данные заявки</h2>
                 <p className="mt-1 text-sm text-[#476788]">Контакт, площадка и юридическое лицо из анкеты.</p>
               </div>
-              <span className="text-xs font-medium text-[#6b86a4]">{application.id}</span>
+              <span className="text-xs font-medium text-[#6b86a4]">№{application.number}</span>
             </div>
             <div>
               <section className="p-6">
@@ -7016,7 +7630,7 @@ const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateAp
                 <Button variant="primary" disabled={!approveReady} onClick={() => makeDecision('Одобрена')}>Одобрить заявку</Button>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                   <Button variant="secondary" disabled={!comment.trim()} onClick={() => makeDecision('Нужны данные')}>Запросить данные</Button>
-                  <Button variant="danger" disabled={!comment.trim()} onClick={() => makeDecision('Отклонена')}>Отклонить</Button>
+                  <Button variant="danger" disabled={!comment.trim() || application.accountStatus === 'Активен' || application.status === 'Отклонена'} onClick={() => makeDecision('Отклонена')}>Отклонить</Button>
                 </div>
               </div>
             </div>
@@ -7026,32 +7640,37 @@ const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateAp
                 <h3 className="font-display text-base font-bold">Доступ паблишера</h3>
               {application.accountStatus === 'Не создан' && (
                 <>
-                  <p className="mt-2 text-sm leading-6 text-[#476788]">Создайте организацию паблишера и отправьте владельцу приглашение.</p>
-                  <Button className="mt-5 w-full" variant="primary" onClick={() => setInviteOpen(true)}>Создать кабинет</Button>
+                  <p className="mt-2 text-sm leading-6 text-[#476788]">Создайте ссылку для доступа владельца к кабинету.</p>
+                  <Button className="mt-5 w-full" variant="primary" onClick={() => setInviteOpen(true)}>Создать приглашение</Button>
                 </>
               )}
-              {application.accountStatus === 'Приглашение отправлено' && (
+              {application.accountStatus === 'Приглашение создано' && (
                 <div className="mt-4 space-y-4">
                   <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4">
-                    <div className="text-xs text-[#476788]">Приглашение отправлено</div>
+                    <div className="text-xs text-[#476788]">Приглашение создано</div>
                     <div className="mt-1 break-all text-sm font-semibold">{application.email}</div>
                   </div>
-                  <Button className="w-full" variant="primary" onClick={() => update({ accountStatus: 'Активен' })}>Активировать кабинет</Button>
-                  <Button className="w-full" variant="secondary">Отправить повторно</Button>
+                  {inviteLink&&<div className="flex min-w-0 items-center gap-2"><input readOnly aria-label="Ссылка приглашения паблишера" className="min-w-0 flex-1 rounded-lg border border-[#d4e0ed] bg-white px-3 py-2 text-xs" value={inviteLink}/><CopyButton value={inviteLink} label="Скопировать приглашение" /></div>}
+                  <Button className="w-full" variant="secondary" onClick={sendInvite}>Создать новую ссылку</Button>
                 </div>
               )}
               {application.accountStatus === 'Активен' && (
                 <div className="mt-4 rounded-xl border border-[#b7ebca] bg-[#effcf4] p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-[#15803d]"><CheckCircle2 className="h-4 w-4" /> Кабинет активен</div>
-                  <p className="mt-2 text-xs leading-5 text-[#476788]">Площадка создана как черновик и проходит отдельную модерацию перед публикацией в каталоге.</p>
+                  <p className="mt-2 text-xs leading-5 text-[#476788]">Владелец принял приглашение и задал пароль.</p>
                 </div>
               )}
               </div>
             )}
           </Card>
+          <Button variant="danger" className="mt-4 w-full" onClick={() => setDeleteOpen(true)}>Удалить заявку</Button>
         </aside>
       </div>
 
+      <Modal isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} title="Удалить заявку" className="max-w-md">
+        <p className="text-sm text-[#476788]">Заявка №{application.number} исчезнет из рабочего списка. Решения и аудит сохранятся; приглашение перестанет действовать. Уже созданный кабинет останется доступен.</p>
+        <div className="mt-5 flex justify-end gap-3"><Button variant="secondary" onClick={() => setDeleteOpen(false)}>Отмена</Button><Button variant="danger" onClick={async () => {if(await onDelete(application.id)){setDeleteOpen(false);navigate('admin_publisher_applications');}}}>Удалить заявку</Button></div>
+      </Modal>
       <Modal isOpen={inviteOpen} onClose={() => setInviteOpen(false)} title="Создать кабинет паблишера" className="max-w-2xl">
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -7060,14 +7679,14 @@ const AdminPublisherApplicationDetailView = ({ application, navigate, onUpdateAp
           </div>
           <label className="block">
             <span className="text-sm font-medium text-[#476788]">Почта владельца кабинета</span>
-            <input type="email" className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} />
+            <input type="email" readOnly className="mt-2 h-[42px] w-full rounded-lg border border-[#476788] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" value={inviteEmail} />
           </label>
           <div className="rounded-xl border border-[#d4e0ed] bg-[#f8f9fb] p-4 text-sm leading-6 text-[#476788]">
-            Пароль не задается администратором. Владелец получит одноразовую ссылку, подтвердит почту и настроит вход.
+            Пароль не задается администратором. Скопируйте ссылку после создания и передайте ее владельцу площадки.
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setInviteOpen(false)}>Отмена</Button>
-            <Button variant="primary" disabled={!inviteEmail.trim()} onClick={sendInvite}>Создать и отправить приглашение</Button>
+            <Button variant="primary" disabled={!inviteEmail.trim()} onClick={sendInvite}>Создать ссылку</Button>
           </div>
         </div>
       </Modal>
@@ -7099,6 +7718,7 @@ const AdminInformerEditorPage = ({
   onPause,
 }) => {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const mockCatalog=useBackend().data.outlets.filter(o=>o.status==='approved'&&o.active);
   const [pendingSelectionIds, setPendingSelectionIds] = useState([]);
   const [pickerQuery, setPickerQuery] = useState('');
   const [pickerType, setPickerType] = useState(undefined);
@@ -7382,6 +8002,7 @@ const AdminInformerEditorPage = ({
 };
 
 const AdminInformerView = ({ items, onChangeItems }) => {
+  const backend=useBackend();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState(undefined);
   const [formatFilter, setFormatFilter] = useState(undefined);
@@ -7397,7 +8018,7 @@ const AdminInformerView = ({ items, onChangeItems }) => {
     icon: 'store',
     accent: 'blue',
     status: 'Черновик',
-    startsAt: '23.07.2026',
+    startsAt: new Date().toLocaleDateString('ru-RU'),
     endsAt: 'Без срока',
     selectionIds: [],
     packagePrice: '',
@@ -7413,7 +8034,7 @@ const AdminInformerView = ({ items, onChangeItems }) => {
     && (!formatFilter || formatFilter === 'Все форматы' || getInformerFormat(item) === formatFilter)
   ));
   const PreviewIcon = iconMap[draft.icon] || FileText;
-  const selectionOptions = getInformerSelectionOptions(draft.format);
+  const selectionOptions = getInformerSelectionOptions(draft.format, backend.data.outlets.filter(o=>o.status==='approved'&&o.active));
   const selectedContent = selectionOptions.filter((option) => (draft.selectionIds || []).includes(option.value));
   const requiresSelection = draft.format === 'Подборка площадок';
   const validTargetUrl = draft.format !== 'Внешняя ссылка' || /^https?:\/\/\S+$/i.test(draft.targetUrl || '');
@@ -7439,23 +8060,22 @@ const AdminInformerView = ({ items, onChangeItems }) => {
       : { ...emptyDraft, selectionIds: [], packagePrice: '', targetUrl: '' });
     setEditorOpen(true);
   };
-  const saveItem = (status = draft.status) => {
+  const saveItem = async (status = draft.status) => {
     if (!validDraft) return;
     const nextItem = {
       ...draft,
-      id: editingId || `INF-${String(items.length + 1).padStart(3, '0')}`,
+      id: editingId || crypto.randomUUID(),
       status,
-      updatedAt: '23.07.2026, 15:20',
+      updatedAt: new Date().toLocaleString('ru-RU'),
     };
-    onChangeItems((currentItems) => editingId
+    const saved=await onChangeItems((currentItems) => editingId
       ? currentItems.map((item) => item.id === editingId ? nextItem : item)
       : [nextItem, ...currentItems]);
-    setEditorOpen(false);
+    if(saved)setEditorOpen(false);
   };
-  const pauseItem = () => {
+  const pauseItem = async () => {
     if (!editingId) return;
-    onChangeItems((currentItems) => currentItems.map((item) => item.id === editingId ? { ...item, status: 'Приостановлен', updatedAt: '23.07.2026, 15:20' } : item));
-    setEditorOpen(false);
+    if(await onChangeItems((currentItems) => currentItems.map((item) => item.id === editingId ? { ...item, status: 'Приостановлен', updatedAt: new Date().toLocaleString('ru-RU') } : item)))setEditorOpen(false);
   };
 
   if (editorOpen) {
@@ -7658,14 +8278,16 @@ const AdminInformerView = ({ items, onChangeItems }) => {
   );
 };
 
-const AdminExpeditedModerationQueue = ({ navigate, onSelect }) => (
+const AdminExpeditedModerationQueue = ({ navigate, onSelect }) => {
+  const mockExpeditedModeration = useBackend().data.materials.filter(m=>m.apiStatus==='pending' && m.expedited).sort((a,b)=>a.submitted_at.localeCompare(b.submitted_at)).map(m=>({id:m.id,number:materialNumber(m),title:m.name,customer:m.owner_id,submittedAt:new Date(m.submitted_at).toLocaleString('ru-RU'),deadline:'Приоритетная проверка',row:[m.id,m.name,m.type,m.status,'Проверить']}));
+  return (
   <Card className="overflow-hidden border-[#ffd98f]">
     <div className="flex items-center gap-3 border-b border-[#ffe3aa] bg-[#fff9ec] px-6 py-5">
       <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#fff0c9] text-[#b46b00]">
         <Zap className="h-5 w-5" />
       </span>
       <h2 className="font-display text-base font-bold text-[#0b3558]">Ускоренная модерация</h2>
-      <Badge color="amber">{mockExpeditedModeration.length} материала</Badge>
+      <Badge color="amber">{mockExpeditedModeration.length} {new Intl.PluralRules('ru').select(mockExpeditedModeration.length)==='one'?'материал':new Intl.PluralRules('ru').select(mockExpeditedModeration.length)==='few'?'материала':'материалов'}</Badge>
     </div>
     <div className="divide-y divide-[#d4e0ed]">
       {mockExpeditedModeration.map((material) => (
@@ -7677,10 +8299,10 @@ const AdminExpeditedModerationQueue = ({ navigate, onSelect }) => (
             ? onSelect('admin_moderation', material.row, 'admin_moderation_detail')
             : navigate('admin_moderation_detail')}
         >
-          <span className="text-sm font-semibold text-[#006bff]">{material.id}</span>
+          <span className="text-sm font-semibold text-[#006bff]">№{material.number}</span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-[#0b3558]">{material.title}</span>
-            <span className="mt-1 block text-xs text-[#476788]">{material.customer} · поступил {material.submittedAt}</span>
+            <span className="mt-1 block text-xs text-[#476788]">Поступил {material.submittedAt}</span>
           </span>
           <span className="text-sm font-medium tabular-nums text-[#8a5700]">{material.deadline}</span>
           <ChevronRight className="h-4 w-4 text-[#6b86a4]" />
@@ -7688,16 +8310,18 @@ const AdminExpeditedModerationQueue = ({ navigate, onSelect }) => (
       ))}
     </div>
   </Card>
-);
+); };
 
-const AdminDashboardView = ({ navigate, onSelect }) => (
+const AdminDashboardView = ({ navigate, onSelect }) => {
+  const {data}=useBackend();
+  const queue=[...data.materials.filter(m=>m.apiStatus==='pending'&&!m.expedited).map(m=>({id:m.id,number:`№${materialNumber(m)}`,object:m.name,type:'Материал',risk:'Обычный',status:m.status,color:'blue',section:'admin_moderation',route:'admin_moderation_detail'})),...data.orders.filter(o=>o.apiStatus==='disputed').map(o=>({id:o.id,number:`Спор №${o.dispute_number}`,object:o.material,type:'Спор',risk:'Требует решения',status:o.status,color:'amber',section:'admin_orders',route:'admin_dispute_detail'}))];
+  return (
   <div className="space-y-8">
-    <h1 className="font-display text-2xl font-bold text-[#0b3558]">Админ-панель</h1>
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Материалы</div><div className="text-2xl font-semibold mt-2">18</div></Card>
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Заказы в споре</div><div className="text-2xl font-semibold mt-2">7</div></Card>
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Заморожено</div><div className="text-2xl font-semibold mt-2">12,4 млн ₽</div></Card>
-      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Комиссия 15%</div><div className="text-2xl font-semibold mt-2">1,8 млн ₽</div></Card>
+      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Материалы</div><div className="text-2xl font-semibold mt-2">{data.materials.length}</div></Card>
+      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Заказы в споре</div><div className="text-2xl font-semibold mt-2">{data.orders.filter(o=>o.apiStatus==='disputed').length}</div></Card>
+      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Резерв заказов</div><div className="text-2xl font-semibold mt-2">{formatMoney(data.orders.reduce((sum,o)=>sum+o.frozen,0))}</div></Card>
+      <Card className="p-5"><div className="text-xs text-[#476788] uppercase">Комиссия завершённых заказов</div><div className="text-2xl font-semibold mt-2">{formatMoney(data.orders.filter(o=>o.apiStatus==='completed').reduce((sum,o)=>sum+(o.amount-o.payout)/100,0))}</div></Card>
     </div>
     <AdminExpeditedModerationQueue navigate={navigate} onSelect={onSelect} />
     <Card className="overflow-hidden">
@@ -7705,12 +8329,12 @@ const AdminDashboardView = ({ navigate, onSelect }) => (
       <table className="min-w-full divide-y divide-[#d4e0ed]">
         <thead className="bg-[#f8f9fb]"><tr><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Номер</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Объект</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Тип</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Риск</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Статус</th></tr></thead>
         <tbody className="divide-y divide-[#d4e0ed]">
-          {mockAdminQueue.map(item => <tr key={item.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => navigate(item.type === 'Спор' ? 'admin_dispute_detail' : 'admin_moderation_detail')}><td className="px-6 py-4 text-sm font-medium">{item.id}</td><td className="px-6 py-4 text-sm text-[#476788]">{item.object}</td><td className="px-6 py-4 text-sm text-[#476788]">{item.type}</td><td className="px-6 py-4 text-sm text-[#476788]">{item.risk}</td><td className="px-6 py-4"><Badge color={item.color}>{item.status}</Badge></td></tr>)}
+          {queue.map(item => <tr key={item.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => onSelect(item.section,[item.id,item.object,item.type,item.status],item.route)}><td className="px-6 py-4 text-sm font-medium">{item.number}</td><td className="px-6 py-4 text-sm text-[#476788]">{item.object}</td><td className="px-6 py-4 text-sm text-[#476788]">{item.type}</td><td className="px-6 py-4 text-sm text-[#476788]">{item.risk}</td><td className="px-6 py-4"><Badge color={item.color}>{item.status}</Badge></td></tr>)}
         </tbody>
       </table>
     </Card>
   </div>
-);
+);};
 
 const AdminPlatformsCatalogView = ({ navigate, onSelect }) => {
   const [query, setQuery] = useState('');
@@ -7845,7 +8469,11 @@ const AdminPlatformsCatalogView = ({ navigate, onSelect }) => {
 };
 
 const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect }) => {
-  const data = mockAdminSections[section] || mockAdminSections.admin_moderation;
+  const backend = useBackend();
+  const data = {...(mockAdminSections[section] || mockAdminSections.admin_moderation),rows:section==='admin_moderation'
+    ? backend.data.materials.filter(m=>m.apiStatus==='pending'&&!m.expedited).map(m=>[m.id,m.name,m.type,m.status,'Проверить'])
+    : section==='admin_orders' ? backend.data.orders.map(o=>[o.id,o.material,o.status,o.platform,'Открыть'])
+    : section==='admin_payouts' ? backend.data.payouts.map(p=>[p.id,p.publisher_email,{pending:'На проверке',approved:'Ожидает перечисления',transferred:'Перечислена',returned:'Возвращена',rejected:'Отклонена'}[p.status],formatMoney(Number(p.amount)/100),p.status==='pending'?'Рассмотреть':'Открыть']) : []};
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('Все статусы');
   const [userTypeFilter, setUserTypeFilter] = useState('Все типы');
@@ -7865,7 +8493,8 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
     admin_audit: 'admin_audit_detail',
   }[section];
   const filteredRows = data.rows.filter((row) => {
-    const matchesQuery = row.join(' ').toLowerCase().includes(query.toLowerCase());
+    const publicNumber=section==='admin_orders'?backend.data.orders.find(o=>o.id===row[0])?.number:section==='admin_payouts'?backend.data.payouts.find(p=>p.id===row[0])?.number:section==='admin_moderation'?backend.data.materials.find(m=>m.id===row[0])?.number:'';
+    const matchesQuery = `${publicNumber} ${row.join(' ')}`.toLowerCase().includes(query.trim().replace(/^[№#]\s*/, '').toLowerCase());
     const matchesUserType = section !== 'admin_users' || userTypeFilter === 'Все типы' || row[2] === userTypeFilter;
     const matchesStatus = section === 'admin_users'
       ? statusFilter === 'Все статусы' || row[3] === statusFilter
@@ -7883,7 +8512,7 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
           <h1 className="font-display text-2xl font-bold text-[#0b3558]">{data.title}</h1>
           <p className="text-sm text-[#476788] mt-1">Операционный раздел админки с отдельными действиями и подтверждениями.</p>
         </div>
-        <Button variant="secondary" onClick={() => setExported(true)}><Download className="h-4 w-4" /> {exported ? 'Экспорт готов' : 'Экспорт'}</Button>
+        <Button variant="secondary" onClick={() => section==='admin_payouts'?downloadFromApi('/admin/payouts/export.csv'):setExported(true)}><Download className="h-4 w-4" /> {section==='admin_payouts'?'Экспорт':exported?'Экспорт готов':'Экспорт'}</Button>
       </div>
       <div className={`grid grid-cols-1 gap-3 ${section === 'admin_users' ? 'md:grid-cols-[1fr_190px_190px_190px]' : 'md:grid-cols-[1fr_220px_220px]'}`}>
         <div className="relative">
@@ -7908,11 +8537,11 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
         <table className="min-w-[900px] w-full divide-y divide-[#d4e0ed]">
-          <thead className="bg-[#f8f9fb]"><tr><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Номер / объект</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Тип / сумма</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Статус</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Контекст</th><th className="px-6 py-4 text-right text-xs font-medium text-[#476788] uppercase">Действие</th></tr></thead>
+          <thead className="bg-[#f8f9fb]"><tr><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">{section==='admin_orders'?'Номер заказа':'Номер / объект'}</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">{section==='admin_orders'?'Материал':'Тип / сумма'}</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">Статус</th><th className="px-6 py-4 text-left text-xs font-medium text-[#476788] uppercase">{section==='admin_orders'?'Площадка':'Контекст'}</th><th className="px-6 py-4 text-right text-xs font-medium text-[#476788] uppercase">Действие</th></tr></thead>
           <tbody className="divide-y divide-[#d4e0ed]">
             {filteredRows.map((row) => (
               <tr key={row.join('-')} className="hover:bg-[#f8f9fb] cursor-pointer" onClick={() => detailRoute && (onSelect ? onSelect(section, row, detailRoute) : navigate(detailRoute))}>
-                <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">{row[0]}</td>
+                <td className="px-6 py-4 text-sm font-medium text-[#0b3558]">{section==='admin_orders' ? `№${backend.data.orders.find(o=>o.id===row[0])?.number ?? '—'}` : section==='admin_payouts'?`W-${backend.data.payouts.find(p=>p.id===row[0])?.number??'—'}`:section==='admin_moderation'?`№${backend.data.materials.find(m=>m.id===row[0])?.number??'—'}`:row[0]}</td>
                 <td className="px-6 py-4 text-sm text-[#476788]">{row[1]}</td>
                 <td className="px-6 py-4"><Badge color={String(row[2]).includes('Удержание') || String(row[2]).includes('Риск') ? 'red' : 'blue'}>{row[2]}</Badge></td>
                 <td className="px-6 py-4 text-sm text-[#476788]">{row[3]}</td>
@@ -7928,52 +8557,58 @@ const AdminWorklistView = ({ section = 'admin_moderation', navigate, onSelect })
   );
 };
 
-const AdminOrderDetailView = ({ navigate, selection }) => {
-  const [result, setResult] = useState('');
-  const row = selection?.row || mockAdminSections.admin_orders.rows[0];
+const AdminOrderDetailView = ({ navigate, selection, orderId }) => {
+  const backend=useBackend();
+  const [result,setResult]=useState('');
+  const order=backend.data.orders.find(o=>o.id===(orderId||selection?.row?.[0]));
+  const fromUser=new URLSearchParams(location.search).get('from_user');
+  const back=()=>fromUser?navigate('admin_users',{admin_user:fromUser,user_tab:'orders'}):navigate('admin_orders');
+  if(!order)return <Card className="p-6"><Button variant="secondary" onClick={back}>{fromUser?'К пользователю':'Выбрать заказ'}</Button></Card>;
+  const format=({article:'Статья',news:'Новость',post:'Пост',longread:'Лонгрид'})[order.snapshot.format];
+  const statusCopy={
+    pending:['Ожидается решение площадки','Заказ передан паблишеру. Средства заморожены до принятия или отказа.'],
+    accepted:['Ожидается публикация','Площадка приняла заказ. Средства остаются замороженными до завершения размещения.'],
+    submitted:['Ожидается решение заказчика','Площадка отправила ссылку. Средства остаются замороженными до приемки публикации или открытия спора.'],
+    completed:['Заказ завершен','Публикация принята, выплата и комиссия зафиксированы в финансовом журнале.'],
+    rejected:['Площадка отказалась от заказа','Заказ отклонен паблишером, резерв освобожден и средства возвращены заказчику.'],
+    disputed:['Заказ находится в споре','Средства на холде. Решение принимается в связанной карточке спора.'],
+    refunded:['Средства возвращены заказчику','Спор завершен возвратом, финансовые операции зафиксированы.'],
+  }[order.apiStatus];
   return (
-  <div className="space-y-6 max-w-5xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('admin_orders')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К заказам
+  <div className="space-y-6 max-w-5xl mx-auto" data-order-state={order.apiStatus}>
+    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={back}>
+      <ChevronRight className="w-4 h-4 rotate-180" /> {fromUser?'К пользователю':'К заказам'}
     </button>
     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Админ: заказ {row[0]}</h1>
+        <h1 className="font-display text-2xl font-bold text-[#0b3558]">Заказ №{order.number}</h1>
         <p className="text-sm text-[#476788] mt-1">Полная карточка заказа для контроля споров, финансов и публикации.</p>
       </div>
-      <Badge color="indigo">{row[1]}</Badge>
+      <Badge color={order.statusColor}>{order.status}</Badge>
     </div>
     <Card className="p-6">
       <div className="flex flex-col md:flex-row md:items-start gap-5">
         <div className="w-11 h-11 rounded-full border border-[#d4e0ed] bg-[#f8f9fb] flex items-center justify-center"><Clock className="w-5 h-5 text-[#006bff]" /></div>
-        <div className="flex-1"><h2 className="font-display text-lg font-bold">Ожидается решение заказчика</h2><p className="mt-1 text-sm text-[#476788]">Площадка отправила ссылку. Средства остаются замороженными до приемки публикации или открытия спора.</p><div className="mt-4 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => navigate('admin_order_chat')}>Открыть чат заказа</Button><Button variant="secondary" onClick={() => navigate('admin_dispute_detail')}>Связанные споры</Button></div></div>
+        <div className="flex-1"><h2 className="font-display text-lg font-bold">{statusCopy[0]}</h2><p className="mt-1 text-sm text-[#476788]">{statusCopy[1]}</p><div className="mt-4 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => navigate('admin_order_chat',fromUser?{order:order.id,from_user:fromUser,user_tab:'orders'}:undefined)}>Открыть чат заказа</Button><Button variant="secondary" onClick={() => navigate('admin_dispute_detail')}>{order.dispute_number?`Спор №${order.dispute_number}`:'Связанные споры'}</Button></div></div>
       </div>
     </Card>
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <Card className="p-6 lg:col-span-2">
         <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Состав заказа</h2>
-        <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">Материал</div><div className="mt-1 text-lg font-semibold">Пресс-релиз: Запуск новой платформы</div><div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">{[['Заказчик', 'Заказчик #842'], ['Площадка', 'РБК Инвестиции'], ['Формат', 'Статья']].map(([label, value]) => <div key={label} className="rounded-lg border border-[#d4e0ed] bg-white p-3"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 text-sm font-medium">{value}</div></div>)}</div></div>
-        <div className="mt-4 rounded-lg border border-[#d4e0ed] p-4"><div className="flex justify-between gap-3 text-sm"><span className="text-[#476788]">Ссылка на публикацию</span><a className="text-[#006bff]" href="https://invest.rbc.ru/news/652a9f">invest.rbc.ru/news/652a9f</a></div></div>
+        <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">Материал</div><div className="mt-1 text-lg font-semibold">{order.material}</div><div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">{[['Заказчик',`Заказчик #${String(order.customer_id).slice(0,8)}`],['Площадка',order.platform],['Формат',format]].map(([label,value])=><div key={label} className="rounded-lg border border-[#d4e0ed] bg-white p-3"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 text-sm font-medium">{value}</div></div>)}</div></div>
+        <div className="mt-4 rounded-lg border border-[#d4e0ed] p-4"><div className="flex flex-col justify-between gap-2 text-sm sm:flex-row"><span className="text-[#476788]">Ссылка на публикацию</span>{order.publication_url?<a className="break-all text-[#006bff]" href={order.publication_url} target="_blank" rel="noopener noreferrer">{order.publication_url}</a>:<span className="text-[#476788]">Еще не загружена</span>}</div></div>
       </Card>
-      <Card className="p-6">
-        <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Админские действия</h2>
-        <div className="space-y-2">
-          <Button variant="secondary" className="w-full" onClick={() => setResult('Запрос доказательств отправлен обеим сторонам.')}>Запросить доказательства</Button>
-          <Button variant="secondary" className="w-full" onClick={() => setResult('Удержание создано и ожидает подтверждения финансового контролера.')}>Применить удержание</Button>
-          <Button variant="primary" className="w-full" onClick={() => navigate('admin_dispute_detail')}>Открыть решение спора</Button>
-        </div>
-        <div className="mt-4"><ActionResult text={result} /></div>
-      </Card>
+      <Card className="p-6"><h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Админские действия</h2><div className="space-y-2"><Button variant="secondary" className="w-full" onClick={()=>setResult('Запрос доказательств отправлен обеим сторонам.')}>Запросить доказательства</Button><Button variant="secondary" className="w-full" onClick={()=>setResult('Удержание создано и ожидает подтверждения финансового контролера.')}>Применить удержание</Button><Button variant="primary" className="w-full" onClick={()=>navigate('admin_dispute_detail')}>Открыть решение спора</Button></div><div className="mt-4"><ActionResult text={result}/></div></Card>
     </div>
-    <OrderMaterialContent context="admin" showCopyActions />
+    <LiveMaterialContent material={order.snapshot} copy preserveOrderLayout />
     <Card className="p-6">
       <h2 className="font-display text-base font-bold mb-4">Финансы заказа</h2>
       <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ['Стоимость', formatMoney(150000)],
-          ['Заморожено', formatMoney(150000)],
-          ['Комиссия', formatMoney(22500)],
-          ['К выплате паблишеру', formatMoney(127500)],
+          ['Стоимость', formatMoney(order.price)],
+          ['Заморожено', formatMoney(order.frozen)],
+          ['Комиссия по условиям заказа', formatMoney((order.amount-order.payout)/100)],
+          ['Вознаграждение паблишера', formatMoney(order.payout/100)],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
             <div className="text-xs text-[#476788]">{label}</div>
@@ -7986,42 +8621,58 @@ const AdminOrderDetailView = ({ navigate, selection }) => {
   );
 };
 
-const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => {
+const AdminModerationDetailView = ({ navigate, selection, materialId, onOpenPublisher }) => {
+  const backend = useBackend();
   const [comment, setComment] = useState('');
   const [result, setResult] = useState('');
+  const [pendingDecision, setPendingDecision] = useState('');
+  const [advertiser, setAdvertiser] = useState(null);
+  const [advertiserError, setAdvertiserError] = useState('');
   const [linksOpen, setLinksOpen] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
-  const row = selection?.row || mockAdminSections.admin_moderation.rows[0];
+  const row = materialId ? [materialId] : selection?.row || mockAdminSections.admin_moderation.rows[0];
+  const liveMaterial = backend.data.materials.find(m=>m.id===row[0]);
+  const materialSettings = liveMaterial ? Object.entries({tags:'Тэги',title:'Title',description:'Description',desiredUrl:'Желаемый URL',notes:'Примечание и ТЗ'}).filter(([key])=>liveMaterial.metadata?.[key]).map(([key,label])=>[label,liveMaterial.metadata[key]]) : [];
+  const materialLinks = liveMaterial ? materialBodyLinks(liveMaterial.body) : [];
+  useEffect(()=>{
+    let active=true;
+    setAdvertiser(null);setAdvertiserError('');
+    if(liveMaterial?.advertiserId) api(`/admin/advertisers/${liveMaterial.advertiserId}`).then(value=>{if(active)setAdvertiser(value);}).catch(error=>{if(active)setAdvertiserError(error.message);});
+    return()=>{active=false;};
+  },[liveMaterial?.advertiserId]);
   const isPlatform = String(row[0]).startsWith('#P-');
   const moderationOrder = {
-    material: row[0] === '#M-1054' ? 'Интервью с генеральным директором' : 'Пресс-релиз: Запуск новой платформы',
+    material: row[0] === '№1054' ? 'Интервью с генеральным директором' : 'Пресс-релиз: Запуск новой платформы',
     platform: 'РБК Инвестиции',
     customer: 'Заказчик #842',
     advertiser: 'ООО "Финтех Решения"',
     format: 'Статья',
-    amount: row[0] === '#M-1054' ? 60000 : 127500,
-    deadline: row[0] === '#M-1054' ? 'публикация до 22.10.2023' : 'публикация до 20.10.2023',
+    amount: row[0] === '№1054' ? 60000 : 127500,
+    deadline: row[0] === '№1054' ? 'публикация до 22.10.2023' : 'публикация до 20.10.2023',
   };
-  const submitDecision = (decision) => {
+  const submitDecision = async (decision) => {
     if (decision !== 'Принят' && !comment.trim()) {
       setResult('Добавьте комментарий: он обязателен при отклонении.');
       return;
     }
-    setResult(`${isPlatform ? 'Площадка' : 'Материал'}: ${decision.toLowerCase()}. Решение сохранено в журнале аудита.`);
+    const ok = await backend.perform(async () => {
+      if(!liveMaterial) throw new Error('Материал не найден');
+      await api(`/moderation/${liveMaterial.id}`,'POST',{approved:decision==='Принят',reason:comment});await backend.refresh();
+    });
+    if(ok) {setPendingDecision('');setResult(`Материал: ${decision.toLowerCase()}. Решение сохранено в журнале аудита.`);}
   };
   const publisherProfileRow = mockAdminSections.admin_users.rows.find((userRow) => userRow[0] === 'P-044') || mockAdminSections.admin_users.rows.find((userRow) => userRow[2] === 'Паблишер');
 
   return (
   <div className="space-y-6 max-w-6xl mx-auto">
-    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('admin_moderation')}>
-      <ChevronRight className="w-4 h-4 rotate-180" /> К очереди модерации
+    <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => {const userId=new URLSearchParams(location.search).get('from_user');if(userId)navigate('admin_users',{admin_user:userId,user_tab:'assets'});else navigate('admin_moderation');}}>
+      <ChevronRight className="w-4 h-4 rotate-180" /> {new URLSearchParams(location.search).has('from_user')?'К пользователю':'К очереди модерации'}
     </button>
     <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-[#0b3558] flex items-center gap-3">{isPlatform ? 'Площадка' : 'Материал'} {row[0]} <Badge color="amber">{row[3]}</Badge></h1>
-        <p className="text-sm text-[#476788] mt-1">{row[1]} · {row[2]} · поступил сегодня, 12:40</p>
+        <h1 className="font-display text-2xl font-bold text-[#0b3558] flex flex-wrap items-center gap-3 break-words">{liveMaterial ? liveMaterial.name : `${isPlatform ? 'Площадка' : 'Материал'} ${row[0]}`} <Badge color="amber">{liveMaterial?.status || row[3]}</Badge></h1>
+        <p className="text-sm text-[#476788] mt-1">{liveMaterial ? `Материал №${materialNumber(liveMaterial)} · ${liveMaterial.type} · поступил ${new Date(liveMaterial.submitted_at).toLocaleString('ru-RU')}` : `${row[1]} · ${row[2]}`}</p>
       </div>
-      <div className="text-left lg:text-right"><div className="text-sm text-[#476788]">SLA проверки</div><div className="text-xl font-semibold text-[#0b3558]">1 ч 18 мин</div></div>
     </div>
 
     <Card className="overflow-hidden">
@@ -8039,31 +8690,28 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
         </div>
         <div className="flex flex-wrap gap-3 xl:justify-end">
           <Button variant="primary" onClick={() => submitDecision('Принят')}>Принять</Button>
-          {!isPlatform && <Button variant="secondary" onClick={() => submitDecision('Возвращен на доработку')}>Вернуть на доработку</Button>}
-          <Button variant="danger" onClick={() => submitDecision('Отклонен')}>Отклонить</Button>
+          {!isPlatform && <Button variant="secondary" onClick={() => {setResult('');setComment('');setPendingDecision('Возвращен на доработку');}}>Вернуть на доработку</Button>}
+          <Button variant="danger" onClick={() => {setResult('');setComment('');setPendingDecision('Отклонен');}}>Отклонить</Button>
         </div>
       </div>
-      <div className="grid gap-4 border-t border-[#d4e0ed] bg-[#f8fbff] p-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.42fr)]">
-        <label className="block">
-          <span className="text-sm font-medium text-[#476788]">Комментарий модератора</span>
-          <textarea
-            value={comment}
-            onChange={(event) => setComment(event.target.value)}
-            className="mt-2 min-h-[92px] w-full resize-y rounded-lg border border-[#476788] bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]"
-            placeholder={isPlatform ? 'Укажите причину отклонения' : 'Укажите, что нужно доработать, или причину отклонения'}
-          />
-        </label>
-        <div className="flex min-h-[92px] items-end">
-          <div className="w-full">
-            <div className="text-xs leading-5 text-[#476788]">Решение и комментарий сохраняются в журнале аудита и отображаются заявителю.</div>
-            <div className="mt-3"><ActionResult text={result} tone={result.startsWith('Добавьте') ? 'error' : 'success'} /></div>
-          </div>
-        </div>
-      </div>
+      {pendingDecision && <div className="border-t border-[#d4e0ed] bg-[#f8fbff] p-6">
+        <label className="block"><span className="text-sm font-medium text-[#476788]">Комментарий модератора</span><textarea value={comment} onChange={(event) => setComment(event.target.value)} className="mt-2 min-h-[112px] w-full resize-y rounded-lg border border-[#476788] bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#006bff]" placeholder={pendingDecision === 'Отклонен' ? 'Укажите причину отклонения' : 'Укажите, что нужно доработать'} /></label>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs leading-5 text-[#476788]">Решение и комментарий сохраняются в журнале аудита и отображаются заявителю.</p><div className="flex shrink-0 gap-3"><Button variant="secondary" onClick={() => setPendingDecision('')}>Отмена</Button><Button variant={pendingDecision === 'Отклонен' ? 'danger' : 'primary'} disabled={!comment.trim()} onClick={() => submitDecision(pendingDecision)}>Подтвердить</Button></div></div>
+      </div>}
+      {result && <div className="border-t border-[#d4e0ed] px-6 py-4"><ActionResult text={result} tone={result.startsWith('Добавьте') ? 'error' : 'success'} /></div>}
     </Card>
 
     <div className="space-y-6">
-        {!isPlatform && (
+        {liveMaterial && <>
+          <Card className="overflow-hidden">
+            <div className="border-b border-[#d4e0ed] px-6 py-5"><h2 className="font-display text-lg font-bold text-[#0b3558]">Текст и изображения материала</h2><p className="mt-1 text-sm text-[#476788]">Версия, отправленная заказчиком на модерацию</p></div>
+            <div className="p-6">{liveMaterial.body ? <div className="material-content" dangerouslySetInnerHTML={{__html:liveMaterial.body}} /> : <p className="text-[#476788]">Текст отсутствует</p>}</div>
+          </Card>
+          <MaterialAttachments ids={liveMaterial.metadata?.attachments || []} />
+          <PlacementParameters links={materialLinks} settings={materialSettings} />
+          <Card className="p-6"><h2 className="font-display text-lg font-bold text-[#0b3558]">Рекламодатель</h2>{!liveMaterial.advertiserId ? <p className="mt-3 text-sm text-[#476788]">Без рекламодателя</p> : advertiserError ? <p className="mt-3 text-sm text-red-600">{advertiserError}</p> : !advertiser ? <p className="mt-3 text-sm text-[#476788]">Загрузка…</p> : <dl className="mt-4 grid gap-4 sm:grid-cols-2">{Object.entries({Название:advertiser.name,ИНН:advertiser.inn,КПП:advertiser.details?.kpp,'Объект рекламы':advertiser.details?.advertisedObject,'Тип договора':advertiser.details?.contractType,'Номер договора':advertiser.details?.contractNumber}).filter(([,value])=>value).map(([label,value])=><div key={label} className="border-b border-[#d4e0ed] pb-3 text-sm"><dt className="text-[#476788]">{label}</dt><dd className="mt-1 break-words font-medium text-[#0b3558]">{String(value)}</dd></div>)}</dl>}</Card>
+        </>}
+        {!liveMaterial && !isPlatform && (
           <Card className="p-6">
             <div className="flex flex-wrap items-center gap-2">
               <Badge color="amber">{row[3]}</Badge>
@@ -8097,7 +8745,7 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
           </Card>
         )}
 
-        <Card className="overflow-hidden">
+        {!liveMaterial && <Card className="overflow-hidden">
           <div className="flex flex-col gap-2 border-b border-[#d4e0ed] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-display text-lg font-bold text-[#0b3558]">{isPlatform ? 'Карточка площадки' : 'Текст и изображения материала'}</h2>
@@ -8185,6 +8833,7 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
                       type="button"
                       className="mt-1 text-left font-semibold text-[#006bff] hover:text-[#0b3558]"
                       onClick={() => onOpenPublisher?.(publisherProfileRow)}
+                      disabled={backend.user.teamRole==='moderator'}
                     >
                       ООО «Новая редакция»
                     </button>
@@ -8253,31 +8902,60 @@ const AdminModerationDetailView = ({ navigate, selection, onOpenPublisher }) => 
             </>
           )}
           </div>
-        </Card>
+        </Card>}
     </div>
   </div>
   );
 };
 
-const AdminDisputeDetailView = ({ navigate, selection }) => {
+const AdminDisputesView = ({ onOpen }) => {
+  return <div className="space-y-6">
+    <h1 className="font-display text-2xl font-bold text-[#0b3558]">Жалобы и споры</h1>
+    <DisputeList onOpen={onOpen} />
+  </div>;
+};
+
+const AdminDisputeDetailView = ({ navigate, selection, orderId }) => {
+  const backend=useBackend();
   const [reason, setReason] = useState('');
   const [result, setResult] = useState('');
-  const [evidenceRequested, setEvidenceRequested] = useState(false);
-  const row = selection?.row || mockAdminSections.admin_complaints.rows[0];
+  const [evidenceRequests, setEvidenceRequests] = useState([]);
+  const [partialOpen,setPartialOpen]=useState(false);
+  const [partialAmount,setPartialAmount]=useState('');
+  const order=backend.data.orders.find(item=>item.id===(orderId||selection?.row?.[0]))||backend.data.orders.find(item=>item.apiStatus==='disputed');
+  useEffect(()=>{
+    let active=true;
+    if(order?.id) api(`/orders/${order.id}/messages`).then(rows=>{if(active)setEvidenceRequests(rows.filter(row=>row.kind==='evidence_request'));}).catch(error=>{if(active)backend.setError(error.message);});
+    return()=>{active=false;};
+  },[order?.id]);
+  if(!order)return <EmptyState title="Спор не найден" text="Вернитесь к списку жалоб и выберите существующий спор." />;
+  const pending=order.apiStatus==='disputed';
   const disputeData = {
-    orderId: String(row[1] || 'Заказ #1045').replace('Заказ ', ''),
-    orderTitle: 'Пресс-релиз: Запуск новой платформы',
-    platform: 'РБК Инвестиции',
-    customer: 'Заказчик #842',
-    publicationUrl: row[0] === 'C-020' ? '' : 'https://invest.rbc.ru/news/652a9f',
-    publicationLabel: row[0] === 'C-020' ? 'ссылка не загружена или недоступна' : 'invest.rbc.ru/news/652a9f',
+    orderId: `№${order.number}`,
+    orderTitle: order.material,
+    platform: order.platform,
+    customer: order.customer_id,
+    publicationUrl: order.publication_url || '',
+    publicationLabel: order.publication_url ? order.publication_url.replace(/^https?:\/\//,'') : 'ссылка не загружена или недоступна',
   };
-  const resolve = (decision) => {
+  const resolve = async (decision,publisherAmount?) => {
     if (!reason.trim()) {
       setResult('Добавьте обоснование решения.');
       return;
     }
-    setResult(`Спор закрыт: ${decision.toLowerCase()}. Финансовое последствие зафиксировано.`);
+    const ok=await backend.perform(async()=>{
+      await api(`/orders/${order.id}/action`,'POST',{action:'resolve',decision,reason,...(publisherAmount?{publisherAmount}: {})},crypto.randomUUID());
+      await backend.refresh();
+    });
+    if(ok)navigate('admin_complaints');
+  };
+  const requestEvidence=async recipient=>{
+    const ok=await backend.perform(async()=>{
+      await api(`/admin/orders/${order.id}/evidence-request`,'POST',{recipient},crypto.randomUUID());
+      const rows=await api(`/orders/${order.id}/messages`);
+      setEvidenceRequests(rows.filter(row=>row.kind==='evidence_request'));
+    });
+    if(ok)setResult('Запрос доказательств отправлен выбранной стороне.');
   };
   return (
   <div className="space-y-6 max-w-6xl mx-auto">
@@ -8285,13 +8963,13 @@ const AdminDisputeDetailView = ({ navigate, selection }) => {
       <ChevronRight className="w-4 h-4 rotate-180" /> К жалобам
     </button>
     <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-      <div><h1 className="font-display text-2xl font-bold text-[#0b3558] flex items-center gap-3">Спор {row[0]} <Badge color="amber">{row[2]}</Badge></h1><p className="text-sm text-[#476788] mt-1">{row[1]} · открыт заказчиком 19.10.2023</p></div>
-      <div className="text-left lg:text-right"><div className="text-sm text-[#476788]">На холде</div><div className="text-2xl font-semibold">{formatMoney(150000)}</div></div>
+      <div><h1 className="font-display text-2xl font-bold text-[#0b3558] flex items-center gap-3">Спор #C-{String(order.dispute_number).padStart(4,'0')} <Badge color={pending?'amber':'green'}>{pending?'на рассмотрении':'решен'}</Badge></h1><p className="text-sm text-[#476788] mt-1">Заказ №{order.number} · открыт заказчиком {new Date(order.updated_at).toLocaleDateString('ru-RU')}</p></div>
+      <div className="text-left lg:text-right"><div className="text-sm text-[#476788]">{pending?'На холде':'Распределено'}</div><div className="text-2xl font-semibold">{formatMoney(order.amount/100)}</div></div>
     </div>
     <Card className="p-6">
       <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Предмет спора</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-        {[['Причина', 'Материал изменен после согласования'], ['Основание', row[3]], ['Срок ответа', 'до 20.10, 18:00']].map(([label, value]) => <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 font-medium">{value}</div></div>)}
+        {[['Причина', order.reason||'Нарушение условий размещения'], ['Основание', order.snapshot?.title||order.material], ['Статус', pending?'Ожидает решения администратора':'Решение принято']].map(([label, value]) => <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 font-medium">{value}</div></div>)}
       </div>
     </Card>
     <Card className="p-6">
@@ -8330,54 +9008,65 @@ const AdminDisputeDetailView = ({ navigate, selection }) => {
       </div>
     </Card>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {[['Позиция заказчика', 'В публикации изменен согласованный заголовок и удалена ссылка на продукт.', 'доказательства получены'], ['Позиция паблишера', 'Изменения внесены по редакционной политике и не меняют предмет материала.', 'ожидается дополнение']].map(([title, text, status]) => (
-        <Card key={title} className="p-6"><div className="flex items-center justify-between gap-3"><h2 className="font-display text-base font-bold">{title}</h2><Badge color={status.includes('получены') ? 'green' : 'amber'}>{status}</Badge></div><p className="mt-4 text-sm leading-6 text-[#476788]">{text}</p><Button variant="secondary" className="mt-5" onClick={() => setEvidenceRequested(true)}>{evidenceRequested ? 'Запрос отправлен' : 'Запросить доказательства'}</Button></Card>
+      {[['customer','Позиция заказчика', 'В публикации изменен согласованный заголовок и удалена ссылка на продукт.', 'доказательства получены'], ['publisher','Позиция паблишера', 'Изменения внесены по редакционной политике и не меняют предмет материала.', 'ожидается дополнение']].map(([recipient, title, text, status]) => (
+        <Card key={recipient} className="p-6"><div className="flex items-center justify-between gap-3"><h2 className="font-display text-base font-bold">{title}</h2><Badge color={status.includes('получены') ? 'green' : 'amber'}>{status}</Badge></div><p className="mt-4 text-sm leading-6 text-[#476788]">{text}</p><Button variant="secondary" className="mt-5" disabled={!pending||backend.busy} onClick={() => requestEvidence(recipient)}>{evidenceRequests.some(item=>item.recipient_id===(recipient==='customer'?order.customer_id:order.publisher_id)) ? 'Запрос отправлен' : 'Запросить доказательства'}</Button></Card>
       ))}
     </div>
     <Card className="p-6">
       <h2 className="font-display text-base font-bold text-[#0b3558]">Решение администратора</h2>
-      <textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-4 min-h-[130px] w-full rounded-lg border border-[#476788] px-4 py-3 text-sm" placeholder="Обоснование решения обязательно и будет доступно обеим сторонам" />
+      {pending?<><textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-4 min-h-[130px] w-full rounded-lg border border-[#476788] px-4 py-3 text-sm" placeholder="Обоснование решения обязательно и будет доступно обеим сторонам" />
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Button variant="secondary" onClick={() => resolve('Полный возврат заказчику')}>Полный возврат</Button>
-        <Button variant="secondary" onClick={() => resolve('Полная выплата паблишеру')}>Полная выплата</Button>
-        <Button variant="secondary" onClick={() => resolve('Частичное удержание')}>Частичное удержание</Button>
-        <Button variant="primary" onClick={() => resolve('Без санкций')}>Закрыть без санкций</Button>
-      </div>
+        <Button variant="secondary" disabled={backend.busy} onClick={() => resolve('full_refund')}>Полный возврат</Button>
+        <Button variant="secondary" disabled={backend.busy} onClick={() => resolve('full_payout')}>Полная выплата</Button>
+        <Button variant="secondary" disabled={backend.busy} onClick={() => reason.trim()?setPartialOpen(true):setResult('Добавьте обоснование решения.')}>Частичное удержание</Button>
+        <Button variant="primary" disabled={backend.busy} onClick={() => resolve('no_sanctions')}>Закрыть без санкций</Button>
+      </div></>:<p className="mt-4 text-sm leading-6 text-[#476788]">{order.reason}. Финансовое последствие зафиксировано, повторное решение недоступно.</p>}
       <div className="mt-4"><ActionResult text={result} tone={result.startsWith('Добавьте') ? 'error' : 'success'} /></div>
     </Card>
+    <Modal isOpen={partialOpen} onClose={()=>setPartialOpen(false)} title="Частичное удержание">
+      <div className="space-y-5">
+        <label className="block"><span className="text-sm font-medium text-[#476788]">Сумма выплаты паблишеру</span><input inputMode="numeric" value={partialAmount} onChange={event=>setPartialAmount(event.target.value.replace(/\D/g,''))} className="mt-2 w-full rounded-lg border border-[#476788] px-4 py-3 text-sm" placeholder="Сумма в рублях" /></label>
+        <p className="text-sm leading-6 text-[#476788]">Оставшаяся часть суммы будет возвращена заказчику.</p>
+        <div className="flex justify-end gap-3"><Button variant="secondary" onClick={()=>setPartialOpen(false)}>Отмена</Button><Button variant="primary" disabled={!Number(partialAmount)||Number(partialAmount)>=order.amount/100||backend.busy} onClick={()=>resolve('partial',Math.round(Number(partialAmount)*100))}>Применить решение</Button></div>
+      </div>
+    </Modal>
   </div>
   );
 };
 
 const AdminPayoutDetailView = ({ navigate, selection }) => {
+  const backend=useBackend();
   const [comment, setComment] = useState('');
-  const [result, setResult] = useState('');
-  const row = selection?.row || mockAdminSections.admin_payouts.rows[0];
-  const decide = (decision) => {
-    if (decision !== 'Подтверждена' && !comment.trim()) {
-      setResult('Укажите причину возврата или отклонения выплаты.');
-      return;
-    }
-    setResult(`Выплата ${decision.toLowerCase()}. Операция добавлена в финансовый журнал.`);
+  const [bankReference,setBankReference]=useState('');
+  const payout=backend.data.payouts.find(item=>item.id===selection?.row?.[0]);
+  if(!payout)return <Card className="p-6">Заявка на выплату не найдена.</Card>;
+  const requisites=payout.requisites||{};
+  const status={pending:'На проверке',approved:'Ожидает перечисления',transferred:'Перечислена',returned:'Возвращена',rejected:'Отклонена'}[payout.status];
+  const decide=async decision=>{
+    if(decision!=='approved'&&!comment.trim())return;
+    const ok=await backend.perform(async()=>{await api(`/admin/payouts/${payout.id}/decision`,'POST',{decision,comment});await backend.refresh();});
+    if(ok)setComment('');
   };
   return (
   <div className="space-y-6 max-w-5xl mx-auto">
     <button className="flex items-center gap-2 text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => navigate('admin_payouts')}><ChevronRight className="w-4 h-4 rotate-180" /> К выплатам</button>
-    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4"><div><h1 className="font-display text-2xl font-bold flex items-center gap-3">Выплата {row[0]} <Badge color="blue">{row[3]}</Badge></h1><p className="mt-1 text-sm text-[#476788]">{row[1]} · создана 19.10.2023</p></div><div className="sm:text-right"><div className="text-sm text-[#476788]">К перечислению</div><div className="text-2xl font-semibold">{formatMoney(199750)}</div></div></div>
+    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4"><div><h1 className="font-display text-2xl font-bold flex items-center gap-3">Выплата W-{payout.number} <Badge color={payout.status==='approved'?'green':payout.status==='pending'?'blue':'red'}>{status}</Badge></h1><p className="mt-1 text-sm text-[#476788]">{payout.publisher_email} · создана {new Date(payout.created_at).toLocaleDateString('ru-RU')}</p></div><div className="sm:text-right"><div className="text-sm text-[#476788]">Сумма заявки</div><div className="text-2xl font-semibold">{formatMoney(Number(payout.amount)/100)}</div></div></div>
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <Card className="p-6 lg:col-span-2">
         <h2 className="font-display text-base font-bold mb-4">Расчет выплаты</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[['Начислено', formatMoney(235000)], ['Комиссия 15%', formatMoney(35250)], ['Итого', formatMoney(199750)]].map(([label, value]) => <div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 text-lg font-semibold">{value}</div></div>)}</div>
-        <h3 className="mt-6 text-sm font-semibold">Заказы-основания</h3>
-        <div className="mt-3 divide-y divide-[#d4e0ed] rounded-lg border border-[#d4e0ed]">{[['#1045', 'РБК Инвестиции', '127 500 ₽'], ['#1041', 'РБК Инвестиции', '107 500 ₽']].map(row => <div key={row[0]} className="grid grid-cols-3 gap-3 px-4 py-3 text-sm"><span className="font-medium">{row[0]}</span><span className="text-[#476788]">{row[1]}</span><span className="text-right font-medium">{row[2]}</span></div>)}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{[['Зарезервировано',formatMoney(Number(payout.amount)/100)],['Комиссия за вывод',formatMoney(0)]].map(([label,value])=><div key={label} className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 text-lg font-semibold">{value}</div></div>)}</div>
+        <p className="mt-5 text-sm leading-6 text-[#476788]">Комиссия площадки уже удержана при завершении заказов. Подтверждение заявки не означает банковского перечисления.</p>
+        {payout.comment&&<p className="mt-4 text-sm text-[#476788]">Комментарий: {payout.comment}</p>}
       </Card>
       <Card className="p-6">
         <h2 className="font-display text-base font-bold mb-4">Реквизиты</h2>
-        <div className="space-y-3 text-sm">{[['Получатель', 'ООО «Редакция РБК»'], ['ИНН', '7700001111'], ['Счет', '•••• 4432'], ['БИК', '044525000']].map(([label, value]) => <div key={label}><div className="text-xs text-[#476788]">{label}</div><div className="mt-0.5 font-medium">{value}</div></div>)}</div>
+        <div className="space-y-3 text-sm">{[['Получатель',requisites.recipient||requisites.personName],['ИНН',requisites.inn||requisites.personInn],['Счет',requisites.account||requisites.personAccount],['БИК',requisites.bik||requisites.personBik]].map(([label,value])=><div key={label}><div className="text-xs text-[#476788]">{label}</div><div className="mt-0.5 break-all font-medium">{value||'—'}</div></div>)}</div>
         <Badge color="green" className="mt-4">реквизиты проверены</Badge>
       </Card>
     </div>
-    <Card className="p-6"><label className="block"><span className="text-sm font-medium text-[#476788]">Комментарий финансового контролера</span><textarea value={comment} onChange={(event) => setComment(event.target.value)} className="mt-2 min-h-[100px] w-full rounded-lg border border-[#476788] px-4 py-3 text-sm" /></label><div className="mt-4 flex flex-wrap justify-end gap-3"><Button variant="secondary" onClick={() => decide('Возвращена на проверку')}>Вернуть на проверку</Button><Button variant="secondary" onClick={() => decide('Отклонена')}>Отклонить</Button><Button variant="primary" onClick={() => decide('Подтверждена')}>Подтвердить выплату</Button></div><div className="mt-4"><ActionResult text={result} tone={result.startsWith('Укажите') ? 'error' : 'success'} /></div></Card>
+    {payout.status==='pending'&&<Card className="p-6"><label className="block"><span className="text-sm font-medium text-[#476788]">Комментарий финансового контролера</span><textarea value={comment} onChange={(event) => setComment(event.target.value)} className="mt-2 min-h-[100px] w-full rounded-lg border border-[#476788] px-4 py-3 text-sm" /></label><div className="mt-4 flex flex-wrap justify-end gap-3"><Button variant="secondary" disabled={!comment.trim()||backend.busy} onClick={() => decide('returned')}>Вернуть на проверку</Button><Button variant="secondary" disabled={!comment.trim()||backend.busy} onClick={() => decide('rejected')}>Отклонить</Button><Button variant="primary" disabled={backend.busy} onClick={() => decide('approved')}>Подтвердить заявку</Button></div></Card>}
+    {payout.status==='approved'&&<Card className="p-6"><h2 className="font-display text-base font-bold">Подтверждение перечисления</h2><p className="mt-2 text-sm text-[#476788]">Укажите идентификатор операции только после подтверждения перевода банком.</p><input className="mt-4 w-full rounded-lg border border-[#476788] px-4 py-3 text-sm" aria-label="Идентификатор банковского перевода" placeholder="Идентификатор банковской операции" minLength={6} maxLength={120} value={bankReference} onChange={event=>setBankReference(event.target.value)}/><div className="mt-4 flex justify-end"><Button variant="primary" disabled={backend.busy||bankReference.trim().length<6} onClick={()=>backend.perform(async()=>{await api(`/admin/payouts/${payout.id}/transfer`,'POST',{bankReference:bankReference.trim(),transferredAt:new Date().toISOString()},crypto.randomUUID());await backend.refresh();})}>Отметить перечисление</Button></div></Card>}
+    {payout.status==='transferred'&&<Card className="p-6 text-sm"><div>Идентификатор операции: <strong>{payout.bank_reference}</strong></div><div className="mt-2 text-[#476788]">Перечислено {new Date(payout.transferred_at).toLocaleString('ru-RU')}</div></Card>}
   </div>
   );
 };
@@ -8765,7 +9454,7 @@ const AdminPlatformDetailView = ({ navigate, selection }) => {
             <tbody className="divide-y divide-[#d4e0ed] bg-white">
               {platformPublications.map((order) => (
                 <tr key={order.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => navigate('admin_order_detail')}>
-                  <td className="px-6 py-4 text-sm font-semibold text-[#006bff]">#{order.id}</td>
+                  <td className="px-6 py-4 text-sm font-semibold text-[#006bff]">№{orderNumber(order)}</td>
                   <td className="max-w-[340px] px-6 py-4 text-sm font-medium text-[#0b3558]"><span className="line-clamp-2">{order.material}</span></td>
                   <td className="px-6 py-4 text-sm text-[#476788]">{order.format.replace('СМИ (', '').replace(')', '')}</td>
                   <td className="px-6 py-4 text-sm tabular-nums text-[#476788]">{order.date}</td>
@@ -8790,7 +9479,7 @@ const AdminEntityDetailView = ({ navigate, type, selection }) => {
     finance: { back: 'admin_balances', title: 'Финансовый профиль', badge: 'без ограничений', fields: [['Доступно', '1 250 000 ₽'], ['Заморожено', '345 000 ₽'], ['Удержано', '52 000 ₽'], ['Комиссия', '15%']], action: 'Создать корректировку' },
     ticket: { back: 'admin_support', title: 'Тикет #T-118', badge: 'в работе', fields: [['Тема', 'Не проходит выплата'], ['Автор', 'РБК Инвестиции'], ['Приоритет', 'Высокий'], ['Ответственный', 'support@axioma.ru']], action: 'Отправить ответ' },
     document: { back: 'admin_documents', title: 'Документ #D-2048', badge: 'готов', fields: [['Тип', 'Отчет по размещению'], ['Заказ', '#1045'], ['Получатель', 'Заказчик #842'], ['Создан', '19.10.2023']], action: 'Скачать документ' },
-    audit: { back: 'admin_audit', title: 'Событие #LOG-8841', badge: 'зафиксировано', fields: [['Сотрудник', 'moderator@axioma.ru'], ['Действие', 'Изменен статус материала'], ['Объект', '#M-1052'], ['Время', '19.10.2023, 13:42']], action: 'Открыть объект' },
+    audit: { back: 'admin_audit', title: 'Событие #LOG-8841', badge: 'зафиксировано', fields: [['Сотрудник', 'moderator@axioma.ru'], ['Действие', 'Изменен статус материала'], ['Объект', '№1052'], ['Время', '19.10.2023, 13:42']], action: 'Открыть объект' },
   };
   const config = configs[type];
   const selectedRow = selection?.row;
@@ -8826,8 +9515,7 @@ const AdminEntityDetailView = ({ navigate, type, selection }) => {
 
 const AdminAdvertiserDetailView = ({ navigate, selection, onOpenOrder }) => {
   const row = selection?.row || mockAdminSections.admin_advertisers.rows[0];
-  const [status, setStatus] = useState(row[3]);
-  const [result, setResult] = useState('');
+  const status = row[3];
   const isVerified = status === 'Проверен';
   const isBlocked = status === 'Заблокирован';
   const isChecking = status === 'Проверка запрошена';
@@ -8871,7 +9559,7 @@ const AdminAdvertiserDetailView = ({ navigate, selection, onOpenOrder }) => {
   const checkState = isVerified
     ? {
         title: 'Юрлицо подтверждено',
-        text: 'Внешний сервис подтвердил существование юрлица и совпадение идентификаторов.',
+        text: 'Статус сохранен в карточке. Автоматическая проверка через внешний сервис не подключена.',
         icon: CheckCircle2,
         color: 'green',
       }
@@ -8885,27 +9573,17 @@ const AdminAdvertiserDetailView = ({ navigate, selection, onOpenOrder }) => {
       : isChecking
         ? {
             title: 'Проверка запрошена',
-            text: 'Запрос отправлен во внешний сервис. Результат применится автоматически после ответа API.',
+            text: 'Автоматическая проверка через внешний сервис не подключена.',
             icon: Clock,
             color: 'amber',
           }
         : {
             title: 'Проверка не запускалась',
-            text: 'Запустите автоматическую проверку юрлица через внешний сервис.',
+            text: 'Автоматическая проверка через внешний сервис не подключена.',
             icon: Clock,
             color: 'gray',
           };
   const CheckIcon = checkState.icon;
-
-  const requestCheck = () => {
-    setStatus('Проверка запрошена');
-    setResult('Запрос на проверку отправлен во внешний сервис. Статус обновится автоматически после ответа API.');
-  };
-
-  const blockAdvertiser = () => {
-    setStatus('Заблокирован');
-    setResult('Рекламодатель заблокирован и не может использоваться в данных для маркировки.');
-  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -8927,7 +9605,7 @@ const AdminAdvertiserDetailView = ({ navigate, selection, onOpenOrder }) => {
         <div className="lg:col-span-2 space-y-6">
           <Card className="p-5 bg-[#f8f9fb]">
             <p className="text-sm text-[#476788]">
-              Рекламодатель используется только в данных для маркировки. В админке проверяется факт существования юрлица и корректность идентификаторов: ИНН, КПП, ОГРН и юридического наименования.
+              Рекламодатель используется в данных для маркировки. Автоматическая проверка юридических реквизитов пока не подключена.
             </p>
           </Card>
 
@@ -8976,7 +9654,7 @@ const AdminAdvertiserDetailView = ({ navigate, selection, onOpenOrder }) => {
 
         <div className="space-y-6">
           <Card className="p-6">
-            <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Автоматическая проверка</h2>
+            <h2 className="font-display text-base font-bold text-[#0b3558] mb-4">Проверка реквизитов</h2>
             <div className="rounded-lg border border-[#d4e0ed] bg-[#f8f9fb] p-4">
               <div className="flex items-start gap-3">
                 <CheckIcon className={`mt-0.5 h-5 w-5 ${checkState.color === 'green' ? 'text-emerald-500' : checkState.color === 'red' ? 'text-red-500' : checkState.color === 'amber' ? 'text-amber-500' : 'text-[#476788]'}`} />
@@ -8987,10 +9665,9 @@ const AdminAdvertiserDetailView = ({ navigate, selection, onOpenOrder }) => {
               </div>
             </div>
             <div className="mt-4 space-y-2">
-              <Button variant="primary" className="w-full" onClick={requestCheck}>Запросить проверку</Button>
-              <Button variant="danger" className="w-full" onClick={blockAdvertiser}>Заблокировать</Button>
+              <Button variant="primary" className="w-full" disabled>Запросить проверку</Button>
+              <Button variant="danger" className="w-full" disabled>Заблокировать</Button>
             </div>
-            <div className="mt-4"><ActionResult text={result} tone={isBlocked ? 'error' : 'success'} /></div>
           </Card>
         </div>
       </div>
@@ -9029,7 +9706,7 @@ const AdminTicketDetailView = ({ navigate, selection }) => {
         requester: 'ООО «Финтех Решения»',
         role: 'Заказчик',
         email: 'owner@fintech.ru',
-        related: 'Материал #M-1052',
+        related: 'Материал №1052',
         relatedRoute: 'admin_moderation_detail',
         category: 'Модерация материала',
         created: '18.10.2023, 17:45',
@@ -9258,8 +9935,8 @@ const AdminUserDetailView = ({ navigate, selection }) => {
   const company = (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card className="p-6"><h2 className="font-display text-base font-bold">{isPublisher ? 'Реквизиты получателя' : 'Юридические данные и документы'}</h2><div className="mt-4 space-y-4">{(isPublisher
-        ? [['Статус получателя', 'Юридическое лицо'], ['Получатель', 'ООО Редакция'], ['ИНН', '7701000000'], ['КПП', '770101001'], ['ОГРН', '1237701000000'], ['Система налогообложения', 'ОСНО, НДС 20%'], ['Юридический адрес', '125009, Москва, ул. Тверская, 7']]
-        : [['Статус плательщика', 'Юридическое лицо'], ['Юридическое название', 'ООО «Финтех Решения»'], ['ИНН', '7700000000'], ['КПП', '770001001'], ['ОГРН', '1237700000000'], ['Система налогообложения', 'ОСНО, НДС 20%'], ['Юридический адрес', '125009, Москва, ул. Тверская, 1']]
+        ? [['Статус получателя', 'Юридическое лицо'], ['Получатель', 'ООО Редакция'], ['ИНН', '7701000000'], ['КПП', '770101001'], ['ОГРН', '1237701000000'], ['Система налогообложения', 'ОСНО, НДС 22%'], ['Юридический адрес', '125009, Москва, ул. Тверская, 7']]
+        : [['Статус плательщика', 'Юридическое лицо'], ['Юридическое название', 'ООО «Финтех Решения»'], ['ИНН', '7700000000'], ['КПП', '770001001'], ['ОГРН', '1237700000000'], ['Система налогообложения', 'ОСНО, НДС 22%'], ['Юридический адрес', '125009, Москва, ул. Тверская, 1']]
       ).map(([label, value]) => <div key={label} className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs text-[#476788]">{label}</div><div className="mt-1 text-sm font-medium break-words">{value}</div></div><CopyButton value={value} label={`Скопировать ${label}`} /></div>)}</div></Card>
       <Card className="p-6"><div className="flex items-center justify-between"><h2 className="font-display text-base font-bold">Банковские реквизиты</h2><Badge color="green">проверены</Badge></div><div className="mt-4 space-y-4">{(isPublisher
         ? [['Банк', 'АО Банк'], ['Расчетный счет', '40702810********4432'], ['БИК', '044525000'], ['График выплат', '1 раз в месяц']]
@@ -9343,7 +10020,7 @@ const AdminUserDetailView = ({ navigate, selection }) => {
   const operations = (
       <Card className="overflow-hidden">
         <div className="px-6 py-5 border-b border-[#d4e0ed]"><h2 className="font-display text-base font-bold">{isPublisher ? 'Заказы паблишера' : 'Заказы заказчика'}</h2></div>
-        <div className="overflow-x-auto"><table className="min-w-[900px] w-full divide-y divide-[#d4e0ed]"><thead className="bg-[#f8f9fb]"><tr>{['Заказ', 'Материал', 'Контрагент', 'Сумма', 'Статус', ''].map(head => <th key={head || 'action'} className="px-5 py-3 text-left text-xs text-[#476788] uppercase">{head}</th>)}</tr></thead><tbody className="divide-y divide-[#d4e0ed]">{mockOrdersClient.slice(0, 4).map(order => <tr key={order.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => navigate('admin_order_detail')}><td className="px-5 py-4 text-sm font-medium text-[#006bff]">#{order.id}</td><td className="px-5 py-4 text-sm">{order.material}</td><td className="px-5 py-4 text-sm text-[#476788]">{isPublisher ? `Заказчик #${order.id - 203}` : order.platform}</td><td className="px-5 py-4 text-sm font-medium">{formatMoney(order.price)}</td><td className="px-5 py-4"><Badge color={order.statusColor}>{order.status}</Badge></td><td className="px-5 py-4 text-right text-sm font-medium text-[#006bff]">Открыть</td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="min-w-[900px] w-full divide-y divide-[#d4e0ed]"><thead className="bg-[#f8f9fb]"><tr>{['Заказ', 'Материал', 'Контрагент', 'Сумма', 'Статус', ''].map(head => <th key={head || 'action'} className="px-5 py-3 text-left text-xs text-[#476788] uppercase">{head}</th>)}</tr></thead><tbody className="divide-y divide-[#d4e0ed]">{mockOrdersClient.slice(0, 4).map(order => <tr key={order.id} className="cursor-pointer hover:bg-[#f8f9fb]" onClick={() => navigate('admin_order_detail')}><td className="px-5 py-4 text-sm font-medium text-[#006bff]">№{orderNumber(order)}</td><td className="px-5 py-4 text-sm">{order.material}</td><td className="px-5 py-4 text-sm text-[#476788]">{isPublisher ? `Заказчик #${order.id - 203}` : order.platform}</td><td className="px-5 py-4 text-sm font-medium">{formatMoney(order.price)}</td><td className="px-5 py-4"><Badge color={order.statusColor}>{order.status}</Badge></td><td className="px-5 py-4 text-right text-sm font-medium text-[#006bff]">Открыть</td></tr>)}</tbody></table></div>
       </Card>
   );
 
@@ -9381,15 +10058,18 @@ const AdminUserDetailView = ({ navigate, selection }) => {
 
 const AdminSettingsView = () => {
   const [saved, setSaved] = useState(false);
+  const backend=useBackend();
+  if(backend.user.teamRole==='moderator')return <TeamMemberSettingsView />;
   return (
   <div className="space-y-6">
     <div><h1 className="font-display text-2xl font-bold">Настройки админки</h1><p className="mt-1 text-sm text-[#476788]">Роли, уведомления и операционные параметры платформы.</p></div>
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <TeamAccessSettingsBlock description="Назначайте доступ к модерации, финансам и поддержке." members={[
+      {backend.user.isPrimaryAdmin&&<TeamAccessSettingsBlock description="Назначайте доступ к модерации, финансам и поддержке." members={[
         ['Модератор', 'moderator@axioma.ru', 'Модерация', 'активен', 'green'],
         ['Финансы', 'finance@axioma.ru', 'Финансы', 'активен', 'green'],
         ['Поддержка', 'support@axioma.ru', 'Поддержка', 'активен', 'green'],
-      ]} />
+      ]} />}
+      <AccountSecuritySettings />
       <NotificationsSettingsBlock events={[
         ['Просрочен SLA модерации', true, true],
         ['Открыт новый спор', true, true],
@@ -9406,48 +10086,126 @@ const AdminSettingsView = () => {
 
 // --- MAIN APP COMPONENT ---
 
+const TeamInvitationPage = ({token}) => {
+  const [invite,setInvite]=useState(null);
+  const [password,setPassword]=useState('');
+  const [error,setError]=useState('');
+  const [done,setDone]=useState(false);
+  useEffect(()=>{api(`/team/invitation/${encodeURIComponent(token)}`).then(setInvite).catch(event=>setError(event.message));},[token]);
+  return <main className="flex min-h-screen items-center justify-center bg-[#f8f9fb] p-4">
+    <Card className="w-full max-w-lg p-6">
+      <h1 className="font-display text-xl font-bold text-[#0b3558]">Доступ к команде</h1>
+      {error&&<p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+      {done?<><p className="mt-4 text-sm text-[#476788]">Пароль создан. Войдите в кабинет под своим email.</p><Button variant="primary" className="mt-5" onClick={()=>{location.href='/'}}>Перейти ко входу</Button></>
+        :invite?<form className="mt-5 space-y-4" onSubmit={async event=>{
+          event.preventDefault();setError('');
+          try{await api('/team/accept','POST',{token,password});setDone(true);}catch(failure){setError(failure.message);}
+        }}>
+          <p className="text-sm text-[#476788]">{invite.email} · {invite.role==='customer'?'Заказчик':invite.role==='publisher'?'Паблишер':'Администратор'}</p>
+          <SettingField label="Пароль"><input required type="password" autoComplete="new-password" minLength={12} maxLength={128} className={settingInputClass} value={password} onChange={event=>setPassword(event.target.value)} /></SettingField>
+          <Button variant="primary" type="submit">Принять приглашение</Button>
+        </form>:!error&&<p className="mt-4 text-sm text-[#476788]">Загрузка…</p>}
+    </Card>
+  </main>;
+};
+
 export default function App() {
+  const backend = useBackend();
   // Режим интерфейса: лендинг, заказчик, площадка, админка
   const [globalMode, setGlobalMode] = useState('landing');
 
   // Состояние кабинета заказчика
-	  const [clientView, setClientView] = useState('dashboard');
-	  const [favoritePlatforms, setFavoritePlatforms] = useState([101, 102]);
+	  const [clientView, setClientView] = useCabinetView('customer','dashboard');
+	  const favoritePlatforms = backend.data.favorites;
 	  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [projects, setProjects] = useState(initialProjects);
-  const [clientMaterials, setClientMaterials] = useState(mockMaterials);
-  const [clientOrders, setClientOrders] = useState(mockOrdersClient);
-  const [selectedProjectId, setSelectedProjectId] = useState(initialProjects[0].id);
-  const [selectedMaterialId, setSelectedMaterialId] = useState(mockMaterials[0].id);
-  const [selectedOrderId, setSelectedOrderId] = useState(mockOrdersClient[0].id);
-  const [materialProjectPreset, setMaterialProjectPreset] = useState(null);
-  const [selectedReportOrder, setSelectedReportOrder] = useState(mockReports[0].order);
-  const [projectReportConfig, setProjectReportConfig] = useState({
-    projectId: initialProjects[0].id,
-    from: '2023-10-01',
-    to: '2023-10-31',
-    label: 'Текущий месяц',
+  const [notificationReads, setNotificationReads] = useState<string[]>([]);
+  const [notificationTickets, setNotificationTickets] = useState<any[]>([]);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  useEffect(()=>{
+    if(!backend.user){setNotificationReads([]);return;}
+    let active=true;
+    api<string[]>('/notifications/read').then(keys=>{if(active)setNotificationReads(keys);}).catch(()=>{});
+    return ()=>{active=false;};
+  },[backend.user?.id,notificationsOpen]);
+  useEffect(()=>{
+    if(!backend.user||backend.user.teamRole==='moderator'){setNotificationTickets([]);return;}
+    let active=true;
+    const load=()=>{if(document.visibilityState==='visible')api<any[]>('/tickets').then(rows=>{if(active)setNotificationTickets(rows);}).catch(()=>{});};
+    load();
+    const timer=setInterval(load,30000);
+    return ()=>{active=false;clearInterval(timer);};
+  },[backend.user?.id,notificationsOpen]);
+  useEffect(()=>{
+    if(!backend.user)return;
+    const refresh=()=>{if(document.visibilityState==='visible')backend.refresh(backend.user).catch(()=>{});};
+    const timer=setInterval(refresh,60000);
+    document.addEventListener('visibilitychange',refresh);
+    return ()=>{clearInterval(timer);document.removeEventListener('visibilitychange',refresh);};
+  },[backend.user?.id]);
+  useEffect(()=>{if(notificationsOpen&&backend.user)backend.refresh(backend.user).catch(()=>{});},[notificationsOpen,backend.user?.id]);
+  const projects = backend.data.projects;
+  const clientMaterials = backend.data.materials;
+  const clientOrders = backend.data.orders;
+  const reports = (backend.data.reports?.placements || []).map((placement) => {
+    const order=clientOrders.find((item)=>item.id===placement.id);
+    return {
+      ...placement,
+      order:`№${placement.number}`,
+      date:new Date(placement.updatedAt).toLocaleDateString('ru-RU'),
+      price:placement.amount/100,
+      status:order?.status || placement.status,
+      color:order?.statusColor || 'blue',
+    };
   });
+  const [selectedProjectId, setSelectedProjectId] = useState<any>(()=>new URLSearchParams(location.search).get('project'));
+  const [selectedMaterialId, setSelectedMaterialId] = useState<any>(()=>new URLSearchParams(location.search).get('material'));
+  const [selectedAdvertiserId, setSelectedAdvertiserId] = useState<any>(()=>new URLSearchParams(location.search).get('advertiser'));
+  const [selectedOrderId, setSelectedOrderId] = useState<any>(()=>new URLSearchParams(location.search).get('order'));
+  const [materialProjectPreset, setMaterialProjectPreset] = useState(null);
+  const [selectedReportOrder, setSelectedReportOrder] = useState<any>(()=>new URLSearchParams(location.search).get('report'));
+  const [projectReportConfig, setProjectReportConfig] = useState<any>({
+    projectId: null,
+    from: '',
+    to: '',
+    label: '',
+  });
+  const savedProjectReport = (backend.data.reports?.saved || []).find((report) => report.id === selectedReportOrder);
+  const effectiveProjectReportConfig = projectReportConfig.projectId ? projectReportConfig : savedProjectReport ? {
+    projectId:savedProjectReport.project_id,
+    from:String(savedProjectReport.date_from).slice(0,10),
+    to:String(savedProjectReport.date_to).slice(0,10),
+    label:'Выбранный период',
+    reportId:savedProjectReport.id,
+  } : projectReportConfig;
 
   // Состояние кабинета паблишера
-  const [publisherView, setPublisherView] = useState('pub_dashboard');
+  const [publisherView, setPublisherView] = useCabinetView('publisher','pub_dashboard');
   const [adminSelection, setAdminSelection] = useState(null);
 
   // Состояние админки
-  const [adminView, setAdminView] = useState('admin_dashboard');
-  const [publisherApplications, setPublisherApplications] = useState(initialPublisherApplications);
-  const [selectedPublisherApplicationId, setSelectedPublisherApplicationId] = useState(initialPublisherApplications[0].id);
-  const [informerItems, setInformerItems] = useState(initialInformerItems);
+  const [adminView, setAdminView] = useCabinetView('admin','admin_dashboard');
+  const [publisherApplications, setPublisherApplications] = useState([]);
+  const [selectedPublisherApplicationId, setSelectedPublisherApplicationId] = useState(() => new URLSearchParams(location.search).get('application'));
+  useEffect(()=>{if(backend.user?.role==='admin'&&backend.user.teamRole!=='moderator')api('/admin/publisher-applications').then(setPublisherApplications).catch(error=>backend.setError(error.message));},[backend.user?.id]);
+  const informerItems=backend.data.informers;
+  const setInformerItems=(update)=>backend.perform(async()=>{
+    const next=typeof update==='function'?update(informerItems):update;
+    for(const item of next){const old=informerItems.find(i=>i.id===item.id);if(JSON.stringify(old)===JSON.stringify(item))continue;
+      const {id,updatedAt,...data}=item;await api(old?`/informers/${id}`:'/informers',old?'PUT':'POST',data);
+    }
+    for(const old of informerItems)if(!next.some(i=>i.id===old.id))await api(`/informers/${old.id}`,'DELETE');
+    await backend.refresh();
+  });
   const [adminNavOpenGroup, setAdminNavOpenGroup] = useState('participants');
 
-  const toggleFavoritePlatform = (id) => {
-    setFavoritePlatforms((current) =>
-      current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id],
-    );
-  };
+  const toggleFavoritePlatform = (id) => backend.perform(async () => {
+    await api(`/favorites/${id}`,'PUT',{favorite:!favoritePlatforms.includes(id)});
+    await backend.refresh();
+  });
 
   const clientNav = [
     { id: 'dashboard', label: 'Панель', icon: LayoutDashboard },
+    { id: 'reputation', label: 'Репутация', icon: BarChart3 },
     { id: 'projects', label: 'Проекты', icon: FolderKanban },
     { id: 'materials', label: 'Материалы', icon: FileText },
     { id: 'catalog', label: 'Каталог площадок', icon: Store },
@@ -9493,6 +10251,7 @@ export default function App() {
         { id: 'admin_balances', label: 'Балансы', icon: CreditCard },
         { id: 'admin_operations', label: 'Операции', icon: Download },
         { id: 'admin_payouts', label: 'Выплаты', icon: Download },
+        { id: 'admin_bank_review', label: 'Банковская сверка', icon: CreditCard },
         { id: 'admin_documents', label: 'Документы', icon: FileText },
       ],
     },
@@ -9512,20 +10271,66 @@ export default function App() {
       items: [
         { id: 'admin_informer', label: 'Информер', icon: Bell },
         { id: 'admin_audit', label: 'Аудит', icon: ShieldCheck },
+        { id: 'admin_integrations', label: 'API интеграции', icon: Link2 },
         { id: 'admin_settings', label: 'Настройки', icon: Settings },
       ],
     },
   ];
-  const adminNav = [...adminPrimaryNav, ...adminNavGroups.flatMap((group) => group.items)];
+  const moderatorViews = new Set(['admin_moderation','admin_moderation_detail','admin_advertisers','admin_platforms','admin_platform_detail','admin_settings']);
+  const isModerator = backend.user?.role==='admin'&&backend.user.teamRole==='moderator';
+  const visibleAdminPrimaryNav = isModerator ? adminPrimaryNav.filter(item=>item.id==='admin_moderation') : adminPrimaryNav;
+  const visibleAdminNavGroups = isModerator ? adminNavGroups.map(group=>({...group,items:group.items.filter(item=>['admin_advertisers','admin_platforms','admin_settings'].includes(item.id))})).filter(group=>group.items.length) : adminNavGroups;
+  const adminNav = [...visibleAdminPrimaryNav, ...visibleAdminNavGroups.flatMap((group) => group.items)];
+  useEffect(()=>{if(isModerator&&!moderatorViews.has(adminView))setAdminView('admin_moderation');},[isModerator,adminView]);
 
   useEffect(() => {
     if (globalMode !== 'admin') return;
     const activeGroup = adminNavGroups.find((group) => group.items.some((item) => item.id === adminView));
     if (activeGroup) setAdminNavOpenGroup(activeGroup.id);
   }, [adminView, globalMode]);
+  useEffect(() => {
+    setGlobalMode(backend.user ? {customer:'client', publisher:'publisher', admin:'admin'}[backend.user.role] : 'landing');
+    if(backend.ready && !backend.user && /^\/(customer|publisher|admin)(\/|$)/.test(location.pathname) && location.pathname!=='/admin' && location.pathname!=='/admin/login') {
+      history.replaceState(null,'','/');
+    }
+    if(backend.user && location.pathname!=='/' && (!location.pathname.startsWith(`/${backend.user.role}/`) && location.pathname!==`/${backend.user.role}` || location.pathname.endsWith('/login'))) {
+      history.replaceState(null,'',`/${backend.user.role}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, [backend.user?.id, backend.ready]);
 
   // Логика маршрутизации
-  if (globalMode === 'landing') {
+  useEffect(()=>{
+    const restore=()=>{
+      const q=new URLSearchParams(location.search);
+      setSelectedMaterialId(q.get('material'));setSelectedAdvertiserId(q.get('advertiser'));setSelectedOrderId(q.get('order'));setSelectedProjectId(q.get('project'));setSelectedReportOrder(q.get('report'));setSelectedPublisherApplicationId(q.get('application'));backend.setOutletId(q.get('outlet'));
+    };
+    window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore);
+  },[]);
+  useEffect(()=>{
+    if(!backend.user)return;
+    const q=new URLSearchParams(location.search);
+    for(const key of ['material','advertiser','order','project','report','outlet','application'])q.delete(key);
+    const view=backend.user.role==='admin'?adminView:backend.user.role==='publisher'?publisherView:clientView;
+    if(!['support','pub_support','admin_support'].includes(view)){q.delete('ticket');q.delete('support_tab');}
+    const params={
+      material:['material_detail','material_edit','admin_moderation_detail'].includes(view)?selectedMaterialId:null,
+      advertiser:['advertiser_detail','advertiser_edit'].includes(view)?selectedAdvertiserId:null,
+      order:/(^order_|^complaint$|^dispute_detail$|^pub_order_|^pub_complaint$|^pub_dispute_detail$|^admin_order_|^admin_dispute_detail$)/.test(view)?selectedOrderId:null,
+      project:view==='project_detail'?selectedProjectId:null,
+      report:['report_detail','project_report'].includes(view)?selectedReportOrder:null,
+      outlet:['platform_detail','pub_platform_detail','admin_platform_detail'].includes(view)?backend.outletId:null,
+      application:view==='admin_publisher_application_detail'?selectedPublisherApplicationId:null,
+    };
+    for(const [key,id] of Object.entries(params))if(id)q.set(key,String(id));
+    const search=q.toString();
+    history.replaceState(null,'',location.pathname+(search?'?'+search:''));
+  },[clientView,publisherView,adminView,selectedMaterialId,selectedAdvertiserId,selectedOrderId,selectedProjectId,selectedReportOrder,selectedPublisherApplicationId,backend.outletId,backend.user?.id]);
+  if (!backend.ready) return <div className="p-8 text-[#476788]">Загрузка…</div>;
+  const invitationToken=new URLSearchParams(location.search).get('invite');
+  if(invitationToken&&!backend.user)return <TeamInvitationPage token={invitationToken} />;
+  if (location.pathname==='/' || globalMode === 'landing' || !backend.user) {
+    if(location.pathname==='/admin' || location.pathname.startsWith('/admin/')) return <AdminLogin />;
     return <LandingView setGlobalMode={setGlobalMode} />;
   }
 
@@ -9534,27 +10339,54 @@ export default function App() {
   const navItems = isClient ? clientNav : isAdmin ? adminNav : publisherNav;
   const currentView = isClient ? clientView : isAdmin ? adminView : publisherView;
   const setView = isClient ? setClientView : isAdmin ? setAdminView : setPublisherView;
-  const notifications = isAdmin
+  const operationalQueueCount = backend.data.materials.filter((material) => material.apiStatus === 'pending').length
+    + backend.data.orders.filter((order) => order.apiStatus === 'disputed').length;
+  const operationalQueueLabel = operationalQueueCount % 10 === 1 && operationalQueueCount % 100 !== 11
+    ? 'задача'
+    : [2, 3, 4].includes(operationalQueueCount % 10) && ![12, 13, 14].includes(operationalQueueCount % 100)
+      ? 'задачи'
+      : 'задач';
+  const notifications: {key:string;title:string;text:string;target:any;color:string}[] = isModerator
+    ? backend.data.materials.filter(item=>item.apiStatus==='pending').map(item=>({key:`material:${item.id}:pending`,title:'Материал на модерации',text:`Материал №${materialNumber(item)} ожидает проверки`,target:{view:'admin_moderation_detail',section:'admin_moderation',id:item.id},color:'blue'}))
+    : isAdmin
     ? [
-        ['Новый материал на модерации', 'Материал #M-1052 ожидает проверки', 'admin_moderation', 'blue'],
-        ['Новая заявка паблишера', 'Investor.ru ожидает ручной проверки', 'admin_publisher_applications', 'blue'],
-        ['Тикет с высоким приоритетом', 'Паблишер РБК Инвестиции ждет ответ по выплате', 'admin_support', 'red'],
-        ['Выплата ожидает подтверждения', 'W-112 · 235 000 ₽ на выводе', 'admin_payouts', 'amber'],
+        ...backend.data.materials.filter(item=>item.apiStatus==='pending').map(item=>({key:`material:${item.id}:pending`,title:'Новый материал на модерации',text:`Материал №${materialNumber(item)} ожидает проверки`,target:{view:'admin_moderation_detail',section:'admin_moderation',id:item.id},color:'blue'})),
+        ...publisherApplications.filter(item=>['Новая','На проверке'].includes(item.status)).map(item=>({key:`application:${item.id}:pending`,title:'Новая заявка паблишера',text:`${item.platform} ожидает проверки`,target:{view:'admin_publisher_application_detail',id:item.id},color:'blue'})),
+        ...backend.data.orders.filter(item=>item.apiStatus==='disputed').map(item=>({key:`order:${item.id}:disputed`,title:'Открыт спор',text:`Заказ №${orderNumber(item)}`,target:{view:'admin_dispute_detail',section:'admin_complaints',id:item.id},color:'red'})),
+        ...backend.data.payouts.filter(item=>item.status==='pending').map(item=>({key:`payout:${item.id}:pending`,title:'Выплата ожидает подтверждения',text:`Заявка №${item.number}`,target:{view:'admin_payout_detail',section:'admin_payouts',id:item.id},color:'amber'})),
       ]
     : isClient
       ? [
-          ['Паблишер загрузил публикацию', 'Заказ #1045 ожидает приемки', 'order_detail', 'blue'],
-          ['Открыт спор #C-020', 'Модератор запросил доказательства', 'dispute_detail', 'amber'],
-          ['Баланс ниже лимита', 'Пополните баланс для новых заказов', 'topup', 'red'],
+          ...backend.data.orders.filter(item=>item.apiStatus==='submitted').map(item=>({key:`order:${item.id}:submitted`,title:'Паблишер загрузил публикацию',text:`Заказ №${orderNumber(item)} ожидает приемки`,target:{view:'order_detail',id:item.id},color:'blue'})),
+          ...backend.data.orders.filter(item=>item.apiStatus==='disputed').map(item=>({key:`order:${item.id}:disputed`,title:'Открыт спор',text:`Заказ №${orderNumber(item)}`,target:{view:'dispute_detail',id:item.id},color:'amber'})),
         ]
       : [
-          ['Новый входящий заказ', 'Заказ #1048 ожидает решения паблишера', 'pub_order_new_detail', 'blue'],
-          ['Заказ ожидает публикации', 'По заказу #1045 нужно загрузить ссылку', 'pub_order_detail', 'amber'],
-          ['Открыт спор #C-020', 'Админ запросил доказательства паблишера', 'pub_dispute_detail', 'red'],
+          ...backend.data.orders.filter(item=>item.apiStatus==='pending').map(item=>({key:`order:${item.id}:pending`,title:'Новый входящий заказ',text:`Заказ №${orderNumber(item)} ожидает решения`,target:{view:'pub_order_new_detail',id:item.id},color:'blue'})),
+          ...backend.data.orders.filter(item=>item.apiStatus==='accepted').map(item=>({key:`order:${item.id}:accepted`,title:'Заказ ожидает публикации',text:`По заказу №${orderNumber(item)} нужно загрузить ссылку`,target:{view:'pub_order_detail',id:item.id},color:'amber'})),
+          ...backend.data.orders.filter(item=>item.apiStatus==='disputed').map(item=>({key:`order:${item.id}:disputed`,title:'Открыт спор',text:`Заказ №${orderNumber(item)}`,target:{view:'pub_dispute_detail',id:item.id},color:'red'})),
         ];
-  const openNotificationTarget = (target) => {
+  if(!isModerator)notifications.push(...notificationTickets.filter(ticket=>ticket.awaiting_reply&&ticket.last_message_id).map(ticket=>({
+    key:`ticket:${ticket.id}:${ticket.last_message_id}`,
+    title:isAdmin?'Новое обращение в поддержку':'Ответ поддержки',
+    text:`Тикет T-${ticket.number} · ${ticket.subject}`,
+    target:{view:isAdmin?'admin_support':isClient?'support':'pub_support',id:ticket.id},
+    color:'blue',
+  })));
+  const unreadNotifications=notifications.filter(item=>!notificationReads.includes(item.key));
+  const openNotificationTarget = (notification) => {
+    if(!notificationReads.includes(notification.key)){
+      setNotificationReads(keys=>[...keys,notification.key]);
+      api('/notifications/read','POST',{key:notification.key}).catch(()=>setNotificationReads(keys=>keys.filter(key=>key!==notification.key)));
+    }
     setNotificationsOpen(false);
-    setView(target);
+    setShowAllNotifications(false);
+    const {view,id,section}=notification.target;
+    if(section)setAdminSelection({section,row:[id]});
+    if(['support','pub_support','admin_support'].includes(view)){setView(view,{ticket:id});window.dispatchEvent(new PopStateEvent('popstate'));return;}
+    if(view==='admin_moderation_detail')setSelectedMaterialId(id);
+    else if(view==='admin_publisher_application_detail')setSelectedPublisherApplicationId(id);
+    else if(view.includes('order')||view.includes('dispute'))setSelectedOrderId(id);
+    setView(view);
   };
   const parentViewByDetail = {
     project_detail: 'projects',
@@ -9586,6 +10418,8 @@ export default function App() {
   };
   const activeNavView = parentViewByDetail[currentView] || currentView;
   const openAdminDetail = (section, row, route) => {
+    if(section==='admin_orders'||section==='admin_complaints')setSelectedOrderId(row[0]);
+    if(section==='admin_moderation')setSelectedMaterialId(row[0]);
     setAdminSelection({ section, row });
     setAdminView(route);
   };
@@ -9594,22 +10428,41 @@ export default function App() {
     setAdminView('admin_user_detail');
   };
   const openAdminOrderById = (orderId) => {
-    const row = mockAdminSections.admin_orders.rows.find((orderRow) => orderRow[0] === orderId) || mockAdminSections.admin_orders.rows[0];
-    setAdminSelection({ section: 'admin_orders', row });
+    setSelectedOrderId(orderId);
     setAdminView('admin_order_detail');
   };
   const openPublisherApplication = (applicationId) => {
     setSelectedPublisherApplicationId(applicationId);
     setAdminView('admin_publisher_application_detail');
   };
-  const updatePublisherApplication = (applicationId, patch) => {
-    setPublisherApplications((items) => items.map((item) => item.id === applicationId ? { ...item, ...patch } : item));
-  };
-  const createPublisherApplication = (application) => {
-    setPublisherApplications((items) => [application, ...items]);
-    setSelectedPublisherApplicationId(application.id);
+  const updatePublisherApplication = (applicationId, patch) => backend.perform(async()=>{
+    const updated=await api(`/admin/publisher-applications/${applicationId}`,'PATCH',{
+      ...('checks' in patch?{checks:patch.checks}:{}),
+      ...('status' in patch?{status:patch.status}:{}),
+      ...('decisionComment' in patch?{decisionComment:patch.decisionComment}:{}),
+    });
+    setPublisherApplications(items=>items.map(item=>item.id===applicationId?updated:item));
+  });
+  const createPublisherApplication = (application) => backend.perform(async()=>{
+    const created=await api('/admin/publisher-applications','POST',application);
+    setPublisherApplications(items=>[created,...items]);
+    setSelectedPublisherApplicationId(created.id);
     setAdminView('admin_publisher_application_detail');
+  });
+  const invitePublisherApplication = async (applicationId) => {
+    let token='';
+    const ok=await backend.perform(async()=>{
+      const updated=await api(`/admin/publisher-applications/${applicationId}/invite`,'POST',{});
+      setPublisherApplications(items=>items.map(item=>item.id===applicationId?updated:item));
+      token=updated.token;
+    });
+    return ok?token:null;
   };
+  const deletePublisherApplication = (applicationId) => backend.perform(async()=>{
+    await api(`/admin/publisher-applications/${applicationId}`,'DELETE');
+    setPublisherApplications(items=>items.filter(item=>item.id!==applicationId));
+    setSelectedPublisherApplicationId(null);
+  });
   const openProject = (projectId) => {
     setSelectedProjectId(projectId);
     setClientView('project_detail');
@@ -9631,113 +10484,71 @@ export default function App() {
     );
   };
   const openPlacementReport = (report) => {
-    setSelectedReportOrder(report.order);
+    setSelectedReportOrder(report.id);
     setClientView('report_detail');
   };
-  const openProjectReport = (config) => {
-    setProjectReportConfig(config);
-    setClientView('project_report');
-  };
+  const openProjectReport = (config) => backend.perform(async () => {
+    const report=await api('/reports','POST',{projectId:config.projectId,dateFrom:config.from,dateTo:config.to},crypto.randomUUID());
+    await backend.refresh();setSelectedReportOrder(report.id);setProjectReportConfig({...config,reportId:report.id});setClientView('project_report');
+  });
   const startCreateMaterial = (projectId = null) => {
     setMaterialProjectPreset(projectId);
     setClientView('create_material');
   };
-  const createProject = ({ name, description, advertisers }) => {
-    const nextId = Math.max(0, ...projects.map((project) => project.id)) + 1;
-    const nextProject = {
-      id: nextId,
-      code: `PR-${String(nextId).padStart(3, '0')}`,
-      name,
-      description,
-      advertisers,
-      status: 'Активный',
-      updatedAt: '23.07.2026',
-    };
-    setProjects((items) => [...items, nextProject]);
-    setSelectedProjectId(nextId);
-    setClientView('project_detail');
-  };
-  const toggleProjectStatus = (projectId) => {
-    setProjects((items) => items.map((project) => project.id === projectId
-      ? { ...project, status: project.status === 'Активный' ? 'Завершен' : 'Активный', updatedAt: '23.07.2026' }
-      : project));
-  };
-  const deleteProject = (projectId) => {
-    const hasMaterials = clientMaterials.some((material) => material.projectId === projectId);
-    const hasOrders = clientOrders.some((order) => order.projectId === projectId);
-    if (hasMaterials || hasOrders) return;
-    setProjects((items) => items.filter((project) => project.id !== projectId));
-  };
-  const createMaterial = (material) => {
-    const nextId = Math.max(0, ...clientMaterials.map((item) => item.id)) + 1;
-    setClientMaterials((items) => [...items, { ...material, id: nextId, placements: 0, date: '23.07.2026' }]);
-    if (material.projectId) {
-      setProjects((items) => items.map((project) => project.id === material.projectId ? { ...project, updatedAt: '23.07.2026' } : project));
-    }
-  };
-  const updateMaterial = (materialId, patch) => {
-    setClientMaterials((items) => items.map((material) => material.id === materialId ? { ...material, ...patch } : material));
-  };
-  const changeMaterialProject = (materialId, projectId) => {
-    setClientMaterials((items) => items.map((material) => material.id === materialId ? { ...material, projectId } : material));
-  };
-  const changeOrderProject = (orderId, projectId) => {
-    setClientOrders((items) => items.map((order) => order.id === orderId ? { ...order, projectId } : order));
-  };
-  const moveOrders = (orderIds, projectId) => {
-    setClientOrders((items) => items.map((order) => orderIds.includes(order.id) ? { ...order, projectId } : order));
-  };
-  const createOrdersFromMaterial = (material, platforms) => {
-    setClientOrders((items) => {
-      const startId = Math.max(0, ...items.map((order) => order.id)) + 1;
-      const createdOrders = platforms.map((platform, index) => ({
-        id: startId + index,
-        material: material.name,
-        platform: platform.name,
-        price: platform.price,
-        frozen: platform.price,
-        status: 'Площадка рассматривает',
-        statusColor: 'blue',
-        date: '23.07.2026',
-        action: 'Дождаться площадки',
-        projectId: material.projectId ?? null,
-      }));
-      return [...createdOrders, ...items];
-    });
-    setClientMaterials((items) => items.map((item) => item.id === material.id
-      ? { ...item, placements: item.placements + platforms.length, status: 'Используется в заказах', statusColor: 'indigo' }
-      : item));
-    setClientView('orders');
-  };
+  const createProject = (values) => backend.perform(async () => {
+    const project = await api('/projects','POST',values);
+    await backend.refresh(); setSelectedProjectId(project.id); setClientView('project_detail');
+  });
+  const toggleProjectStatus = (id) => backend.perform(async () => {
+    await api(`/projects/${id}`,'PATCH',{completed:projects.find(p => p.id === id)?.status === 'Активный'}); await backend.refresh();
+  });
+  const deleteProject = (id) => backend.perform(async () => { await api(`/projects/${id}`,'DELETE'); await backend.refresh(); setClientView('projects'); });
+  const createMaterial = (materials, status, expedited, key) => backend.perform(async () => {
+    await api('/materials/save-batch','POST',{items:materials.map(m => ({...materialPayload(m,backend.data.advertisers),clientKey:m.clientKey})),submit:status === 'На модерации',expedited},key);
+    await backend.refresh();
+  });
+  const updateMaterial = (id, patch) => backend.perform(async () => {
+    const material = clientMaterials.find(m => m.id === id);
+    await api(`/materials/${id}`,'PUT',{...materialPayload({...material,...patch},backend.data.advertisers),version:material.version}); await backend.refresh();
+  });
+  const changeMaterialProject = (id, projectId) => backend.perform(async () => {
+    await api(`/materials/${id}/project`,'POST',{projectId}); await backend.refresh();
+  });
+  const changeOrderProject = (id, projectId) => backend.perform(async () => { await api(`/orders/${id}/project`,'POST',{projectId}); await backend.refresh(); });
+  const moveOrders = (ids, projectId) => backend.perform(async () => { await api('/orders/project','POST',{ids,projectId}); await backend.refresh(); });
+  const createOrdersFromMaterial = (material, platforms, key, limitConfirmed = false,autoAccept = false,offer = null) => backend.perform(async () => {
+    await api('/orders','POST',{materialId:material.id,placements:platforms.map(p => ({outletId:p.id,format:apiFormatByLabel[p.format]})),expectedAmount:offer?.expectedAmount ?? Math.round(platforms.reduce((sum,p)=>sum+p.price,0)*100),...(offer?.informerId ? {informerId:offer.informerId}:{}),limitConfirmed,autoAccept},key); await backend.refresh(); setClientView('orders');
+  });
 
   const renderContent = () => {
     if (isClient) {
       switch (clientView) {
-        case 'dashboard': return <ClientDashboardView navigate={setClientView} informerItems={informerItems} />;
+        case 'dashboard': return <ClientDashboardView navigate={setClientView} onOpenOrder={openOrder} informerItems={informerItems} />;
+        case 'reputation': return <ReputationIntelligenceView navigate={setClientView} />;
         case 'projects': return <ClientProjectsView projects={projects} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openProject={openProject} onCreateProject={createProject} />;
-        case 'project_detail': return <ClientProjectDetailView project={projects.find((project) => project.id === selectedProjectId)} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openMaterial={openMaterial} openOrder={openOrder} onAddMaterial={startCreateMaterial} onToggleStatus={toggleProjectStatus} onDelete={deleteProject} />;
+        case 'project_detail': return <ClientProjectDetailView project={projects.find((project) => project.id === selectedProjectId)} materials={clientMaterials} orders={clientOrders} navigate={setClientView} openMaterial={openMaterial} openOrder={openOrder} onAddMaterial={startCreateMaterial} onToggleStatus={toggleProjectStatus} onDelete={deleteProject} onCreateProjectReport={openProjectReport} />;
         case 'materials': return <ClientMaterialsView navigate={setClientView} projects={projects} materials={clientMaterials} openProject={openProject} openMaterial={openMaterial} startCreateMaterial={startCreateMaterial} />;
         case 'material_detail': return <ClientMaterialDetailView navigate={setClientView} material={clientMaterials.find((material) => material.id === selectedMaterialId)} projects={projects} openProject={openProject} onChangeProject={changeMaterialProject} />;
         case 'material_edit': return <ClientEditMaterialView navigate={setClientView} material={clientMaterials.find((material) => material.id === selectedMaterialId)} projects={projects} onUpdateMaterial={updateMaterial} />;
         case 'create_material': return <ClientCreateMaterialView navigate={setClientView} projects={projects} defaultProjectId={materialProjectPreset} onCreateMaterial={createMaterial} />;
-        case 'advertisers': return <ClientAdvertisersView navigate={setClientView} />;
+        case 'advertisers': return <ClientAdvertisersView navigate={setClientView} onOpenAdvertiser={id=>{setSelectedAdvertiserId(id);setClientView('advertiser_detail');}} />;
         case 'advertiser_new': return <ClientAdvertiserNewView navigate={setClientView} />;
-        case 'advertiser_detail': return <ClientAdvertiserDetailView navigate={setClientView} />;
-        case 'advertiser_edit': return <ClientAdvertiserEditView navigate={setClientView} />;
-        case 'catalog': return <ClientCatalogView favoritePlatforms={favoritePlatforms} toggleFavoritePlatform={toggleFavoritePlatform} navigate={setClientView} materials={clientMaterials} projects={projects} onCreateOrders={createOrdersFromMaterial} />;
+        case 'advertiser_detail': return <ClientAdvertiserDetailRoute id={selectedAdvertiserId} navigate={setClientView} orders={clientOrders} onOpenOrder={openOrder} />;
+        case 'advertiser_edit': return <ClientAdvertiserEditView id={selectedAdvertiserId} navigate={setClientView} />;
+        case 'catalog': return <ClientCatalogView favoritePlatforms={favoritePlatforms} toggleFavoritePlatform={toggleFavoritePlatform} navigate={(view,id)=>{if(id)backend.setOutletId(id);setClientView(view);}} materials={clientMaterials} projects={projects} onCreateOrders={createOrdersFromMaterial} />;
         case 'platform_detail': return <ClientPlatformDetailView favoritePlatforms={favoritePlatforms} toggleFavoritePlatform={toggleFavoritePlatform} navigate={setClientView} materials={clientMaterials} projects={projects} onCreateOrders={createOrdersFromMaterial} />;
-        case 'order_detail': return <ClientOrderDetailView navigate={setClientView} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
-        case 'order_pending_detail': return <ClientOrderDetailView navigate={setClientView} state="pending" sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
-        case 'order_rejected_detail': return <ClientOrderDetailView navigate={setClientView} state="rejected" sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
-        case 'order_completed_detail': return <ClientOrderDetailView navigate={setClientView} state="completed" orderId={selectedOrderId} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} />;
+        case 'order_detail': return <ClientOrderDetailView navigate={setClientView} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} onOpenReport={openPlacementReport} />;
+        case 'order_pending_detail': return <ClientOrderDetailView navigate={setClientView} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} onOpenReport={openPlacementReport} />;
+        case 'order_rejected_detail': return <ClientOrderDetailView navigate={setClientView} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} onOpenReport={openPlacementReport} />;
+        case 'order_completed_detail': return <ClientOrderDetailView navigate={setClientView} sourceOrder={clientOrders.find((order) => order.id === selectedOrderId)} projects={projects} openProject={openProject} onChangeProject={changeOrderProject} onOpenReport={openPlacementReport} />;
         case 'complaint': return <ClientComplaintView navigate={setClientView} />;
         case 'dispute_detail': return <DisputeDetailView navigate={setClientView} />;
-        case 'order_chat': return <OrderChatView navigate={setClientView} />;
-        case 'report_detail': return <ClientReportDetailView navigate={setClientView} report={mockReports.find((report) => report.order === selectedReportOrder)} projects={projects} openProject={openProject} />;
-        case 'project_report': return <ClientProjectReportView navigate={setClientView} config={projectReportConfig} projects={projects} reports={mockReports} onOpenPlacementReport={openPlacementReport} />;
+        case 'order_chat': return <OrderConversation orderId={selectedOrderId} onBack={()=>setClientView('order_detail')} />;
+        case 'report_detail': return <ClientReportDetailView navigate={setClientView} report={reports.find((report) => report.id === selectedReportOrder)} projects={projects} openProject={openProject} />;
+        case 'project_report': return <ClientProjectReportView navigate={setClientView} config={effectiveProjectReportConfig} projects={projects} reports={reports} onOpenPlacementReport={openPlacementReport} onChangePeriod={openProjectReport} />;
         case 'orders': return <ClientOrdersView navigate={setClientView} projects={projects} orders={clientOrders} openProject={openProject} openOrder={openOrder} onMoveOrders={moveOrders} />;
-        case 'reports': return <ClientReportsView projects={projects} openProject={openProject} onOpenReport={openPlacementReport} onCreateProjectReport={openProjectReport} />;
-        case 'support': return <ClientSupportView navigate={setClientView} />;
+        case 'reports': return <ClientReportsView projects={projects} reports={reports} openProject={openProject} onOpenReport={openPlacementReport} onCreateProjectReport={openProjectReport} />;
+        case 'support': return <SupportDesk navigate={setClientView} onOpenDispute={(orderId)=>{setSelectedOrderId(orderId);setClientView('dispute_detail');}} />;
         case 'balance': return <ClientBalanceView navigate={setClientView} />;
         case 'topup': return <ClientTopUpView navigate={setClientView} />;
         case 'operations': return <ClientOperationsView navigate={setClientView} />;
@@ -9751,21 +10562,24 @@ export default function App() {
       }
     } else if (!isAdmin) {
       switch (publisherView) {
-        case 'pub_dashboard': return <PublisherDashboardView navigate={setPublisherView} />;
-        case 'pub_orders': return <PublisherOrdersView navigate={setPublisherView} />;
-        case 'pub_order_detail': return <PublisherOrderDetailView navigate={setPublisherView} />;
-        case 'pub_order_acceptance_detail': return <PublisherOrderDetailView navigate={setPublisherView} state="acceptance" />;
-        case 'pub_order_new_detail': return <PublisherOrderDetailView navigate={setPublisherView} state="new" />;
-        case 'pub_order_chat': return <OrderChatView navigate={setPublisherView} role="publisher" />;
+        case 'pub_dashboard': return <PublisherDashboardView navigate={setPublisherView} onOpenOrder={order => {
+          setSelectedOrderId(order.id);
+          setPublisherView(order.apiStatus === 'submitted' ? 'pub_order_acceptance_detail' : order.apiStatus === 'pending' ? 'pub_order_new_detail' : order.apiStatus === 'disputed' ? 'pub_dispute_detail' : 'pub_order_detail');
+        }} />;
+        case 'pub_orders': return <PublisherOrdersView navigate={setPublisherView} onOpenOrder={order => {setSelectedOrderId(order.id);setPublisherView('pub_order_detail');}} />;
+        case 'pub_order_detail':
+        case 'pub_order_acceptance_detail':
+        case 'pub_order_new_detail': return clientOrders.find(o=>o.id===selectedOrderId) ? <PublisherOrderDetailView navigate={setPublisherView} sourceOrder={clientOrders.find(o=>o.id===selectedOrderId)} /> : <Card className="p-6">Выберите заказ в списке.</Card>;
+        case 'pub_order_chat': return <OrderConversation orderId={selectedOrderId} onBack={()=>setPublisherView('pub_order_detail')} />;
         case 'pub_platforms': return <PublisherPlatformsView navigate={setPublisherView} />;
         case 'pub_platform_new': return <PublisherPlatformNewView navigate={setPublisherView} />;
-        case 'pub_platform_detail': return <PublisherPlatformDetailView navigate={setPublisherView} />;
+        case 'pub_platform_detail': return <LivePublisherPlatformDetail navigate={setPublisherView} />;
         case 'pub_publication': return <PublisherOrderDetailView navigate={setPublisherView} />;
-        case 'pub_finance': return <PublisherFinanceView />;
+        case 'pub_finance': return <PublisherFinanceView navigate={setPublisherView} />;
         case 'pub_payout_request': return <PublisherPayoutRequestView navigate={setPublisherView} />;
         case 'pub_complaint': return <PublisherComplaintView navigate={setPublisherView} />;
         case 'pub_dispute_detail': return <DisputeDetailView navigate={setPublisherView} role="publisher" />;
-        case 'pub_support': return <ClientSupportView navigate={setPublisherView} role="publisher" />;
+        case 'pub_support': return <SupportDesk navigate={setPublisherView} onOpenDispute={(orderId)=>{setSelectedOrderId(orderId);setPublisherView('pub_dispute_detail');}} />;
         case 'pub_sanctions': return <PublisherSanctionsView navigate={setPublisherView} />;
         case 'pub_settings': return <PublisherSettingsView />;
         default: return (
@@ -9776,37 +10590,43 @@ export default function App() {
         );
       }
     } else {
-      switch (adminView) {
+      switch (isModerator&&!moderatorViews.has(adminView)?'admin_moderation':adminView) {
         case 'admin_dashboard': return <AdminDashboardView navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_moderation': return <AdminWorklistView section="admin_moderation" navigate={setAdminView} onSelect={openAdminDetail} />;
-        case 'admin_moderation_detail': return <AdminModerationDetailView navigate={setAdminView} selection={adminSelection} onOpenPublisher={openAdminPublisherProfile} />;
+        case 'admin_moderation_detail': return <AdminModerationDetailView navigate={setAdminView} selection={adminSelection} materialId={selectedMaterialId} onOpenPublisher={openAdminPublisherProfile} />;
         case 'admin_orders': return <AdminWorklistView section="admin_orders" navigate={setAdminView} onSelect={openAdminDetail} />;
-        case 'admin_order_detail': return <AdminOrderDetailView navigate={setAdminView} selection={adminSelection} />;
-        case 'admin_order_chat': return <OrderChatView navigate={setAdminView} role="admin" />;
+        case 'admin_order_detail': return <AdminOrderDetailView navigate={setAdminView} selection={adminSelection} orderId={selectedOrderId} />;
+        case 'admin_order_chat': return <OrderConversation orderId={selectedOrderId||adminSelection?.row?.[0]} onBack={()=>{const fromUser=new URLSearchParams(location.search).get('from_user');setAdminView('admin_order_detail',fromUser?{order:selectedOrderId,from_user:fromUser,user_tab:'orders'}:undefined);}} />;
         case 'admin_publisher_applications': return <AdminPublisherApplicationsView applications={publisherApplications} onOpenApplication={openPublisherApplication} onCreateApplication={createPublisherApplication} />;
-        case 'admin_publisher_application_detail': return <AdminPublisherApplicationDetailView application={publisherApplications.find((application) => application.id === selectedPublisherApplicationId)} navigate={setAdminView} onUpdateApplication={updatePublisherApplication} />;
-        case 'admin_users': return <AdminWorklistView section="admin_users" navigate={setAdminView} onSelect={openAdminDetail} />;
+        case 'admin_publisher_application_detail': return <AdminPublisherApplicationDetailView application={publisherApplications.find((application) => application.id === selectedPublisherApplicationId)} navigate={setAdminView} onUpdateApplication={updatePublisherApplication} onInvite={invitePublisherApplication} onDelete={deletePublisherApplication} />;
+        case 'admin_users': return <AdminRecords kind="users" SelectComponent={CustomSelect}
+          onOpenOutlet={(id,userId)=>{backend.setOutletId(id);setAdminView('admin_platform_detail',{outlet:id,from_user:userId,user_tab:'assets'});}}
+          onOpenOrder={(id,userId)=>{setSelectedOrderId(id);setAdminView('admin_order_detail',{order:id,from_user:userId,user_tab:'orders'});}}
+          onOpenAdvertiser={(id,userId)=>setAdminView('admin_advertisers',{admin_advertiser:id,from_user:userId,user_tab:'assets'})}
+          onOpenMaterial={(id,userId)=>{setSelectedMaterialId(id);setAdminSelection({section:'admin_moderation',row:[id]});setAdminView('admin_moderation_detail',{material:id,from_user:userId,user_tab:'assets'});}} />;
         case 'admin_user_detail': return <AdminUserDetailView navigate={setAdminView} selection={adminSelection} />;
-        case 'admin_advertisers': return <AdminWorklistView section="admin_advertisers" navigate={setAdminView} onSelect={openAdminDetail} />;
-        case 'admin_advertiser_detail': return <AdminAdvertiserDetailView navigate={setAdminView} selection={adminSelection} onOpenOrder={openAdminOrderById} />;
-        case 'admin_platforms': return <AdminPlatformsCatalogView navigate={setAdminView} onSelect={openAdminDetail} />;
-        case 'admin_platform_detail': return <AdminPlatformDetailView navigate={setAdminView} selection={adminSelection} />;
-        case 'admin_balances': return <AdminWorklistView section="admin_balances" navigate={setAdminView} onSelect={openAdminDetail} />;
+        case 'admin_advertisers': return <AdminRecords kind="advertisers" SelectComponent={CustomSelect} onReturnToUser={id=>setAdminView('admin_users',{admin_user:id,user_tab:'assets'})} />;
+        case 'admin_advertiser_detail': return <AdminRecords kind="advertisers" SelectComponent={CustomSelect} />;
+        case 'admin_platforms': return <PublisherPlatformsView navigate={setAdminView} />;
+        case 'admin_platform_detail': return <LivePublisherPlatformDetail navigate={view=>{const userId=new URLSearchParams(location.search).get('from_user');if(view==='admin_platforms'&&userId)setAdminView('admin_users',{admin_user:userId,user_tab:'assets'});else setAdminView(view);}} />;
+        case 'admin_balances': return <AdminRecords kind="balances" SelectComponent={CustomSelect} />;
         case 'admin_finance_detail': return <AdminFinanceDetailView navigate={setAdminView} selection={adminSelection} />;
-        case 'admin_operations': return <AdminWorklistView section="admin_operations" navigate={setAdminView} onSelect={openAdminDetail} />;
-        case 'admin_complaints': return <AdminWorklistView section="admin_complaints" navigate={setAdminView} onSelect={openAdminDetail} />;
-        case 'admin_dispute_detail': return <AdminDisputeDetailView navigate={setAdminView} selection={adminSelection} />;
+        case 'admin_operations': return <AdminRecords kind="ledger" SelectComponent={CustomSelect} />;
+        case 'admin_complaints': return <AdminDisputesView onOpen={(orderId)=>{setSelectedOrderId(orderId);setAdminSelection({section:'admin_complaints',row:[orderId]});setAdminView('admin_dispute_detail');}} />;
+        case 'admin_dispute_detail': return <AdminDisputeDetailView navigate={setAdminView} selection={adminSelection} orderId={selectedOrderId} />;
         case 'admin_payouts': return <AdminWorklistView section="admin_payouts" navigate={setAdminView} onSelect={openAdminDetail} />;
         case 'admin_payout_detail': return <AdminPayoutDetailView navigate={setAdminView} selection={adminSelection} />;
-        case 'admin_support': return <AdminWorklistView section="admin_support" navigate={setAdminView} onSelect={openAdminDetail} />;
+        case 'admin_bank_review': return <AdminBankReview />;
+        case 'admin_support': return <SupportDesk navigate={setAdminView} onOpenDispute={(orderId)=>{setSelectedOrderId(orderId);setAdminView('admin_dispute_detail');}} />;
         case 'admin_ticket_detail': return <AdminTicketDetailView navigate={setAdminView} selection={adminSelection} />;
-        case 'admin_documents': return <AdminWorklistView section="admin_documents" navigate={setAdminView} onSelect={openAdminDetail} />;
-        case 'admin_document_detail': return <AdminEntityDetailView navigate={setAdminView} type="document" selection={adminSelection} />;
+        case 'admin_documents': return <AdminActs />;
+        case 'admin_document_detail': return <AdminActs />;
         case 'admin_informer': return <AdminInformerView items={informerItems} onChangeItems={setInformerItems} />;
-        case 'admin_audit': return <AdminWorklistView section="admin_audit" navigate={setAdminView} onSelect={openAdminDetail} />;
+        case 'admin_audit': return <AdminRecords kind="audit" SelectComponent={CustomSelect} />;
         case 'admin_audit_detail': return <AdminEntityDetailView navigate={setAdminView} type="audit" selection={adminSelection} />;
+        case 'admin_integrations': return <AdminReputationIntegrationsView />;
         case 'admin_settings': return <AdminSettingsView />;
-        default: return <AdminDashboardView navigate={setAdminView} />;
+        default: return <AdminDashboardView navigate={setAdminView} onSelect={openAdminDetail} />;
       }
     }
   };
@@ -9815,19 +10635,19 @@ export default function App() {
     <div className="flex h-screen bg-[#f8f9fb] font-sans text-[#0b3558] text-[90%]">
       {/* БОКОВАЯ НАВИГАЦИЯ */}
       <aside className="w-64 flex flex-col hidden md:flex flex-shrink-0 border-r border-[#d4e0ed] bg-white text-[#476788]">
-        <div className="h-16 flex items-center px-6 border-b border-[#d4e0ed] cursor-pointer text-[#0b3558]" onClick={() => setGlobalMode('landing')}>
+        <button type="button" className="h-16 w-full flex items-center px-6 border-b border-[#d4e0ed] cursor-pointer text-left text-[#0b3558]" onClick={() => setView(isClient ? 'dashboard' : isAdmin ? isModerator?'admin_moderation':'admin_dashboard' : 'pub_dashboard')}>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-[#0b3558]">
                 <div className="w-3 h-3 border-2 rounded-sm border-white"></div>
             </div>
             <span className="font-display font-bold tracking-tight">Аксиома</span>
           </div>
-          <span className="ml-2 text-[10px] uppercase font-medium px-2 py-0.5 rounded-full bg-[#f8f9fb] text-[#476788]">{isClient ? 'Заказчик' : isAdmin ? 'Админ' : 'Паблишер'}</span>
-        </div>
+          <span className="ml-2 text-[10px] uppercase font-medium px-2 py-0.5 rounded-full bg-[#f8f9fb] text-[#476788]">{isClient ? 'Заказчик' : isAdmin ? isModerator?'Модератор':'Админ' : 'Паблишер'}</span>
+        </button>
         
         <div className="p-4 flex-1 overflow-y-auto">
           <div className="space-y-1">
-            {(isAdmin ? adminPrimaryNav : navItems).map((item) => {
+            {(isAdmin ? visibleAdminPrimaryNav : navItems).map((item) => {
               const Icon = item.icon;
               const isActive = activeNavView === item.id;
 
@@ -9844,7 +10664,7 @@ export default function App() {
             })}
             {isAdmin && (
               <div className="space-y-1 pt-2">
-                {adminNavGroups.map((group) => {
+                {visibleAdminNavGroups.map((group) => {
                   const GroupIcon = group.icon;
                   const hasActiveItem = group.items.some((item) => item.id === activeNavView);
                   const isOpen = adminNavOpenGroup === group.id;
@@ -9896,10 +10716,10 @@ export default function App() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate text-[#0b3558]">
-                {isClient ? 'Александр С.' : isAdmin ? 'Модератор' : 'РБК Инвестиции'}
+                {backend.user.email}
               </div>
               <div className="text-xs truncate text-[#476788]">
-                {isClient ? 'ООО "Финтех"' : isAdmin ? 'Операционный доступ' : 'Паблишер #842'}
+                {isClient ? 'Заказчик' : isAdmin ? 'Операционный доступ' : 'Паблишер'}
               </div>
             </div>
           </div>
@@ -9925,46 +10745,44 @@ export default function App() {
             {isClient ? (
               <>
                 <span className="text-[#476788] mr-2">Баланс:</span>
-                <span className="font-semibold text-[#0b3558] tabular-nums">{formatMoney(1250000)}</span>
+                <span className="font-semibold text-[#0b3558] tabular-nums">{formatMoney(backend.data.balance.available / 100)}</span>
               </>
             ) : isAdmin ? (
               <>
                 <span className="text-[#476788] mr-2">Очередь:</span>
-                <span className="font-semibold text-[#006bff] tabular-nums">{mockAdminQueue.length} задачи</span>
+                <span className="font-semibold text-[#006bff] tabular-nums">{operationalQueueCount} {operationalQueueLabel}</span>
               </>
-            ) : (
-              <>
-                <span className="text-[#476788] mr-2">Площадка:</span>
-                <span className="font-semibold text-[#0b3558]">РБК Инвестиции</span>
-              </>
-            )}
+            ) : null}
             </div>
           </div>
 	          <div className="flex items-center gap-3">
-	             <button className="text-sm text-[#476788] hover:text-[#0b3558]" onClick={() => setGlobalMode('landing')}>На сайт</button>
+	             <button className="text-sm text-[#476788] hover:text-[#0b3558]" onClick={backend.logout}>Выйти</button>
 	             <div className="relative">
-	               <button className="relative p-2 text-[#476788] hover:text-[#0b3558] transition-colors rounded-full hover:bg-[#f8f9fb]" onClick={() => setNotificationsOpen((value) => !value)}>
+	               <button aria-label={unreadNotifications.length?`Уведомления: ${unreadNotifications.length} новых`:'Уведомления'} aria-expanded={notificationsOpen} className="relative p-2 text-[#476788] hover:text-[#0b3558] transition-colors rounded-full hover:bg-[#f8f9fb]" onClick={() => setNotificationsOpen((value) => !value)}>
 	                  <Bell className="w-5 h-5" />
-	                  <span className="absolute top-2 right-2 w-2 h-2 bg-[#006bff] rounded-full border-2 border-white"></span>
+	                  {unreadNotifications.length>0&&<span className="absolute top-2 right-2 w-2 h-2 bg-[#006bff] rounded-full border-2 border-white" />}
 	               </button>
 	               {notificationsOpen && (
-	                 <div className="absolute right-0 top-full mt-3 w-[360px] rounded-2xl border border-[#d4e0ed] bg-white shadow-[rgba(11,53,88,0.10)_0px_24px_60px] z-50 overflow-hidden">
+	                 <div className="absolute right-0 top-full mt-3 w-[min(360px,calc(100vw-24px))] rounded-2xl border border-[#d4e0ed] bg-white shadow-[rgba(11,53,88,0.10)_0px_24px_60px] z-50 overflow-hidden">
 	                   <div className="px-5 py-4 border-b border-[#d4e0ed] flex items-center justify-between">
 	                     <div className="font-semibold text-[#0b3558]">Уведомления</div>
-	                     <Badge color="blue">{notifications.length} новых</Badge>
+	                     {unreadNotifications.length>0&&<Badge color="blue">{unreadNotifications.length} новых</Badge>}
 	                   </div>
-	                   {notifications.map(([title, text, target, color]) => (
-	                     <button key={title} className="w-full text-left px-5 py-4 border-b border-[#d4e0ed] hover:bg-[#f8f9fb]" onClick={() => openNotificationTarget(target)}>
+	                   <div className="max-h-[min(60vh,480px)] overflow-y-auto">
+                   {notifications.length===0&&<div className="px-5 py-5 text-sm text-[#476788]">Уведомлений нет</div>}
+                   {(showAllNotifications?notifications:notifications.slice(0,4)).map((notification) => (
+                     <button key={notification.key} className="w-full text-left px-5 py-4 border-b border-[#d4e0ed] hover:bg-[#f8f9fb]" onClick={() => openNotificationTarget(notification)}>
 	                       <div className="flex items-start justify-between gap-3">
 	                         <div>
-	                           <div className="text-sm font-semibold text-[#0b3558]">{title}</div>
-	                           <div className="text-xs text-[#476788] mt-1">{text}</div>
+	                           <div className="text-sm font-semibold text-[#0b3558]">{notification.title}</div>
+	                           <div className="text-xs text-[#476788] mt-1">{notification.text}</div>
 	                         </div>
-	                         <Badge color={color}>новое</Badge>
+	                         {!notificationReads.includes(notification.key)&&<Badge color={notification.color}>новое</Badge>}
 	                       </div>
 	                     </button>
 	                   ))}
-	                   <button className="w-full px-5 py-3 text-sm font-semibold text-[#006bff] hover:bg-[#f8f9fb]" onClick={() => openNotificationTarget(isAdmin ? 'admin_audit' : isClient ? 'support' : 'pub_support')}>Показать все</button>
+	                   </div>
+                   {notifications.length>4&&<button className="w-full px-5 py-3 text-sm font-semibold text-[#006bff] hover:bg-[#f8f9fb]" onClick={() => setShowAllNotifications(value=>!value)}>{showAllNotifications?'Свернуть':'Показать все'}</button>}
 	                 </div>
 	               )}
 	             </div>
@@ -9972,7 +10790,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-auto p-4 sm:p-8 bg-[#f8f9fb]">
-          <div className="max-w-6xl mx-auto pb-10">
+          <div className="workspace-content w-full min-w-0 pb-10">
             {renderContent()}
           </div>
         </div>
